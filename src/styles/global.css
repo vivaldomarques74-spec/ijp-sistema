@@ -1,0 +1,61 @@
+/* TIPOGRAFIA */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #000000;
+  margin-bottom: 12px;
+}
+
+p {
+  color: #000000;
+  line-height: 1.5;
+}
+
+/* LINKS */
+a {
+  color: #000000;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* BOTÕES */
+button {
+  background-color: #ffffff;
+  color: #000000;
+  border: 1px solid #000000;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+button:hover {
+  background-color: #f2f2f2;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* INPUTS */
+input,
+select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #000000;
+  font-size: 14px;
+}
+
+/* CONTAINER PADRÃO */
+.container {
+  padding: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
