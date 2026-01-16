@@ -1,22 +1,19 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyARluOvO6TjFzP_dqRq2gHg5Pwj-a_3tvw",
+  apiKey: "...",
   authDomain: "ijp-web.firebaseapp.com",
   projectId: "ijp-web",
-
-  // 🔥 AQUI ESTÁ A CORREÇÃO
-  storageBucket: "ijp-web.appspot.com",
-
-  messagingSenderId: "698456103004",
-  appId: "1:698456103004:web:1a15835f935194dd7eae99",
+  storageBucket: "ijp-web.firebasestorage.app",
+  messagingSenderId: "...",
+  appId: "..."
 };
 
 const app = initializeApp(firebaseConfig);
 
-export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const storage = getStorage(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app); // ⬅️ assim, SEM bucket manual
