@@ -4,178 +4,208 @@ import {
   doc,
   getDoc,
   updateDoc,
-  collection,
-  getDocs,
 } from "firebase/firestore";
-import { db } from "../services/firebase";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
+import { db, storage } from "../services/firebase";
 
-export default function AlunosEditar() {
-  const { id } = useParams<{ id: string }>();
+export default function EditarAluno() {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
 
-  const [dadosAluno, setDadosAluno] = useState<any>({
-    nomeCompleto: "",
-    telefone: "",
-    endereco: "",
-    email: "",
-    cursoAtualId: "",
-    turmaAtualId: "",
-  });
+  const [aluno, setAluno] = useState<any>(null);
+  const [foto, setFoto] = useState<File | null>(null);
 
-  const [cursos, setCursos] = useState<any[]>([]);
-  const [turmas, setTurmas] = useState<any[]>([]);
-
-  // carregar aluno
+  // 🔹 carrega aluno
   useEffect(() => {
-    if (!id) return;
+    async function carregarAluno() {
+      if (!id) return;
 
-    const carregarAluno = async () => {
-      const ref = doc(db, "alunos", id);
-      const snap = await getDoc(ref);
+      const refAluno = doc(db, "alunos", id);
+      const snap = await getDoc(refAluno);
 
-      if (!snap.exists()) {
-        alert("Aluno não encontrado");
-        navigate("/alunos");
-        return;
+      if (snap.exists()) {
+        setAluno({ id: snap.id, ...snap.data() });
       }
 
-      setDadosAluno(snap.data());
       setLoading(false);
-    };
+    }
 
     carregarAluno();
-  }, [id, navigate]);
+  }, [id]);
 
-  // carregar cursos
-  useEffect(() => {
-    const carregarCursos = async () => {
-      const snap = await getDocs(collection(db, "cursos"));
-      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    };
-    carregarCursos();
-  }, []);
-
-  // carregar turmas do curso
-  useEffect(() => {
-    if (!dadosAluno.cursoAtualId) return;
-
-    const carregarTurmas = async () => {
-      const snap = await getDocs(
-        collection(db, "cursos", dadosAluno.cursoAtualId, "turmas")
-      );
-      setTurmas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    };
-
-    carregarTurmas();
-  }, [dadosAluno.cursoAtualId]);
-
-  const handleChange = (e: any) => {
-    const { name, value } = e.target;
-    setDadosAluno((prev: any) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const salvarAlteracoes = async () => {
+  // 🔹 salvar dados (SEM FOTO)
+  async function salvarDados() {
     if (!id) return;
 
-    const ref = doc(db, "alunos", id);
-    const snap = await getDoc(ref);
+    setSalvando(true);
 
-    if (!snap.exists()) {
-      alert("Aluno não encontrado");
+    try {
+      await updateDoc(doc(db, "alunos", id), {
+        nome: aluno.nome,
+        telefone: aluno.telefone,
+        email: aluno.email,
+        endereco: aluno.endereco,
+        base: aluno.base,
+        sensei: aluno.sensei,
+        observacoesMedicas: aluno.observacoesMedicas || "",
+      });
+
+      alert("Dados atualizados com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar dados");
+    }
+
+    setSalvando(false);
+  }
+
+  // 🔹 upload da foto (ISOLADO)
+  async function salvarFoto() {
+    if (!id || !foto) {
+      alert("Selecione uma foto");
       return;
     }
 
-    const dadosAntigos = snap.data();
+    setSalvando(true);
 
-    // 🔒 UPDATE SEGURO — NUNCA APAGA CAMPOS
-    await updateDoc(ref, {
-      ...dadosAntigos,
-      nomeCompleto: dadosAluno.nomeCompleto,
-      telefone: dadosAluno.telefone,
-      endereco: dadosAluno.endereco,
-      email: dadosAluno.email,
-      cursoAtualId: dadosAluno.cursoAtualId,
-      turmaAtualId: dadosAluno.turmaAtualId,
-    });
+    try {
+      const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
+      await uploadBytes(fotoRef, foto);
 
-    alert("Aluno atualizado com sucesso!");
-    navigate("/alunos");
-  };
+      const downloadURL = await getDownloadURL(fotoRef);
+
+      await updateDoc(doc(db, "alunos", id), {
+        fotoURL: downloadURL,
+      });
+
+      setAluno((prev: any) => ({
+        ...prev,
+        fotoURL: downloadURL,
+      }));
+
+      alert("Foto atualizada com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao enviar foto");
+    }
+
+    setSalvando(false);
+  }
 
   if (loading) return <p>Carregando aluno...</p>;
+  if (!aluno) return <p>Aluno não encontrado</p>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Editar Aluno</h1>
+    <div style={{ maxWidth: 600, margin: "0 auto" }}>
+      <h2>Editar Aluno</h2>
 
+      {/* FOTO */}
+      <div style={{ marginBottom: 20 }}>
+        <img
+          src={aluno.fotoURL || "/avatar-placeholder.png"}
+          alt="Foto do aluno"
+          style={{
+            width: 120,
+            height: 120,
+            objectFit: "cover",
+            borderRadius: "50%",
+            display: "block",
+            marginBottom: 10,
+          }}
+        />
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            if (e.target.files?.[0]) {
+              setFoto(e.target.files[0]);
+            }
+          }}
+        />
+
+        <button onClick={salvarFoto} disabled={salvando}>
+          Atualizar Foto
+        </button>
+      </div>
+
+      {/* DADOS */}
       <input
-        name="nomeCompleto"
-        placeholder="Nome completo"
-        value={dadosAluno.nomeCompleto || ""}
-        onChange={handleChange}
+        placeholder="Nome"
+        value={aluno.nome || ""}
+        onChange={(e) =>
+          setAluno({ ...aluno, nome: e.target.value })
+        }
       />
 
       <input
-        name="telefone"
         placeholder="Telefone"
-        value={dadosAluno.telefone || ""}
-        onChange={handleChange}
+        value={aluno.telefone || ""}
+        onChange={(e) =>
+          setAluno({ ...aluno, telefone: e.target.value })
+        }
       />
 
       <input
-        name="endereco"
-        placeholder="Endereço"
-        value={dadosAluno.endereco || ""}
-        onChange={handleChange}
-      />
-
-      <input
-        name="email"
         placeholder="Email"
-        value={dadosAluno.email || ""}
-        onChange={handleChange}
+        value={aluno.email || ""}
+        onChange={(e) =>
+          setAluno({ ...aluno, email: e.target.value })
+        }
       />
 
-      <hr />
+      <input
+        placeholder="Endereço"
+        value={aluno.endereco || ""}
+        onChange={(e) =>
+          setAluno({ ...aluno, endereco: e.target.value })
+        }
+      />
 
-      <label>Curso</label>
-      <select
-        name="cursoAtualId"
-        value={dadosAluno.cursoAtualId || ""}
-        onChange={handleChange}
+      <input
+        placeholder="Base"
+        value={aluno.base || ""}
+        onChange={(e) =>
+          setAluno({ ...aluno, base: e.target.value })
+        }
+      />
+
+      <input
+        placeholder="Sensei"
+        value={aluno.sensei || ""}
+        onChange={(e) =>
+          setAluno({ ...aluno, sensei: e.target.value })
+        }
+      />
+
+      <textarea
+        placeholder="Observações Médicas"
+        value={aluno.observacoesMedicas || ""}
+        onChange={(e) =>
+          setAluno({
+            ...aluno,
+            observacoesMedicas: e.target.value,
+          })
+        }
+      />
+
+      <button onClick={salvarDados} disabled={salvando}>
+        Salvar Dados
+      </button>
+
+      <button
+        style={{ marginLeft: 10 }}
+        onClick={() => navigate("/alunos")}
       >
-        <option value="">Selecione</option>
-        {cursos.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.nome}
-          </option>
-        ))}
-      </select>
-
-      <label>Turma</label>
-      <select
-        name="turmaAtualId"
-        value={dadosAluno.turmaAtualId || ""}
-        onChange={handleChange}
-        disabled={!dadosAluno.cursoAtualId}
-      >
-        <option value="">Selecione</option>
-        {turmas.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.nome}
-          </option>
-        ))}
-      </select>
-
-      <br />
-      <br />
-
-      <button onClick={salvarAlteracoes}>Salvar Alterações</button>
+        Voltar
+      </button>
     </div>
   );
 }

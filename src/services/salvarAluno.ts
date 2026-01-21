@@ -1,53 +1,51 @@
-import { collection, addDoc, updateDoc, doc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth, db, storage } from "./firebase";
+import {
+  collection,
+  addDoc,
+  doc,
+  runTransaction,
+} from "firebase/firestore";
+import { auth, db } from "../services/firebase";
 
 export async function salvarAluno({
   dadosAluno,
-  foto,
   onSucesso,
 }: {
   dadosAluno: any;
-  foto: File | null;
   onSucesso?: () => void;
 }) {
-  try {
-    console.log("AUTH USER:", auth.currentUser);
-    console.log("FOTO RECEBIDA:", foto);
+  if (!auth.currentUser) {
+    throw new Error("Usuário não autenticado");
+  }
 
-    if (!auth.currentUser) {
-      throw new Error("Usuário não autenticado no momento do upload");
+  // 🔢 gera matrícula com transação (seguro)
+  const matriculaRef = doc(db, "config", "matricula");
+
+  const numeroMatricula = await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(matriculaRef);
+
+    if (!snap.exists()) {
+      throw new Error("Config de matrícula não encontrada");
     }
 
-    // 1️⃣ cria aluno no Firestore
-    const alunoRef = await addDoc(collection(db, "alunos"), {
-      ...dadosAluno,
-      criadoEm: new Date(),
+    const ultimoNumero = snap.data().ultimoNumero || 0;
+    const novoNumero = ultimoNumero + 1;
+
+    transaction.update(matriculaRef, {
+      ultimoNumero: novoNumero,
     });
 
-    const alunoId = alunoRef.id;
-    console.log("ALUNO ID:", alunoId);
+    return novoNumero;
+  });
 
-    // 2️⃣ upload da foto + salvar URL
-    if (foto) {
-      const fotoRef = ref(storage, `alunos/${alunoId}/foto.jpg`);
-      console.log("STORAGE PATH:", `alunos/${alunoId}/foto.jpg`);
-      console.log("BUCKET:", storage.app.options.storageBucket);
+  const matriculaFormatada = `IJP-${String(numeroMatricula).padStart(6, "0")}`;
 
-      await uploadBytes(fotoRef, foto);
+  // 🧾 cria aluno SEM foto
+  await addDoc(collection(db, "alunos"), {
+    ...dadosAluno,
+    matricula: matriculaFormatada,
+    fotoURL: null,
+    criadoEm: new Date(),
+  });
 
-      const url = await getDownloadURL(fotoRef);
-      console.log("URL DA FOTO:", url);
-
-      await updateDoc(doc(db, "alunos", alunoId), {
-        fotoURL: url,
-      });
-    }
-
-    // 3️⃣ sucesso
-    if (onSucesso) onSucesso();
-  } catch (error) {
-    console.error("Erro ao salvar aluno:", error);
-    alert("Erro ao salvar aluno. Veja o console.");
-  }
+  onSucesso?.();
 }

@@ -19,12 +19,10 @@ export default function AlunosCadastrar() {
     turmaAtualId: "",
   });
 
-  const [foto, setFoto] = useState<File | null>(null);
-
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
 
-  // carregar cursos
+  // 🔹 carregar cursos
   useEffect(() => {
     const carregarCursos = async () => {
       const snap = await getDocs(collection(db, "cursos"));
@@ -33,7 +31,7 @@ export default function AlunosCadastrar() {
     carregarCursos();
   }, []);
 
-  // carregar turmas do curso
+  // 🔹 carregar turmas do curso
   useEffect(() => {
     if (!dadosAluno.cursoAtualId) {
       setTurmas([]);
@@ -64,13 +62,10 @@ export default function AlunosCadastrar() {
       return;
     }
 
-    // logs IMPORTANTES para produção
     console.log("DADOS DO ALUNO:", dadosAluno);
-    console.log("FOTO NO FORM:", foto);
 
     await salvarAluno({
       dadosAluno,
-      foto,
       onSucesso: () => {
         navigate("/alunos");
       },
@@ -163,19 +158,6 @@ export default function AlunosCadastrar() {
           </option>
         ))}
       </select>
-
-      <hr />
-
-      <label>Foto do aluno</label>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => {
-          if (e.target.files && e.target.files.length > 0) {
-            setFoto(e.target.files[0]);
-          }
-        }}
-      />
 
       <br />
       <br />

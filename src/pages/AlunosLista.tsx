@@ -1,94 +1,111 @@
-import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../services/firebase";
 
-interface Aluno {
-  id: string;
-  nomeCompleto?: string;
-  matricula?: string;
-  telefone?: string;
-  fotoURL?: string;
-}
-
-export default function AlunosLista() {
+export default function ListaAlunos() {
+  const [alunos, setAlunos] = useState<any[]>([]);
+  const [busca, setBusca] = useState("");
   const navigate = useNavigate();
 
-  const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [busca, setBusca] = useState("");
-
   useEffect(() => {
-    const carregar = async () => {
-      try {
-        const snap = await getDocs(collection(db, "alunos"));
+    async function carregarAlunos() {
+      const q = query(collection(db, "alunos"), orderBy("nome"));
+      const snap = await getDocs(q);
 
-        const lista: Aluno[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Aluno, "id">),
-        }));
+      const lista = snap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-        setAlunos(lista);
-      } catch (e) {
-        console.error("Erro ao carregar alunos:", e);
-      }
-    };
+      setAlunos(lista);
+    }
 
-    carregar();
+    carregarAlunos();
   }, []);
 
-  const filtrados = alunos.filter((a) => {
-    const texto = `${a.nomeCompleto ?? ""} ${a.matricula ?? ""}`.toLowerCase();
-    return texto.includes(busca.toLowerCase());
-  });
+  function calcularIdade(data: any) {
+    if (!data) return "-";
+
+    const nascimento = data.toDate
+      ? data.toDate()
+      : new Date(data);
+
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - nascimento.getFullYear();
+
+    const m = hoje.getMonth() - nascimento.getMonth();
+    if (m < 0 || (m === 0 && hoje.getDate() < nascimento.getDate())) {
+      idade--;
+    }
+
+    return idade;
+  }
+
+  const alunosFiltrados = useMemo(() => {
+    return alunos.filter((aluno) => {
+      const termo = busca.toLowerCase();
+      return (
+        aluno.nome?.toLowerCase().includes(termo) ||
+        aluno.matricula?.toLowerCase().includes(termo)
+      );
+    });
+  }, [alunos, busca]);
 
   return (
     <div style={{ padding: 20 }}>
-      <h1>Alunos Cadastrados</h1>
+      <h2>Lista de Alunos</h2>
 
       <input
         placeholder="Buscar por nome ou matrícula"
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
-        style={{ marginBottom: 20, width: 300 }}
+        style={{
+          marginBottom: 20,
+          padding: 8,
+          width: "100%",
+          maxWidth: 400,
+        }}
       />
 
-      <table width="100%" cellPadding={8} border={1}>
+      {alunosFiltrados.length === 0 && <p>Nenhum aluno encontrado</p>}
+
+      <table width="100%" cellPadding={8}>
         <thead>
           <tr>
             <th>Foto</th>
-            <th>Matrícula</th>
             <th>Nome</th>
-            <th>Telefone</th>
+            <th>Matrícula</th>
+            <th>Idade</th>
             <th>Ações</th>
           </tr>
         </thead>
 
         <tbody>
-          {filtrados.length === 0 && (
-            <tr>
-              <td colSpan={5}>Nenhum aluno encontrado.</td>
-            </tr>
-          )}
-
-          {filtrados.map((aluno) => (
+          {alunosFiltrados.map((aluno) => (
             <tr key={aluno.id}>
               <td>
-                {aluno.fotoURL ? (
-                  <img
-                    src={aluno.fotoURL}
-                    alt={aluno.nomeCompleto || "Aluno"}
-                    width={50}
-                    height={50}
-                    style={{ objectFit: "cover", borderRadius: 4 }}
-                  />
-                ) : (
-                  "—"
-                )}
+                <img
+                  src={aluno.fotoURL || "/avatar-placeholder.png"}
+                  alt={aluno.nome}
+                  style={{
+                    width: 50,
+                    height: 50,
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                  }}
+                />
               </td>
 
-              <td>{aluno.matricula || "—"}</td>
-              <td>{aluno.nomeCompleto || "—"}</td>
-              <td>{aluno.telefone || "—"}</td>
+              <td>{aluno.nome}</td>
+
+              <td>{aluno.matricula || "-"}</td>
+
+              <td>
+                {aluno.nascimento
+                  ? `${calcularIdade(aluno.nascimento)} anos`
+                  : "-"}
+              </td>
 
               <td>
                 <button
