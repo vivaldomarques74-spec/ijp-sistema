@@ -1,25 +1,58 @@
 import { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "../services/firebase";
 import { useNavigate } from "react-router-dom";
+import { db } from "../services/firebase";
+
+interface Aluno {
+  id: string;
+  nomeCompleto?: string;
+  matricula?: string;
+  telefone?: string;
+  fotoURL?: string;
+}
 
 export default function AlunosLista() {
-  const [alunos, setAlunos] = useState<any[]>([]);
   const navigate = useNavigate();
 
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [busca, setBusca] = useState("");
+
   useEffect(() => {
-    async function carregar() {
-      const snap = await getDocs(collection(db, "alunos"));
-      setAlunos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }
+    const carregar = async () => {
+      try {
+        const snap = await getDocs(collection(db, "alunos"));
+
+        const lista: Aluno[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Aluno, "id">),
+        }));
+
+        setAlunos(lista);
+      } catch (e) {
+        console.error("Erro ao carregar alunos:", e);
+      }
+    };
+
     carregar();
   }, []);
 
+  const filtrados = alunos.filter((a) => {
+    const texto = `${a.nomeCompleto ?? ""} ${a.matricula ?? ""}`.toLowerCase();
+    return texto.includes(busca.toLowerCase());
+  });
+
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 20 }}>
       <h1>Alunos Cadastrados</h1>
 
-      <table width="100%">
+      <input
+        placeholder="Buscar por nome ou matrícula"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        style={{ marginBottom: 20, width: 300 }}
+      />
+
+      <table width="100%" cellPadding={8} border={1}>
         <thead>
           <tr>
             <th>Foto</th>
@@ -29,27 +62,38 @@ export default function AlunosLista() {
             <th>Ações</th>
           </tr>
         </thead>
+
         <tbody>
-          {alunos.map(aluno => (
+          {filtrados.length === 0 && (
+            <tr>
+              <td colSpan={5}>Nenhum aluno encontrado.</td>
+            </tr>
+          )}
+
+          {filtrados.map((aluno) => (
             <tr key={aluno.id}>
               <td>
                 {aluno.fotoURL ? (
                   <img
                     src={aluno.fotoURL}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                    }}
+                    alt={aluno.nomeCompleto || "Aluno"}
+                    width={50}
+                    height={50}
+                    style={{ objectFit: "cover", borderRadius: 4 }}
                   />
-                ) : "—"}
+                ) : (
+                  "—"
+                )}
               </td>
-              <td>{aluno.matricula}</td>
-              <td>{aluno.nome}</td>
-              <td>{aluno.telefone}</td>
+
+              <td>{aluno.matricula || "—"}</td>
+              <td>{aluno.nomeCompleto || "—"}</td>
+              <td>{aluno.telefone || "—"}</td>
+
               <td>
-                <button onClick={() => navigate(`/alunos/editar/${aluno.id}`)}>
+                <button
+                  onClick={() => navigate(`/alunos/editar/${aluno.id}`)}
+                >
                   Editar
                 </button>
               </td>

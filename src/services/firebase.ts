@@ -1,8 +1,11 @@
+// src/services/firebase.ts
+
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
+// ⚠️ CONFIGURAÇÃO VIA ENV (VITE)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -12,8 +15,14 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// 🔥 Inicializa Firebase
 const app = initializeApp(firebaseConfig);
 
+// 🔐 Auth
 export const auth = getAuth(app);
+
+// 🗄 Firestore
 export const db = getFirestore(app);
+
+// 🖼 Storage
 export const storage = getStorage(app);
