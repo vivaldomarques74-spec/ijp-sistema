@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
-import { salvarAluno } from "../services/alunos";
+import { salvarAluno } from "../services/salvarAluno";
 
 export default function AlunosCadastrar() {
   const navigate = useNavigate();
@@ -28,20 +28,23 @@ export default function AlunosCadastrar() {
   useEffect(() => {
     const carregarCursos = async () => {
       const snap = await getDocs(collection(db, "cursos"));
-      setCursos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     };
     carregarCursos();
   }, []);
 
   // carregar turmas do curso
   useEffect(() => {
-    if (!dadosAluno.cursoAtualId) return;
+    if (!dadosAluno.cursoAtualId) {
+      setTurmas([]);
+      return;
+    }
 
     const carregarTurmas = async () => {
       const snap = await getDocs(
         collection(db, "cursos", dadosAluno.cursoAtualId, "turmas")
       );
-      setTurmas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setTurmas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     };
 
     carregarTurmas();
@@ -60,6 +63,10 @@ export default function AlunosCadastrar() {
       alert("Informe o nome do aluno");
       return;
     }
+
+    // logs IMPORTANTES para produção
+    console.log("DADOS DO ALUNO:", dadosAluno);
+    console.log("FOTO NO FORM:", foto);
 
     await salvarAluno({
       dadosAluno,
@@ -116,13 +123,13 @@ export default function AlunosCadastrar() {
         onChange={handleChange}
       />
 
-      <label>
+      <label style={{ display: "block", marginTop: 10 }}>
         <input
           type="checkbox"
           name="menor"
           checked={dadosAluno.menor}
           onChange={handleChange}
-        />
+        />{" "}
         Aluno é menor de idade
       </label>
 
@@ -135,7 +142,7 @@ export default function AlunosCadastrar() {
         onChange={handleChange}
       >
         <option value="">Selecione</option>
-        {cursos.map(c => (
+        {cursos.map((c) => (
           <option key={c.id} value={c.id}>
             {c.nome}
           </option>
@@ -150,7 +157,7 @@ export default function AlunosCadastrar() {
         disabled={!dadosAluno.cursoAtualId}
       >
         <option value="">Selecione</option>
-        {turmas.map(t => (
+        {turmas.map((t) => (
           <option key={t.id} value={t.id}>
             {t.nome}
           </option>
@@ -163,9 +170,11 @@ export default function AlunosCadastrar() {
       <input
         type="file"
         accept="image/*"
-        onChange={(e) =>
-          setFoto(e.target.files ? e.target.files[0] : null)
-        }
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            setFoto(e.target.files[0]);
+          }
+        }}
       />
 
       <br />
