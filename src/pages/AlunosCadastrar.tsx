@@ -1,261 +1,177 @@
 import { useEffect, useState } from "react";
-import { collection, addDoc, getDocs, Timestamp } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db } from "../services/firebase";
 import { useNavigate } from "react-router-dom";
-
-interface Curso {
-  id: string;
-  nome: string;
-}
-
-interface Turma {
-  id: string;
-  nome: string;
-}
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../services/firebase";
+import { salvarAluno } from "../services/alunos";
 
 export default function AlunosCadastrar() {
   const navigate = useNavigate();
-  const storage = getStorage();
 
-  // dados do aluno
-  const [nomeCompleto, setNomeCompleto] = useState("");
-  const [rg, setRg] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [endereco, setEndereco] = useState("");
-  const [email, setEmail] = useState("");
-  const [telefone, setTelefone] = useState("");
+  const [dadosAluno, setDadosAluno] = useState<any>({
+    nomeCompleto: "",
+    rg: "",
+    cpf: "",
+    endereco: "",
+    email: "",
+    telefone: "",
+    menor: false,
+    cursoAtualId: "",
+    turmaAtualId: "",
+  });
 
-  // FOTO
   const [foto, setFoto] = useState<File | null>(null);
 
-  // menor
-  const [menor, setMenor] = useState(false);
+  const [cursos, setCursos] = useState<any[]>([]);
+  const [turmas, setTurmas] = useState<any[]>([]);
 
-  // responsável
-  const [respNome, setRespNome] = useState("");
-  const [respRg, setRespRg] = useState("");
-  const [respCpf, setRespCpf] = useState("");
-  const [respEmail, setRespEmail] = useState("");
-  const [respTelefone, setRespTelefone] = useState("");
-
-  // curso / turma
-  const [cursos, setCursos] = useState<Curso[]>([]);
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [cursoId, setCursoId] = useState("");
-  const [turmaId, setTurmaId] = useState("");
-
+  // carregar cursos
   useEffect(() => {
     const carregarCursos = async () => {
       const snap = await getDocs(collection(db, "cursos"));
-      setCursos(
-        snap.docs.map((d) => ({
-          id: d.id,
-          nome: d.data().nome,
-        }))
-      );
+      setCursos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     };
-
     carregarCursos();
   }, []);
 
+  // carregar turmas do curso
   useEffect(() => {
-    if (!cursoId) return;
+    if (!dadosAluno.cursoAtualId) return;
 
     const carregarTurmas = async () => {
-      const snap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
-      setTurmas(
-        snap.docs.map((d) => ({
-          id: d.id,
-          nome: d.data().nome,
-        }))
+      const snap = await getDocs(
+        collection(db, "cursos", dadosAluno.cursoAtualId, "turmas")
       );
+      setTurmas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     };
 
     carregarTurmas();
-  }, [cursoId]);
+  }, [dadosAluno.cursoAtualId]);
 
-  const salvarAluno = async () => {
-    try {
-      // 🔎 LOG TEMPORÁRIO PARA DEBUG
-      console.log("DB:", db);
+  const handleChange = (e: any) => {
+    const { name, value, type, checked } = e.target;
+    setDadosAluno((prev: any) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
 
-      if (
-        !nomeCompleto ||
-        !rg ||
-        !cpf ||
-        !endereco ||
-        !email ||
-        !telefone ||
-        !cursoId ||
-        !turmaId
-      ) {
-        alert("Preencha todos os campos obrigatórios");
-        return;
-      }
-
-      if (menor) {
-        if (!respNome || !respRg || !respCpf || !respEmail || !respTelefone) {
-          alert("Preencha todos os dados do responsável");
-          return;
-        }
-      }
-
-      let fotoURL: string | null = null;
-
-      if (foto) {
-        try {
-          const fotoRef = ref(
-            storage,
-            `alunos/${Date.now()}_${foto.name}`
-          );
-          await uploadBytes(fotoRef, foto);
-          fotoURL = await getDownloadURL(fotoRef);
-        } catch (err) {
-          console.error("Erro ao subir foto:", err);
-          alert("A foto não pôde ser enviada, mas o aluno será cadastrado.");
-        }
-      }
-
-      await addDoc(collection(db, "alunos"), {
-        nomeCompleto,
-        rg,
-        cpf,
-        endereco,
-        email,
-        telefone,
-        fotoURL,
-        menorDeIdade: menor,
-        responsavel: menor
-          ? {
-              nome: respNome,
-              rg: respRg,
-              cpf: respCpf,
-              email: respEmail,
-              telefone: respTelefone,
-            }
-          : null,
-        cursoAtualId: cursoId,
-        turmaAtualId: turmaId,
-        createdAt: Timestamp.now(),
-      });
-
-      alert("Aluno cadastrado com sucesso!");
-      navigate("/alunos");
-    } catch (error) {
-      console.error("Erro ao salvar aluno:", error);
-      alert("Erro ao salvar aluno. Verifique o console.");
+  const salvar = async () => {
+    if (!dadosAluno.nomeCompleto) {
+      alert("Informe o nome do aluno");
+      return;
     }
+
+    await salvarAluno({
+      dadosAluno,
+      foto,
+      onSucesso: () => {
+        navigate("/alunos");
+      },
+    });
   };
 
   return (
-    <div className="container">
+    <div style={{ padding: 20 }}>
       <h1>Cadastrar Aluno</h1>
 
-      <h3>Dados do Aluno</h3>
-
       <input
+        name="nomeCompleto"
         placeholder="Nome completo"
-        value={nomeCompleto}
-        onChange={(e) => setNomeCompleto(e.target.value)}
+        value={dadosAluno.nomeCompleto}
+        onChange={handleChange}
       />
-      <input placeholder="RG" value={rg} onChange={(e) => setRg(e.target.value)} />
-      <input placeholder="CPF" value={cpf} onChange={(e) => setCpf(e.target.value)} />
+
       <input
+        name="rg"
+        placeholder="RG"
+        value={dadosAluno.rg}
+        onChange={handleChange}
+      />
+
+      <input
+        name="cpf"
+        placeholder="CPF"
+        value={dadosAluno.cpf}
+        onChange={handleChange}
+      />
+
+      <input
+        name="endereco"
         placeholder="Endereço"
-        value={endereco}
-        onChange={(e) => setEndereco(e.target.value)}
+        value={dadosAluno.endereco}
+        onChange={handleChange}
       />
+
       <input
+        name="email"
         placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        value={dadosAluno.email}
+        onChange={handleChange}
       />
+
       <input
+        name="telefone"
         placeholder="Telefone"
-        value={telefone}
-        onChange={(e) => setTelefone(e.target.value)}
+        value={dadosAluno.telefone}
+        onChange={handleChange}
       />
-
-      <label>Foto do aluno</label>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setFoto(e.target.files?.[0] || null)}
-      />
-
-      <hr />
 
       <label>
         <input
           type="checkbox"
-          checked={menor}
-          onChange={(e) => setMenor(e.target.checked)}
-        />{" "}
+          name="menor"
+          checked={dadosAluno.menor}
+          onChange={handleChange}
+        />
         Aluno é menor de idade
       </label>
 
-      {menor && (
-        <>
-          <h3>Dados do Responsável</h3>
-          <input
-            placeholder="Nome do responsável"
-            value={respNome}
-            onChange={(e) => setRespNome(e.target.value)}
-          />
-          <input
-            placeholder="RG do responsável"
-            value={respRg}
-            onChange={(e) => setRespRg(e.target.value)}
-          />
-          <input
-            placeholder="CPF do responsável"
-            value={respCpf}
-            onChange={(e) => setRespCpf(e.target.value)}
-          />
-          <input
-            placeholder="Email do responsável"
-            value={respEmail}
-            onChange={(e) => setRespEmail(e.target.value)}
-          />
-          <input
-            placeholder="Telefone do responsável"
-            value={respTelefone}
-            onChange={(e) => setRespTelefone(e.target.value)}
-          />
-        </>
-      )}
-
       <hr />
 
-      <h3>Curso e Turma</h3>
-
-      <select value={cursoId} onChange={(e) => setCursoId(e.target.value)}>
-        <option value="">Selecione o curso</option>
-        {cursos.map((c) => (
+      <label>Curso</label>
+      <select
+        name="cursoAtualId"
+        value={dadosAluno.cursoAtualId}
+        onChange={handleChange}
+      >
+        <option value="">Selecione</option>
+        {cursos.map(c => (
           <option key={c.id} value={c.id}>
             {c.nome}
           </option>
         ))}
       </select>
 
+      <label>Turma</label>
       <select
-        value={turmaId}
-        onChange={(e) => setTurmaId(e.target.value)}
-        disabled={!cursoId}
+        name="turmaAtualId"
+        value={dadosAluno.turmaAtualId}
+        onChange={handleChange}
+        disabled={!dadosAluno.cursoAtualId}
       >
-        <option value="">Selecione a turma</option>
-        {turmas.map((t) => (
+        <option value="">Selecione</option>
+        {turmas.map(t => (
           <option key={t.id} value={t.id}>
             {t.nome}
           </option>
         ))}
       </select>
 
+      <hr />
+
+      <label>Foto do aluno</label>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) =>
+          setFoto(e.target.files ? e.target.files[0] : null)
+        }
+      />
+
       <br />
       <br />
 
-      <button onClick={salvarAluno}>Salvar Aluno</button>
+      <button onClick={salvar}>Salvar Aluno</button>
     </div>
   );
 }

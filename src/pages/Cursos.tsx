@@ -16,19 +16,21 @@ export default function Cursos() {
   }, []);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Cursos</h2>
+    <div>
+      <h1>Cursos</h1>
 
       <button onClick={() => navigate("/cursos/novo")}>
-        + Novo Curso
+        ➕ Novo Curso
       </button>
+
+      {cursos.length === 0 && <p>Nenhum curso cadastrado.</p>}
 
       <ul>
         {cursos.map(c => (
-          <li key={c.id}>
+          <li key={c.id} style={{ marginTop: 8 }}>
             <strong>{c.nome}</strong>{" "}
             <button onClick={() => navigate(`/cursos/${c.id}`)}>
-              Ver
+              Ver detalhes
             </button>
           </li>
         ))}

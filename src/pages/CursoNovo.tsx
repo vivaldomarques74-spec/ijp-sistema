@@ -9,7 +9,10 @@ export default function CursoNovo() {
   const navigate = useNavigate();
 
   async function salvar() {
-    if (!nome) return alert("Informe o nome do curso");
+    if (!nome) {
+      alert("Informe o nome do curso");
+      return;
+    }
 
     await addDoc(collection(db, "cursos"), {
       nome,
@@ -22,20 +25,24 @@ export default function CursoNovo() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Novo Curso</h2>
+    <div>
+      <h1>Novo Curso</h1>
 
       <input
         placeholder="Nome do curso"
         value={nome}
-        onChange={e => setNome(e.target.value)}
+        onChange={(e) => setNome(e.target.value)}
       />
+
+      <br /><br />
 
       <input
         placeholder="Descrição"
         value={descricao}
-        onChange={e => setDescricao(e.target.value)}
+        onChange={(e) => setDescricao(e.target.value)}
       />
+
+      <br /><br />
 
       <button onClick={salvar}>Salvar</button>
     </div>

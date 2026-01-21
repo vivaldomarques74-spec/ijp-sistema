@@ -1,57 +1,27 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { useNavigate } from "react-router-dom";
 
-type Aluno = {
-  id: string;
-  matricula: string;
-  nome: string;
-  telefone: string;
-  fotoUrl?: string;
-};
-
 export default function AlunosLista() {
-  const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [busca, setBusca] = useState("");
+  const [alunos, setAlunos] = useState<any[]>([]);
   const navigate = useNavigate();
 
-  async function carregarAlunos() {
-    const q = query(collection(db, "alunos"), orderBy("nome"));
-    const snapshot = await getDocs(q);
-
-    const lista: Aluno[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<Aluno, "id">),
-    }));
-
-    setAlunos(lista);
-  }
-
   useEffect(() => {
-    carregarAlunos();
+    async function carregar() {
+      const snap = await getDocs(collection(db, "alunos"));
+      setAlunos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+    carregar();
   }, []);
 
-  const alunosFiltrados = alunos.filter(
-    (a) =>
-      a.nome.toLowerCase().includes(busca.toLowerCase()) ||
-      a.matricula.toLowerCase().includes(busca.toLowerCase())
-  );
-
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Alunos Cadastrados</h2>
+    <div style={{ padding: 24 }}>
+      <h1>Alunos Cadastrados</h1>
 
-      <input
-        placeholder="Buscar por nome ou matrícula"
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        style={{ marginBottom: 20, width: "100%", maxWidth: 400 }}
-      />
-
-      <table width="100%" cellPadding={8} style={{ borderCollapse: "collapse" }}>
+      <table width="100%">
         <thead>
-          <tr style={{ background: "#eee" }}>
+          <tr>
             <th>Foto</th>
             <th>Matrícula</th>
             <th>Nome</th>
@@ -59,22 +29,21 @@ export default function AlunosLista() {
             <th>Ações</th>
           </tr>
         </thead>
-
         <tbody>
-          {alunosFiltrados.map((aluno) => (
-            <tr key={aluno.id} style={{ borderBottom: "1px solid #ddd" }}>
+          {alunos.map(aluno => (
+            <tr key={aluno.id}>
               <td>
-                {aluno.fotoUrl ? (
+                {aluno.fotoURL ? (
                   <img
-                    src={aluno.fotoUrl}
-                    alt={aluno.nome}
-                    width={40}
-                    height={40}
-                    style={{ borderRadius: "50%", objectFit: "cover" }}
+                    src={aluno.fotoURL}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                    }}
                   />
-                ) : (
-                  "—"
-                )}
+                ) : "—"}
               </td>
               <td>{aluno.matricula}</td>
               <td>{aluno.nome}</td>
@@ -88,8 +57,6 @@ export default function AlunosLista() {
           ))}
         </tbody>
       </table>
-
-      {alunosFiltrados.length === 0 && <p>Nenhum aluno encontrado.</p>}
     </div>
   );
 }

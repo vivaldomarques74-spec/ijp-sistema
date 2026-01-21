@@ -7,6 +7,7 @@ import {
   doc,
   Timestamp,
   setDoc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 
@@ -33,8 +34,11 @@ export default function Presenca() {
   const [turmaId, setTurmaId] = useState("");
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [presencas, setPresencas] = useState<Record<string, boolean>>({});
+  const [modo, setModo] = useState<"novo" | "existente">("novo");
 
-  // carregar cursos
+  /* =========================
+     CARREGAR CURSOS
+  ========================= */
   useEffect(() => {
     const carregarCursos = async () => {
       const snap = await getDocs(collection(db, "cursos"));
@@ -45,11 +49,12 @@ export default function Presenca() {
         }))
       );
     };
-
     carregarCursos();
   }, []);
 
-  // carregar turmas do curso
+  /* =========================
+     CARREGAR TURMAS
+  ========================= */
   useEffect(() => {
     if (!cursoId) return;
 
@@ -66,7 +71,9 @@ export default function Presenca() {
     carregarTurmas();
   }, [cursoId]);
 
-  // carregar alunos da turma
+  /* =========================
+     CARREGAR ALUNOS DA TURMA
+  ========================= */
   useEffect(() => {
     if (!turmaId) return;
 
@@ -84,7 +91,6 @@ export default function Presenca() {
 
       setAlunos(lista);
 
-      // inicia todos como presentes
       const inicial: Record<string, boolean> = {};
       lista.forEach((a) => (inicial[a.id] = true));
       setPresencas(inicial);
@@ -92,6 +98,27 @@ export default function Presenca() {
 
     carregarAlunos();
   }, [turmaId]);
+
+  /* =========================
+     VERIFICAR PRESENÇA POR DATA
+  ========================= */
+  useEffect(() => {
+    if (!turmaId || !data) return;
+
+    const verificarPresenca = async () => {
+      const ref = doc(db, "presencas", `${turmaId}_${data}`);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        setPresencas(snap.data().alunos);
+        setModo("existente");
+      } else {
+        setModo("novo");
+      }
+    };
+
+    verificarPresenca();
+  }, [turmaId, data]);
 
   const togglePresenca = (alunoId: string) => {
     setPresencas((prev) => ({
@@ -113,14 +140,18 @@ export default function Presenca() {
       turmaId,
       data: Timestamp.fromDate(new Date(data)),
       alunos: presencas,
-      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     });
 
-    alert("Presença salva com sucesso!");
+    alert(
+      modo === "novo"
+        ? "Presença registrada com sucesso!"
+        : "Presença atualizada com sucesso!"
+    );
   };
 
   return (
-    <div className="container">
+    <div style={{ padding: 20 }}>
       <h1>Presença</h1>
 
       <label>Data</label>
@@ -160,6 +191,12 @@ export default function Presenca() {
         ))}
       </select>
 
+      {modo === "existente" && (
+        <p style={{ color: "green", marginTop: 10 }}>
+          Presença já registrada para esta data. Você está visualizando os dados.
+        </p>
+      )}
+
       <hr />
 
       <h3>Alunos</h3>
@@ -182,7 +219,9 @@ export default function Presenca() {
       </ul>
 
       {alunos.length > 0 && (
-        <button onClick={salvarPresenca}>Salvar Presença</button>
+        <button onClick={salvarPresenca}>
+          {modo === "novo" ? "Salvar Presença" : "Atualizar Presença"}
+        </button>
       )}
     </div>
   );
