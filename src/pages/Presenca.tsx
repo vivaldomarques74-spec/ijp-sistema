@@ -7,6 +7,8 @@ import {
   updateDoc,
   arrayUnion,
   Timestamp,
+  query,
+  where,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 import jsPDF from "jspdf";
@@ -51,6 +53,8 @@ export default function Presencas() {
   useEffect(() => {
     if (!cursoId) {
       setTurmas([]);
+      setTurmaId("");
+      setAlunos([]);
       return;
     }
 
@@ -59,17 +63,34 @@ export default function Presencas() {
     );
   }, [cursoId]);
 
-  // 🔹 CARREGAR ALUNOS
+  // 🔹 CARREGAR ALUNOS (SÓ QUANDO A TURMA FOR SELECIONADA)
   useEffect(() => {
-    getDocs(collection(db, "alunos")).then((snap) =>
+    if (!turmaId) {
+      setAlunos([]);
+      setPresencasMarcadas([]);
+      return;
+    }
+
+    const carregarAlunos = async () => {
+      const q = query(
+        collection(db, "alunos"),
+        where("turmaAtualId", "==", turmaId)
+      );
+
+      const snap = await getDocs(q);
+
       setAlunos(
         snap.docs.map((d) => ({
           id: d.id,
           nomeCompleto: d.data().nomeCompleto,
         }))
-      )
-    );
-  }, []);
+      );
+
+      setPresencasMarcadas([]);
+    };
+
+    carregarAlunos();
+  }, [turmaId]);
 
   // 🔹 SALVAR PRESENÇA
   const salvarPresencas = async () => {
@@ -190,7 +211,7 @@ export default function Presencas() {
 
       <hr />
 
-      {aba === "registrar" && (
+      {aba === "registrar" && turmaId && (
         <>
           {alunos.map((a) => (
             <label key={a.id} style={{ display: "block" }}>
@@ -210,10 +231,14 @@ export default function Presencas() {
           ))}
 
           <br />
-          <button onClick={salvarPresencas}>Salvar Presença</button>
-          <button onClick={gerarPdfPresenca} style={{ marginLeft: 10 }}>
-            Gerar PDF da Presença
-          </button>
+          {alunos.length > 0 && (
+            <>
+              <button onClick={salvarPresencas}>Salvar Presença</button>
+              <button onClick={gerarPdfPresenca} style={{ marginLeft: 10 }}>
+                Gerar PDF da Presença
+              </button>
+            </>
+          )}
         </>
       )}
 
