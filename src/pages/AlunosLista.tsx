@@ -1,22 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../services/firebase";
 
+/** 🔹 TIPO DO ALUNO (RESOLVE O ERRO DO TS) */
+type Aluno = {
+  id: string;
+  nomeCompleto?: string;
+  matricula?: string;
+  nascimento?: any;
+  fotoURL?: string;
+};
+
 export default function ListaAlunos() {
-  const [alunos, setAlunos] = useState<any[]>([]);
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [busca, setBusca] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     async function carregarAlunos() {
-      const q = query(collection(db, "alunos"), orderBy("nome"));
-      const snap = await getDocs(q);
+      const snap = await getDocs(collection(db, "alunos"));
 
-      const lista = snap.docs.map((doc) => ({
+      let lista: Aluno[] = snap.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data(),
+        ...(doc.data() as Omit<Aluno, "id">),
       }));
+
+      // 🔠 ORDEM ALFABÉTICA PELO NOME
+      lista.sort((a, b) =>
+        (a.nomeCompleto || "").localeCompare(b.nomeCompleto || "")
+      );
 
       setAlunos(lista);
     }
@@ -27,14 +40,12 @@ export default function ListaAlunos() {
   function calcularIdade(data: any) {
     if (!data) return "-";
 
-    const nascimento = data.toDate
-      ? data.toDate()
-      : new Date(data);
-
+    const nascimento = data.toDate ? data.toDate() : new Date(data);
     const hoje = new Date();
-    let idade = hoje.getFullYear() - nascimento.getFullYear();
 
+    let idade = hoje.getFullYear() - nascimento.getFullYear();
     const m = hoje.getMonth() - nascimento.getMonth();
+
     if (m < 0 || (m === 0 && hoje.getDate() < nascimento.getDate())) {
       idade--;
     }
@@ -43,13 +54,13 @@ export default function ListaAlunos() {
   }
 
   const alunosFiltrados = useMemo(() => {
-    return alunos.filter((aluno) => {
-      const termo = busca.toLowerCase();
-      return (
-        aluno.nome?.toLowerCase().includes(termo) ||
+    const termo = busca.toLowerCase();
+
+    return alunos.filter(
+      (aluno) =>
+        aluno.nomeCompleto?.toLowerCase().includes(termo) ||
         aluno.matricula?.toLowerCase().includes(termo)
-      );
-    });
+    );
   }, [alunos, busca]);
 
   return (
@@ -87,7 +98,7 @@ export default function ListaAlunos() {
               <td>
                 <img
                   src={aluno.fotoURL || "/avatar-placeholder.png"}
-                  alt={aluno.nome}
+                  alt={aluno.nomeCompleto}
                   style={{
                     width: 50,
                     height: 50,
@@ -97,9 +108,9 @@ export default function ListaAlunos() {
                 />
               </td>
 
-              <td>{aluno.nome}</td>
+              <td>{aluno.nomeCompleto}</td>
 
-              <td>{aluno.matricula || "-"}</td>
+              <td>{aluno.matricula}</td>
 
               <td>
                 {aluno.nascimento

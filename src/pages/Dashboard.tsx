@@ -1,39 +1,64 @@
-import logoIJP from "../assets/logo-ijp.png";
+import { useEffect, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import { db } from "../services/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import logo from "../assets/logo-ijp.png";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const [nome, setNome] = useState<string>("");
+
+  useEffect(() => {
+    async function carregarUsuario() {
+      if (!user) return;
+
+      const ref = doc(db, "usuarios", user.uid);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        setNome(snap.data().nome);
+      }
+    }
+
+    carregarUsuario();
+  }, [user]);
+
   return (
     <div
       style={{
         minHeight: "80vh",
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
+        display: "flex",
         alignItems: "center",
-        gap: 40,
-        padding: 40,
+        justifyContent: "center",
+        padding: "40px",
       }}
     >
-      {/* LOGO */}
-      <div style={{ textAlign: "center" }}>
+      {/* COLUNA ESQUERDA — LOGO */}
+      <div style={{ flex: 1, textAlign: "center" }}>
         <img
-          src={logoIJP}
+          src={logo}
           alt="Instituto Jovens Periféricos"
-          style={{
-            width: "100%",
-            maxWidth: 420,
-          }}
+          style={{ maxWidth: 380, width: "100%" }}
         />
       </div>
 
-      {/* TEXTO */}
-      <div>
-        <h1>Instituto Jovens Periféricos</h1>
-        <h2>Bem-vindo, equipe de excelência</h2>
+      {/* COLUNA DIREITA — TEXTO */}
+      <div style={{ flex: 1 }}>
+        <h1 style={{ fontSize: 36, marginBottom: 16 }}>
+          Instituto Jovens Periféricos
+        </h1>
 
-        <p style={{ fontStyle: "italic", marginTop: 20 }}>
+        <h2 style={{ fontSize: 24, marginBottom: 32 }}>
+          Bem-vindo(a){nome ? `, ${nome}` : ""}
+        </h2>
+
+        <p style={{ fontStyle: "italic", fontSize: 18 }}>
           “Tudo o que fizerem, façam de todo o coração, como para o Senhor.”
         </p>
 
-        <strong>Colossenses 3:23</strong>
+        <p style={{ marginTop: 8, fontWeight: "bold" }}>
+          Colossenses 3:23
+        </p>
       </div>
     </div>
   );

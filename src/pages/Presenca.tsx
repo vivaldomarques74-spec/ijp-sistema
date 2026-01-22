@@ -2,171 +2,176 @@ import { useEffect, useState } from "react";
 import {
   collection,
   getDocs,
-  query,
-  where,
+  addDoc,
   doc,
+  updateDoc,
+  arrayUnion,
   Timestamp,
-  setDoc,
-  getDoc,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
-interface Curso {
-  id: string;
-  nome: string;
-}
-
-interface Turma {
-  id: string;
-  nome: string;
-}
-
-interface Aluno {
+type Aluno = {
   id: string;
   nomeCompleto: string;
-}
+};
 
-export default function Presenca() {
+type Curso = {
+  id: string;
+  nome: string;
+};
+
+type Turma = {
+  id: string;
+  nome: string;
+};
+
+export default function Presencas() {
+  const [aba, setAba] = useState<"registrar" | "historico">("registrar");
+
   const [data, setData] = useState("");
-  const [cursos, setCursos] = useState<Curso[]>([]);
   const [cursoId, setCursoId] = useState("");
-  const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState("");
-  const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [presencas, setPresencas] = useState<Record<string, boolean>>({});
-  const [modo, setModo] = useState<"novo" | "existente">("novo");
 
-  /* =========================
-     CARREGAR CURSOS
-  ========================= */
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [turmas, setTurmas] = useState<Turma[]>([]);
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [presencasMarcadas, setPresencasMarcadas] = useState<string[]>([]);
+  const [historico, setHistorico] = useState<any[]>([]);
+
+  // 🔹 CARREGAR CURSOS
   useEffect(() => {
-    const carregarCursos = async () => {
-      const snap = await getDocs(collection(db, "cursos"));
-      setCursos(
-        snap.docs.map((d) => ({
-          id: d.id,
-          nome: d.data().nome,
-        }))
-      );
-    };
-    carregarCursos();
+    getDocs(collection(db, "cursos")).then((snap) =>
+      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Curso)))
+    );
   }, []);
 
-  /* =========================
-     CARREGAR TURMAS
-  ========================= */
+  // 🔹 CARREGAR TURMAS
   useEffect(() => {
-    if (!cursoId) return;
-
-    const carregarTurmas = async () => {
-      const snap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
-      setTurmas(
-        snap.docs.map((d) => ({
-          id: d.id,
-          nome: d.data().nome,
-        }))
-      );
-    };
-
-    carregarTurmas();
-  }, [cursoId]);
-
-  /* =========================
-     CARREGAR ALUNOS DA TURMA
-  ========================= */
-  useEffect(() => {
-    if (!turmaId) return;
-
-    const carregarAlunos = async () => {
-      const q = query(
-        collection(db, "alunos"),
-        where("turmaAtualId", "==", turmaId)
-      );
-      const snap = await getDocs(q);
-
-      const lista: Aluno[] = snap.docs.map((d) => ({
-        id: d.id,
-        nomeCompleto: d.data().nomeCompleto,
-      }));
-
-      setAlunos(lista);
-
-      const inicial: Record<string, boolean> = {};
-      lista.forEach((a) => (inicial[a.id] = true));
-      setPresencas(inicial);
-    };
-
-    carregarAlunos();
-  }, [turmaId]);
-
-  /* =========================
-     VERIFICAR PRESENÇA POR DATA
-  ========================= */
-  useEffect(() => {
-    if (!turmaId || !data) return;
-
-    const verificarPresenca = async () => {
-      const ref = doc(db, "presencas", `${turmaId}_${data}`);
-      const snap = await getDoc(ref);
-
-      if (snap.exists()) {
-        setPresencas(snap.data().alunos);
-        setModo("existente");
-      } else {
-        setModo("novo");
-      }
-    };
-
-    verificarPresenca();
-  }, [turmaId, data]);
-
-  const togglePresenca = (alunoId: string) => {
-    setPresencas((prev) => ({
-      ...prev,
-      [alunoId]: !prev[alunoId],
-    }));
-  };
-
-  const salvarPresenca = async () => {
-    if (!data || !cursoId || !turmaId) {
-      alert("Selecione data, curso e turma");
+    if (!cursoId) {
+      setTurmas([]);
       return;
     }
 
-    const ref = doc(db, "presencas", `${turmaId}_${data}`);
+    getDocs(collection(db, "cursos", cursoId, "turmas")).then((snap) =>
+      setTurmas(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Turma)))
+    );
+  }, [cursoId]);
 
-    await setDoc(ref, {
-      cursoId,
-      turmaId,
-      data: Timestamp.fromDate(new Date(data)),
-      alunos: presencas,
-      updatedAt: Timestamp.now(),
+  // 🔹 CARREGAR ALUNOS
+  useEffect(() => {
+    getDocs(collection(db, "alunos")).then((snap) =>
+      setAlunos(
+        snap.docs.map((d) => ({
+          id: d.id,
+          nomeCompleto: d.data().nomeCompleto,
+        }))
+      )
+    );
+  }, []);
+
+  // 🔹 SALVAR PRESENÇA
+  const salvarPresencas = async () => {
+    if (!data || !cursoId || !turmaId) {
+      alert("Informe data, curso e turma");
+      return;
+    }
+
+    const dataPresenca = Timestamp.fromDate(new Date(data));
+
+    for (const alunoId of presencasMarcadas) {
+      await addDoc(collection(db, "presencas"), {
+        alunoId,
+        cursoId,
+        turmaId,
+        data: dataPresenca,
+        presente: true,
+      });
+
+      await updateDoc(doc(db, "alunos", alunoId), {
+        historicoPresenca: arrayUnion({
+          cursoId,
+          turmaId,
+          data: dataPresenca,
+          presente: true,
+        }),
+      });
+    }
+
+    alert("Presença registrada com sucesso");
+    setPresencasMarcadas([]);
+  };
+
+  // 🔹 GERAR HISTÓRICO
+  const gerarHistorico = async () => {
+    const snap = await getDocs(collection(db, "presencas"));
+
+    const lista = snap.docs
+      .map((d) => d.data())
+      .filter(
+        (p) =>
+          p.cursoId === cursoId &&
+          p.turmaId === turmaId &&
+          (!data ||
+            p.data.toDate().toISOString().slice(0, 10) === data)
+      );
+
+    setHistorico(lista);
+  };
+
+  // 📄 PDF — PRESENÇA DA AULA
+  const gerarPdfPresenca = () => {
+    const doc = new jsPDF();
+
+    doc.text("Lista de Presença", 14, 15);
+
+    autoTable(doc, {
+      startY: 20,
+      head: [["Aluno", "Presente"]],
+      body: alunos.map((a) => [
+        a.nomeCompleto,
+        presencasMarcadas.includes(a.id) ? "Sim" : "Não",
+      ]),
     });
 
-    alert(
-      modo === "novo"
-        ? "Presença registrada com sucesso!"
-        : "Presença atualizada com sucesso!"
-    );
+    doc.save("presenca.pdf");
+  };
+
+  // 📄 PDF — RELATÓRIO POR ALUNO
+  const gerarPdfAluno = () => {
+    const doc = new jsPDF();
+
+    doc.text("Relatório de Presença por Aluno", 14, 15);
+
+    autoTable(doc, {
+      startY: 20,
+      head: [["Aluno", "Data", "Status"]],
+      body: historico.map((h) => [
+        h.alunoId,
+        h.data.toDate().toLocaleDateString(),
+        h.presente ? "Presente" : "Ausente",
+      ]),
+    });
+
+    doc.save("relatorio-aluno.pdf");
   };
 
   return (
     <div style={{ padding: 20 }}>
-      <h1>Presença</h1>
+      <h1>Presenças</h1>
 
-      <label>Data</label>
-      <input
-        type="date"
-        value={data}
-        onChange={(e) => setData(e.target.value)}
-      />
+      <button onClick={() => setAba("registrar")}>Registrar</button>
+      <button onClick={() => setAba("historico")} style={{ marginLeft: 10 }}>
+        Histórico
+      </button>
 
-      <br />
-      <br />
+      <hr />
 
-      <label>Curso</label>
+      <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+
       <select value={cursoId} onChange={(e) => setCursoId(e.target.value)}>
-        <option value="">Selecione o curso</option>
+        <option value="">Curso</option>
         {cursos.map((c) => (
           <option key={c.id} value={c.id}>
             {c.nome}
@@ -174,16 +179,8 @@ export default function Presenca() {
         ))}
       </select>
 
-      <br />
-      <br />
-
-      <label>Turma</label>
-      <select
-        value={turmaId}
-        onChange={(e) => setTurmaId(e.target.value)}
-        disabled={!cursoId}
-      >
-        <option value="">Selecione a turma</option>
+      <select value={turmaId} onChange={(e) => setTurmaId(e.target.value)}>
+        <option value="">Turma</option>
         {turmas.map((t) => (
           <option key={t.id} value={t.id}>
             {t.nome}
@@ -191,37 +188,42 @@ export default function Presenca() {
         ))}
       </select>
 
-      {modo === "existente" && (
-        <p style={{ color: "green", marginTop: 10 }}>
-          Presença já registrada para esta data. Você está visualizando os dados.
-        </p>
-      )}
-
       <hr />
 
-      <h3>Alunos</h3>
-
-      {alunos.length === 0 && <p>Nenhum aluno nessa turma.</p>}
-
-      <ul>
-        {alunos.map((a) => (
-          <li key={a.id} style={{ marginBottom: 8 }}>
-            <label>
+      {aba === "registrar" && (
+        <>
+          {alunos.map((a) => (
+            <label key={a.id} style={{ display: "block" }}>
               <input
                 type="checkbox"
-                checked={presencas[a.id] || false}
-                onChange={() => togglePresenca(a.id)}
-              />{" "}
+                checked={presencasMarcadas.includes(a.id)}
+                onChange={(e) =>
+                  setPresencasMarcadas((prev) =>
+                    e.target.checked
+                      ? [...prev, a.id]
+                      : prev.filter((id) => id !== a.id)
+                  )
+                }
+              />
               {a.nomeCompleto}
             </label>
-          </li>
-        ))}
-      </ul>
+          ))}
 
-      {alunos.length > 0 && (
-        <button onClick={salvarPresenca}>
-          {modo === "novo" ? "Salvar Presença" : "Atualizar Presença"}
-        </button>
+          <br />
+          <button onClick={salvarPresencas}>Salvar Presença</button>
+          <button onClick={gerarPdfPresenca} style={{ marginLeft: 10 }}>
+            Gerar PDF da Presença
+          </button>
+        </>
+      )}
+
+      {aba === "historico" && (
+        <>
+          <button onClick={gerarHistorico}>Buscar Histórico</button>
+          <button onClick={gerarPdfAluno} style={{ marginLeft: 10 }}>
+            Gerar PDF por Aluno
+          </button>
+        </>
       )}
     </div>
   );

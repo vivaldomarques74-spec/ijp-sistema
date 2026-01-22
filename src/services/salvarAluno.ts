@@ -3,49 +3,67 @@ import {
   addDoc,
   doc,
   runTransaction,
+  updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "../services/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth, db, storage } from "../services/firebase";
 
 export async function salvarAluno({
   dadosAluno,
+  foto,
   onSucesso,
 }: {
   dadosAluno: any;
-  onSucesso?: () => void;
+  foto?: File | null;
+  onSucesso?: (matricula: string) => void;
 }) {
   if (!auth.currentUser) {
     throw new Error("Usuário não autenticado");
   }
 
-  // 🔢 gera matrícula com transação (seguro)
-  const matriculaRef = doc(db, "config", "matricula");
+  // 🔢 CONTADOR DE MATRÍCULA
+  const contadorRef = doc(db, "contadores", "matricula");
 
   const numeroMatricula = await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(matriculaRef);
+    const snap = await transaction.get(contadorRef);
 
     if (!snap.exists()) {
-      throw new Error("Config de matrícula não encontrada");
+      throw new Error("Contador de matrícula não encontrado");
     }
 
-    const ultimoNumero = snap.data().ultimoNumero || 0;
+    const ultimoNumero = snap.data().valor || 0;
     const novoNumero = ultimoNumero + 1;
 
-    transaction.update(matriculaRef, {
-      ultimoNumero: novoNumero,
+    transaction.update(contadorRef, {
+      valor: novoNumero,
     });
 
     return novoNumero;
   });
 
-  const matriculaFormatada = `IJP-${String(numeroMatricula).padStart(6, "0")}`;
+  const matricula = `IJP-${String(numeroMatricula).padStart(5, "0")}`;
 
-  // 🧾 cria aluno SEM foto
-  await addDoc(collection(db, "alunos"), {
+  // 🧾 CRIA ALUNO (SEM FOTO OBRIGATÓRIA)
+  const alunoRef = await addDoc(collection(db, "alunos"), {
     ...dadosAluno,
-    matricula: matriculaFormatada,
-    fotoURL: null,
+    matricula,
+    matriculaNumero: numeroMatricula,
     criadoEm: new Date(),
   });
 
-  onSucesso?.();
+  // 🖼️ FOTO (SÓ SE EXISTIR)
+  if (foto) {
+    const fotoRef = ref(storage, `alunos/${alunoRef.id}/foto.jpg`);
+    await uploadBytes(fotoRef, foto);
+    const fotoURL = await getDownloadURL(fotoRef);
+
+    await updateDoc(alunoRef, {
+      fotoURL,
+    });
+  }
+
+  // 🔁 CALLBACK + RETORNO
+  if (onSucesso) onSucesso(matricula);
+
+  return matricula;
 }

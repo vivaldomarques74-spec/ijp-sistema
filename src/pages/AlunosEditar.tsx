@@ -1,28 +1,48 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   doc,
   getDoc,
   updateDoc,
+  collection,
+  getDocs,
 } from "firebase/firestore";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../services/firebase";
 
 export default function EditarAluno() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
-  const [salvando, setSalvando] = useState(false);
+  const [dadosAluno, setDadosAluno] = useState<any>({
+    nomeCompleto: "",
+    rg: "",
+    cpf: "",
+    endereco: "",
+    email: "",
+    telefone: "",
+    nascimento: "",
+    menor: false,
 
-  const [aluno, setAluno] = useState<any>(null);
+    responsavelNome: "",
+    responsavelEmail: "",
+    responsavelTelefone: "",
+    responsavelCpf: "",
+    responsavelRg: "",
+
+    status: "ativo",
+    observacoes: "",
+
+    cursos: [], // 🔹 HISTÓRICO DE CURSOS
+  });
+
   const [foto, setFoto] = useState<File | null>(null);
+  const [cursos, setCursos] = useState<any[]>([]);
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [novoCursoId, setNovoCursoId] = useState("");
+  const [novaTurmaId, setNovaTurmaId] = useState("");
 
-  // 🔹 carrega aluno
+  // 🔹 CARREGAR ALUNO
   useEffect(() => {
     async function carregarAluno() {
       if (!id) return;
@@ -31,181 +51,164 @@ export default function EditarAluno() {
       const snap = await getDoc(refAluno);
 
       if (snap.exists()) {
-        setAluno({ id: snap.id, ...snap.data() });
+        setDadosAluno({ id: snap.id, ...snap.data() });
       }
-
-      setLoading(false);
     }
 
     carregarAluno();
   }, [id]);
 
-  // 🔹 salvar dados (SEM FOTO)
-  async function salvarDados() {
-    if (!id) return;
-
-    setSalvando(true);
-
-    try {
-      await updateDoc(doc(db, "alunos", id), {
-        nome: aluno.nome,
-        telefone: aluno.telefone,
-        email: aluno.email,
-        endereco: aluno.endereco,
-        base: aluno.base,
-        sensei: aluno.sensei,
-        observacoesMedicas: aluno.observacoesMedicas || "",
-      });
-
-      alert("Dados atualizados com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar dados");
+  // 🔹 CARREGAR CURSOS
+  useEffect(() => {
+    async function carregarCursos() {
+      const snap = await getDocs(collection(db, "cursos"));
+      setCursos(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      );
     }
 
-    setSalvando(false);
-  }
+    carregarCursos();
+  }, []);
 
-  // 🔹 upload da foto (ISOLADO)
-  async function salvarFoto() {
-    if (!id || !foto) {
-      alert("Selecione uma foto");
+  // 🔹 CARREGAR TURMAS DO NOVO CURSO
+  useEffect(() => {
+    if (!novoCursoId) {
+      setTurmas([]);
       return;
     }
 
-    setSalvando(true);
+    async function carregarTurmas() {
+      const snap = await getDocs(
+        collection(db, "cursos", novoCursoId, "turmas")
+      );
 
-    try {
-      const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
-      await uploadBytes(fotoRef, foto);
-
-      const downloadURL = await getDownloadURL(fotoRef);
-
-      await updateDoc(doc(db, "alunos", id), {
-        fotoURL: downloadURL,
-      });
-
-      setAluno((prev: any) => ({
-        ...prev,
-        fotoURL: downloadURL,
-      }));
-
-      alert("Foto atualizada com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao enviar foto");
+      setTurmas(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      );
     }
 
-    setSalvando(false);
-  }
+    carregarTurmas();
+  }, [novoCursoId]);
 
-  if (loading) return <p>Carregando aluno...</p>;
-  if (!aluno) return <p>Aluno não encontrado</p>;
+  const handleChange = (e: any) => {
+    const { name, value, type, checked } = e.target;
+    setDadosAluno((prev: any) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const salvar = async () => {
+    try {
+      if (!id) return;
+
+      const refAluno = doc(db, "alunos", id);
+
+      // 🖼️ UPLOAD DE FOTO
+      let fotoURL = dadosAluno.fotoURL;
+
+      if (foto) {
+        const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
+        await uploadBytes(fotoRef, foto);
+        fotoURL = await getDownloadURL(fotoRef);
+      }
+
+      // 🎓 ADICIONAR NOVO CURSO (SEM APAGAR OS ANTIGOS)
+      let cursosAtualizados = dadosAluno.cursos || [];
+
+      if (novoCursoId && novaTurmaId) {
+        cursosAtualizados = [
+          ...cursosAtualizados,
+          {
+            cursoId: novoCursoId,
+            turmaId: novaTurmaId,
+            data: new Date(),
+          },
+        ];
+      }
+
+      await updateDoc(refAluno, {
+        ...dadosAluno,
+        fotoURL,
+        cursos: cursosAtualizados,
+        atualizadoEm: new Date(),
+      });
+
+      alert("Aluno atualizado com sucesso");
+      navigate("/alunos");
+    } catch (error) {
+      console.error("Erro ao atualizar aluno:", error);
+      alert("Erro ao salvar alterações");
+    }
+  };
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto" }}>
-      <h2>Editar Aluno</h2>
+    <div style={{ padding: 20 }}>
+      <h1>Editar Aluno</h1>
 
-      {/* FOTO */}
-      <div style={{ marginBottom: 20 }}>
-        <img
-          src={aluno.fotoURL || "/avatar-placeholder.png"}
-          alt="Foto do aluno"
-          style={{
-            width: 120,
-            height: 120,
-            objectFit: "cover",
-            borderRadius: "50%",
-            display: "block",
-            marginBottom: 10,
-          }}
-        />
+      <input name="nomeCompleto" value={dadosAluno.nomeCompleto} onChange={handleChange} placeholder="Nome completo" />
+      <input name="rg" value={dadosAluno.rg} onChange={handleChange} placeholder="RG" />
+      <input name="cpf" value={dadosAluno.cpf} onChange={handleChange} placeholder="CPF" />
+      <input name="endereco" value={dadosAluno.endereco} onChange={handleChange} placeholder="Endereço" />
+      <input name="email" value={dadosAluno.email} onChange={handleChange} placeholder="Email" />
+      <input name="telefone" value={dadosAluno.telefone} onChange={handleChange} placeholder="Telefone" />
 
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            if (e.target.files?.[0]) {
-              setFoto(e.target.files[0]);
-            }
-          }}
-        />
+      <label>
+        <input type="checkbox" name="menor" checked={dadosAluno.menor} onChange={handleChange} />
+        Aluno é menor
+      </label>
 
-        <button onClick={salvarFoto} disabled={salvando}>
-          Atualizar Foto
-        </button>
-      </div>
+      {dadosAluno.menor && (
+        <>
+          <h3>Responsável</h3>
+          <input name="responsavelNome" value={dadosAluno.responsavelNome} onChange={handleChange} placeholder="Nome" />
+          <input name="responsavelEmail" value={dadosAluno.responsavelEmail} onChange={handleChange} placeholder="Email" />
+          <input name="responsavelTelefone" value={dadosAluno.responsavelTelefone} onChange={handleChange} placeholder="Telefone" />
+          <input name="responsavelCpf" value={dadosAluno.responsavelCpf} onChange={handleChange} placeholder="CPF" />
+          <input name="responsavelRg" value={dadosAluno.responsavelRg} onChange={handleChange} placeholder="RG" />
+        </>
+      )}
 
-      {/* DADOS */}
-      <input
-        placeholder="Nome"
-        value={aluno.nome || ""}
-        onChange={(e) =>
-          setAluno({ ...aluno, nome: e.target.value })
-        }
-      />
-
-      <input
-        placeholder="Telefone"
-        value={aluno.telefone || ""}
-        onChange={(e) =>
-          setAluno({ ...aluno, telefone: e.target.value })
-        }
-      />
-
-      <input
-        placeholder="Email"
-        value={aluno.email || ""}
-        onChange={(e) =>
-          setAluno({ ...aluno, email: e.target.value })
-        }
-      />
-
-      <input
-        placeholder="Endereço"
-        value={aluno.endereco || ""}
-        onChange={(e) =>
-          setAluno({ ...aluno, endereco: e.target.value })
-        }
-      />
-
-      <input
-        placeholder="Base"
-        value={aluno.base || ""}
-        onChange={(e) =>
-          setAluno({ ...aluno, base: e.target.value })
-        }
-      />
-
-      <input
-        placeholder="Sensei"
-        value={aluno.sensei || ""}
-        onChange={(e) =>
-          setAluno({ ...aluno, sensei: e.target.value })
-        }
-      />
+      <h3>Status</h3>
+      <select name="status" value={dadosAluno.status} onChange={handleChange}>
+        <option value="ativo">Ativo</option>
+        <option value="inativo">Inativo</option>
+      </select>
 
       <textarea
-        placeholder="Observações Médicas"
-        value={aluno.observacoesMedicas || ""}
-        onChange={(e) =>
-          setAluno({
-            ...aluno,
-            observacoesMedicas: e.target.value,
-          })
-        }
+        name="observacoes"
+        value={dadosAluno.observacoes}
+        onChange={handleChange}
+        placeholder="Observações"
       />
 
-      <button onClick={salvarDados} disabled={salvando}>
-        Salvar Dados
-      </button>
+      <h3>Foto do Aluno</h3>
+      <input type="file" onChange={(e) => setFoto(e.target.files?.[0] || null)} />
 
-      <button
-        style={{ marginLeft: 10 }}
-        onClick={() => navigate("/alunos")}
-      >
-        Voltar
-      </button>
+      <h3>Cadastrar em Novo Curso</h3>
+      <select value={novoCursoId} onChange={(e) => setNovoCursoId(e.target.value)}>
+        <option value="">Selecione o curso</option>
+        {cursos.map((c) => (
+          <option key={c.id} value={c.id}>{c.nome}</option>
+        ))}
+      </select>
+
+      <select value={novaTurmaId} onChange={(e) => setNovaTurmaId(e.target.value)}>
+        <option value="">Selecione a turma</option>
+        {turmas.map((t) => (
+          <option key={t.id} value={t.id}>{t.nome}</option>
+        ))}
+      </select>
+
+      <br /><br />
+
+      <button onClick={salvar}>Salvar Alterações</button>
     </div>
   );
 }
