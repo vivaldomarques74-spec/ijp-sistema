@@ -7,6 +7,7 @@ import {
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
+// 🔧 CONFIG FIREBASE (ENV VARS)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -16,19 +17,21 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// 🔥 INIT APP
 const app = initializeApp(firebaseConfig);
 
-// 🔐 AUTH COM PERSISTÊNCIA (SEM ISSO O VERCEL QUEBRA)
+// 🔐 AUTH COM PERSISTÊNCIA (ESSENCIAL NO VERCEL)
 export const auth = getAuth(app);
 
-setPersistence(auth, browserLocalPersistence)
-  .then(() => {
-    console.log("Auth persistido com sucesso");
-  })
-  .catch((err) => {
-    console.error("Erro ao persistir auth:", err);
-  });
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Erro ao persistir auth:", err);
+});
 
-// 🔥 Firestore e Storage
+// 🔥 FIRESTORE
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+
+// 📦 STORAGE — BUCKET FORÇADO (FIX DEFINITIVO PARA VERCEL)
+export const storage = getStorage(
+  app,
+  "gs://ijp-web.firebasestorage.app"
+);
