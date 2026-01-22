@@ -27,6 +27,8 @@ type Curso = {
 type Turma = {
   id: string;
   nome: string;
+  cursoId: string;
+  alunos?: string[]; // 👈 array de IDs
 };
 
 export default function Presencas() {
@@ -45,11 +47,16 @@ export default function Presencas() {
   // 🔹 CARREGAR CURSOS
   useEffect(() => {
     getDocs(collection(db, "cursos")).then((snap) =>
-      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Curso)))
+      setCursos(
+        snap.docs.map((d) => ({
+          id: d.id,
+          nome: d.data().nome,
+        }))
+      )
     );
   }, []);
 
-  // 🔹 CARREGAR TURMAS
+  // 🔹 CARREGAR TURMAS (CORRIGIDO → coleção raiz)
   useEffect(() => {
     if (!cursoId) {
       setTurmas([]);
@@ -58,12 +65,32 @@ export default function Presencas() {
       return;
     }
 
-    getDocs(collection(db, "cursos", cursoId, "turmas")).then((snap) =>
-      setTurmas(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Turma)))
-    );
+    const carregarTurmas = async () => {
+      const q = query(
+        collection(db, "turmas"),
+        where("cursoId", "==", cursoId)
+      );
+
+      const snap = await getDocs(q);
+
+      setTurmas(
+        snap.docs.map(
+          (d) =>
+            ({
+              id: d.id,
+              ...d.data(),
+            } as Turma)
+        )
+      );
+
+      setTurmaId("");
+      setAlunos([]);
+    };
+
+    carregarTurmas();
   }, [cursoId]);
 
-  // 🔹 CARREGAR ALUNOS (SÓ QUANDO A TURMA FOR SELECIONADA)
+  // 🔹 CARREGAR ALUNOS DA TURMA (CORRIGIDO)
   useEffect(() => {
     if (!turmaId) {
       setAlunos([]);
@@ -72,25 +99,28 @@ export default function Presencas() {
     }
 
     const carregarAlunos = async () => {
-      const q = query(
-        collection(db, "alunos"),
-        where("turmaAtualId", "==", turmaId)
-      );
+      const turma = turmas.find((t) => t.id === turmaId);
 
-      const snap = await getDocs(q);
+      if (!turma || !turma.alunos || turma.alunos.length === 0) {
+        setAlunos([]);
+        return;
+      }
 
-      setAlunos(
-        snap.docs.map((d) => ({
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+
+      const lista = alunosSnap.docs
+        .filter((d) => turma.alunos?.includes(d.id))
+        .map((d) => ({
           id: d.id,
           nomeCompleto: d.data().nomeCompleto,
-        }))
-      );
+        }));
 
+      setAlunos(lista);
       setPresencasMarcadas([]);
     };
 
     carregarAlunos();
-  }, [turmaId]);
+  }, [turmaId, turmas]);
 
   // 🔹 SALVAR PRESENÇA
   const salvarPresencas = async () => {

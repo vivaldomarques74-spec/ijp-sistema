@@ -6,6 +6,7 @@ import {
   updateDoc,
   collection,
   getDocs,
+  arrayUnion,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../services/firebase";
@@ -32,8 +33,7 @@ export default function EditarAluno() {
 
     status: "ativo",
     observacoes: "",
-
-    cursos: [], // 🔹 HISTÓRICO DE CURSOS
+    cursos: [], // histórico
   });
 
   const [foto, setFoto] = useState<File | null>(null);
@@ -46,15 +46,11 @@ export default function EditarAluno() {
   useEffect(() => {
     async function carregarAluno() {
       if (!id) return;
-
-      const refAluno = doc(db, "alunos", id);
-      const snap = await getDoc(refAluno);
-
+      const snap = await getDoc(doc(db, "alunos", id));
       if (snap.exists()) {
         setDadosAluno({ id: snap.id, ...snap.data() });
       }
     }
-
     carregarAluno();
   }, [id]);
 
@@ -62,18 +58,12 @@ export default function EditarAluno() {
   useEffect(() => {
     async function carregarCursos() {
       const snap = await getDocs(collection(db, "cursos"));
-      setCursos(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
+      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     }
-
     carregarCursos();
   }, []);
 
-  // 🔹 CARREGAR TURMAS DO NOVO CURSO
+  // 🔹 CARREGAR TURMAS (CORRIGIDO → RAIZ)
   useEffect(() => {
     if (!novoCursoId) {
       setTurmas([]);
@@ -81,15 +71,11 @@ export default function EditarAluno() {
     }
 
     async function carregarTurmas() {
-      const snap = await getDocs(
-        collection(db, "cursos", novoCursoId, "turmas")
-      );
-
+      const snap = await getDocs(collection(db, "turmas"));
       setTurmas(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((t: any) => t.cursoId === novoCursoId)
       );
     }
 
@@ -110,16 +96,15 @@ export default function EditarAluno() {
 
       const refAluno = doc(db, "alunos", id);
 
-      // 🖼️ UPLOAD DE FOTO
+      // 🖼️ FOTO
       let fotoURL = dadosAluno.fotoURL;
-
       if (foto) {
         const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
         await uploadBytes(fotoRef, foto);
         fotoURL = await getDownloadURL(fotoRef);
       }
 
-      // 🎓 ADICIONAR NOVO CURSO (SEM APAGAR OS ANTIGOS)
+      // 🎓 HISTÓRICO DE CURSOS
       let cursosAtualizados = dadosAluno.cursos || [];
 
       if (novoCursoId && novaTurmaId) {
@@ -131,6 +116,11 @@ export default function EditarAluno() {
             data: new Date(),
           },
         ];
+
+        // 🔥 AQUI ESTAVA O ERRO → ADICIONAR NA TURMA
+        await updateDoc(doc(db, "turmas", novaTurmaId), {
+          alunos: arrayUnion(id),
+        });
       }
 
       await updateDoc(refAluno, {
@@ -181,33 +171,27 @@ export default function EditarAluno() {
         <option value="inativo">Inativo</option>
       </select>
 
-      <textarea
-        name="observacoes"
-        value={dadosAluno.observacoes}
-        onChange={handleChange}
-        placeholder="Observações"
-      />
+      <textarea name="observacoes" value={dadosAluno.observacoes} onChange={handleChange} placeholder="Observações" />
 
-      <h3>Foto do Aluno</h3>
+      <h3>Foto</h3>
       <input type="file" onChange={(e) => setFoto(e.target.files?.[0] || null)} />
 
-      <h3>Cadastrar em Novo Curso</h3>
+      <h3>Adicionar em Novo Curso</h3>
       <select value={novoCursoId} onChange={(e) => setNovoCursoId(e.target.value)}>
-        <option value="">Selecione o curso</option>
+        <option value="">Curso</option>
         {cursos.map((c) => (
           <option key={c.id} value={c.id}>{c.nome}</option>
         ))}
       </select>
 
       <select value={novaTurmaId} onChange={(e) => setNovaTurmaId(e.target.value)}>
-        <option value="">Selecione a turma</option>
+        <option value="">Turma</option>
         {turmas.map((t) => (
           <option key={t.id} value={t.id}>{t.nome}</option>
         ))}
       </select>
 
       <br /><br />
-
       <button onClick={salvar}>Salvar Alterações</button>
     </div>
   );
