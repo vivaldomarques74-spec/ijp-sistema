@@ -33,7 +33,7 @@ export default function EditarAluno() {
 
     status: "ativo",
     observacoes: "",
-    cursos: [], // histórico
+    cursos: [],
   });
 
   const [foto, setFoto] = useState<File | null>(null);
@@ -42,7 +42,9 @@ export default function EditarAluno() {
   const [novoCursoId, setNovoCursoId] = useState("");
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
-  // 🔹 CARREGAR ALUNO
+  /* =========================
+     CARREGAR ALUNO
+  ========================= */
   useEffect(() => {
     async function carregarAluno() {
       if (!id) return;
@@ -54,34 +56,54 @@ export default function EditarAluno() {
     carregarAluno();
   }, [id]);
 
-  // 🔹 CARREGAR CURSOS
+  /* =========================
+     CARREGAR CURSOS
+  ========================= */
   useEffect(() => {
     async function carregarCursos() {
       const snap = await getDocs(collection(db, "cursos"));
-      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setCursos(
+        snap.docs.map((d) => ({
+          id: d.id,
+          nome: d.data().nome,
+        }))
+      );
     }
     carregarCursos();
   }, []);
 
-  // 🔹 CARREGAR TURMAS (CORRIGIDO → RAIZ)
+  /* =========================
+     CARREGAR TURMAS DO CURSO (BLINDADO)
+  ========================= */
   useEffect(() => {
     if (!novoCursoId) {
       setTurmas([]);
+      setNovaTurmaId("");
       return;
     }
 
     async function carregarTurmas() {
-      const snap = await getDocs(collection(db, "turmas"));
-      setTurmas(
-        snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((t: any) => t.cursoId === novoCursoId)
+      const snap = await getDocs(
+        collection(db, "cursos", novoCursoId, "turmas")
       );
+
+      const lista = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          nome: data.nome || "(sem nome)",
+        };
+      });
+
+      setTurmas(lista);
     }
 
     carregarTurmas();
   }, [novoCursoId]);
 
+  /* =========================
+     HANDLE CHANGE
+  ========================= */
   const handleChange = (e: any) => {
     const { name, value, type, checked } = e.target;
     setDadosAluno((prev: any) => ({
@@ -90,13 +112,16 @@ export default function EditarAluno() {
     }));
   };
 
+  /* =========================
+     SALVAR
+  ========================= */
   const salvar = async () => {
     try {
       if (!id) return;
 
       const refAluno = doc(db, "alunos", id);
 
-      // 🖼️ FOTO
+      // 📸 FOTO
       let fotoURL = dadosAluno.fotoURL;
       if (foto) {
         const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
@@ -104,23 +129,33 @@ export default function EditarAluno() {
         fotoURL = await getDownloadURL(fotoRef);
       }
 
-      // 🎓 HISTÓRICO DE CURSOS
+      // 🎓 HISTÓRICO DE CURSOS (SEM DUPLICAR)
       let cursosAtualizados = dadosAluno.cursos || [];
 
       if (novoCursoId && novaTurmaId) {
-        cursosAtualizados = [
-          ...cursosAtualizados,
-          {
-            cursoId: novoCursoId,
-            turmaId: novaTurmaId,
-            data: new Date(),
-          },
-        ];
+        const jaExiste = cursosAtualizados.some(
+          (c: any) =>
+            c.cursoId === novoCursoId && c.turmaId === novaTurmaId
+        );
 
-        // 🔥 AQUI ESTAVA O ERRO → ADICIONAR NA TURMA
-        await updateDoc(doc(db, "turmas", novaTurmaId), {
-          alunos: arrayUnion(id),
-        });
+        if (!jaExiste) {
+          cursosAtualizados = [
+            ...cursosAtualizados,
+            {
+              cursoId: novoCursoId,
+              turmaId: novaTurmaId,
+              data: new Date(),
+            },
+          ];
+        }
+
+        // 🔥 ADICIONAR ALUNO NA TURMA (SUBCOLEÇÃO)
+        await updateDoc(
+          doc(db, "cursos", novoCursoId, "turmas", novaTurmaId),
+          {
+            alunos: arrayUnion(id),
+          }
+        );
       }
 
       await updateDoc(refAluno, {
@@ -142,7 +177,12 @@ export default function EditarAluno() {
     <div style={{ padding: 20 }}>
       <h1>Editar Aluno</h1>
 
-      <input name="nomeCompleto" value={dadosAluno.nomeCompleto} onChange={handleChange} placeholder="Nome completo" />
+      <input
+        name="nomeCompleto"
+        value={dadosAluno.nomeCompleto}
+        onChange={handleChange}
+        placeholder="Nome completo"
+      />
       <input name="rg" value={dadosAluno.rg} onChange={handleChange} placeholder="RG" />
       <input name="cpf" value={dadosAluno.cpf} onChange={handleChange} placeholder="CPF" />
       <input name="endereco" value={dadosAluno.endereco} onChange={handleChange} placeholder="Endereço" />
@@ -150,7 +190,12 @@ export default function EditarAluno() {
       <input name="telefone" value={dadosAluno.telefone} onChange={handleChange} placeholder="Telefone" />
 
       <label>
-        <input type="checkbox" name="menor" checked={dadosAluno.menor} onChange={handleChange} />
+        <input
+          type="checkbox"
+          name="menor"
+          checked={dadosAluno.menor}
+          onChange={handleChange}
+        />
         Aluno é menor
       </label>
 
@@ -171,23 +216,33 @@ export default function EditarAluno() {
         <option value="inativo">Inativo</option>
       </select>
 
-      <textarea name="observacoes" value={dadosAluno.observacoes} onChange={handleChange} placeholder="Observações" />
+      <textarea
+        name="observacoes"
+        value={dadosAluno.observacoes}
+        onChange={handleChange}
+        placeholder="Observações"
+      />
 
       <h3>Foto</h3>
       <input type="file" onChange={(e) => setFoto(e.target.files?.[0] || null)} />
 
       <h3>Adicionar em Novo Curso</h3>
+
       <select value={novoCursoId} onChange={(e) => setNovoCursoId(e.target.value)}>
         <option value="">Curso</option>
         {cursos.map((c) => (
-          <option key={c.id} value={c.id}>{c.nome}</option>
+          <option key={c.id} value={c.id}>
+            {c.nome}
+          </option>
         ))}
       </select>
 
       <select value={novaTurmaId} onChange={(e) => setNovaTurmaId(e.target.value)}>
         <option value="">Turma</option>
         {turmas.map((t) => (
-          <option key={t.id} value={t.id}>{t.nome}</option>
+          <option key={t.id} value={t.id}>
+            {t.nome}
+          </option>
         ))}
       </select>
 

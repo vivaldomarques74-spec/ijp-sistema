@@ -4,20 +4,14 @@ import {
   getDocs,
   addDoc,
   doc,
+  getDoc,
   updateDoc,
   arrayUnion,
   Timestamp,
-  query,
-  where,
 } from "firebase/firestore";
 import { db } from "../services/firebase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-
-type Aluno = {
-  id: string;
-  nomeCompleto: string;
-};
 
 type Curso = {
   id: string;
@@ -27,8 +21,12 @@ type Curso = {
 type Turma = {
   id: string;
   nome: string;
-  cursoId: string;
-  alunos?: string[]; // 👈 array de IDs
+  alunos: string[];
+};
+
+type Aluno = {
+  id: string;
+  nomeCompleto: string;
 };
 
 export default function Presencas() {
@@ -44,19 +42,25 @@ export default function Presencas() {
   const [presencasMarcadas, setPresencasMarcadas] = useState<string[]>([]);
   const [historico, setHistorico] = useState<any[]>([]);
 
-  // 🔹 CARREGAR CURSOS
+  /* =========================
+     CARREGAR CURSOS
+  ========================= */
   useEffect(() => {
-    getDocs(collection(db, "cursos")).then((snap) =>
+    async function carregarCursos() {
+      const snap = await getDocs(collection(db, "cursos"));
       setCursos(
         snap.docs.map((d) => ({
           id: d.id,
           nome: d.data().nome,
         }))
-      )
-    );
+      );
+    }
+    carregarCursos();
   }, []);
 
-  // 🔹 CARREGAR TURMAS (CORRIGIDO → coleção raiz)
+  /* =========================
+     CARREGAR TURMAS (SUBCOLEÇÃO)
+  ========================= */
   useEffect(() => {
     if (!cursoId) {
       setTurmas([]);
@@ -65,51 +69,59 @@ export default function Presencas() {
       return;
     }
 
-    const carregarTurmas = async () => {
-      const q = query(
-        collection(db, "turmas"),
-        where("cursoId", "==", cursoId)
+    async function carregarTurmas() {
+      const snap = await getDocs(
+        collection(db, "cursos", cursoId, "turmas")
       );
 
-      const snap = await getDocs(q);
+      const lista: Turma[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          nome: data.nome || "(sem nome)",
+          alunos: Array.isArray(data.alunos) ? data.alunos : [],
+        };
+      });
 
-      setTurmas(
-        snap.docs.map(
-          (d) =>
-            ({
-              id: d.id,
-              ...d.data(),
-            } as Turma)
-        )
-      );
-
-      setTurmaId("");
-      setAlunos([]);
-    };
+      setTurmas(lista);
+    }
 
     carregarTurmas();
   }, [cursoId]);
 
-  // 🔹 CARREGAR ALUNOS DA TURMA (CORRIGIDO)
+  /* =========================
+     CARREGAR ALUNOS DA TURMA
+  ========================= */
   useEffect(() => {
-    if (!turmaId) {
+    if (!cursoId || !turmaId) {
       setAlunos([]);
       setPresencasMarcadas([]);
       return;
     }
 
-    const carregarAlunos = async () => {
-      const turma = turmas.find((t) => t.id === turmaId);
+    async function carregarAlunos() {
+      const turmaRef = doc(db, "cursos", cursoId, "turmas", turmaId);
+      const turmaSnap = await getDoc(turmaRef);
 
-      if (!turma || !turma.alunos || turma.alunos.length === 0) {
+      if (!turmaSnap.exists()) {
+        setAlunos([]);
+        return;
+      }
+
+      const turma = turmaSnap.data();
+      const alunosIds: string[] = Array.isArray(turma.alunos)
+        ? turma.alunos
+        : [];
+
+      if (alunosIds.length === 0) {
         setAlunos([]);
         return;
       }
 
       const alunosSnap = await getDocs(collection(db, "alunos"));
 
-      const lista = alunosSnap.docs
-        .filter((d) => turma.alunos?.includes(d.id))
+      const lista: Aluno[] = alunosSnap.docs
+        .filter((d) => alunosIds.includes(d.id))
         .map((d) => ({
           id: d.id,
           nomeCompleto: d.data().nomeCompleto,
@@ -117,12 +129,14 @@ export default function Presencas() {
 
       setAlunos(lista);
       setPresencasMarcadas([]);
-    };
+    }
 
     carregarAlunos();
-  }, [turmaId, turmas]);
+  }, [cursoId, turmaId]);
 
-  // 🔹 SALVAR PRESENÇA
+  /* =========================
+     SALVAR PRESENÇA
+  ========================= */
   const salvarPresencas = async () => {
     if (!data || !cursoId || !turmaId) {
       alert("Informe data, curso e turma");
@@ -154,7 +168,9 @@ export default function Presencas() {
     setPresencasMarcadas([]);
   };
 
-  // 🔹 GERAR HISTÓRICO
+  /* =========================
+     HISTÓRICO
+  ========================= */
   const gerarHistorico = async () => {
     const snap = await getDocs(collection(db, "presencas"));
 
@@ -171,13 +187,14 @@ export default function Presencas() {
     setHistorico(lista);
   };
 
-  // 📄 PDF — PRESENÇA DA AULA
+  /* =========================
+     PDF
+  ========================= */
   const gerarPdfPresenca = () => {
-    const doc = new jsPDF();
+    const pdf = new jsPDF();
+    pdf.text("Lista de Presença", 14, 15);
 
-    doc.text("Lista de Presença", 14, 15);
-
-    autoTable(doc, {
+    autoTable(pdf, {
       startY: 20,
       head: [["Aluno", "Presente"]],
       body: alunos.map((a) => [
@@ -186,16 +203,14 @@ export default function Presencas() {
       ]),
     });
 
-    doc.save("presenca.pdf");
+    pdf.save("presenca.pdf");
   };
 
-  // 📄 PDF — RELATÓRIO POR ALUNO
   const gerarPdfAluno = () => {
-    const doc = new jsPDF();
+    const pdf = new jsPDF();
+    pdf.text("Relatório de Presença", 14, 15);
 
-    doc.text("Relatório de Presença por Aluno", 14, 15);
-
-    autoTable(doc, {
+    autoTable(pdf, {
       startY: 20,
       head: [["Aluno", "Data", "Status"]],
       body: historico.map((h) => [
@@ -205,7 +220,7 @@ export default function Presencas() {
       ]),
     });
 
-    doc.save("relatorio-aluno.pdf");
+    pdf.save("relatorio-presenca.pdf");
   };
 
   return (
@@ -261,11 +276,12 @@ export default function Presencas() {
           ))}
 
           <br />
+
           {alunos.length > 0 && (
             <>
               <button onClick={salvarPresencas}>Salvar Presença</button>
               <button onClick={gerarPdfPresenca} style={{ marginLeft: 10 }}>
-                Gerar PDF da Presença
+                Gerar PDF
               </button>
             </>
           )}
@@ -276,7 +292,7 @@ export default function Presencas() {
         <>
           <button onClick={gerarHistorico}>Buscar Histórico</button>
           <button onClick={gerarPdfAluno} style={{ marginLeft: 10 }}>
-            Gerar PDF por Aluno
+            Gerar PDF
           </button>
         </>
       )}
