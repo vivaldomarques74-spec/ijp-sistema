@@ -11,6 +11,12 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../services/firebase";
 
+type CursoAluno = {
+  cursoId: string;
+  turmaId: string;
+  data: any;
+};
+
 export default function EditarAluno() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -34,6 +40,7 @@ export default function EditarAluno() {
     status: "ativo",
     observacoes: "",
     cursos: [],
+    fotoURL: "",
   });
 
   const [foto, setFoto] = useState<File | null>(null);
@@ -43,16 +50,41 @@ export default function EditarAluno() {
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
   /* =========================
-     CARREGAR ALUNO
+     CARREGAR ALUNO (BLINDADO)
   ========================= */
   useEffect(() => {
     async function carregarAluno() {
       if (!id) return;
+
       const snap = await getDoc(doc(db, "alunos", id));
+
       if (snap.exists()) {
-        setDadosAluno({ id: snap.id, ...snap.data() });
+        const data = snap.data();
+
+        setDadosAluno({
+          nomeCompleto: data.nomeCompleto || "",
+          rg: data.rg || "",
+          cpf: data.cpf || "",
+          endereco: data.endereco || "",
+          email: data.email || "",
+          telefone: data.telefone || "",
+          nascimento: data.nascimento || "",
+          menor: data.menor || false,
+
+          responsavelNome: data.responsavelNome || "",
+          responsavelEmail: data.responsavelEmail || "",
+          responsavelTelefone: data.responsavelTelefone || "",
+          responsavelCpf: data.responsavelCpf || "",
+          responsavelRg: data.responsavelRg || "",
+
+          status: data.status || "ativo",
+          observacoes: data.observacoes || "",
+          cursos: Array.isArray(data.cursos) ? data.cursos : [],
+          fotoURL: data.fotoURL || "",
+        });
       }
     }
+
     carregarAluno();
   }, [id]);
 
@@ -69,11 +101,12 @@ export default function EditarAluno() {
         }))
       );
     }
+
     carregarCursos();
   }, []);
 
   /* =========================
-     CARREGAR TURMAS DO CURSO (BLINDADO)
+     CARREGAR TURMAS
   ========================= */
   useEffect(() => {
     if (!novoCursoId) {
@@ -87,15 +120,12 @@ export default function EditarAluno() {
         collection(db, "cursos", novoCursoId, "turmas")
       );
 
-      const lista = snap.docs.map((d) => {
-        const data = d.data();
-        return {
+      setTurmas(
+        snap.docs.map((d) => ({
           id: d.id,
-          nome: data.nome || "(sem nome)",
-        };
-      });
-
-      setTurmas(lista);
+          nome: d.data().nome || "(sem nome)",
+        }))
+      );
     }
 
     carregarTurmas();
@@ -113,7 +143,7 @@ export default function EditarAluno() {
   };
 
   /* =========================
-     SALVAR
+     SALVAR (BLINDADO)
   ========================= */
   const salvar = async () => {
     try {
@@ -129,13 +159,14 @@ export default function EditarAluno() {
         fotoURL = await getDownloadURL(fotoRef);
       }
 
-      // 🎓 HISTÓRICO DE CURSOS (SEM DUPLICAR)
-      let cursosAtualizados = dadosAluno.cursos || [];
+      // 🎓 CURSOS
+      let cursosAtualizados: CursoAluno[] = Array.isArray(dadosAluno.cursos)
+        ? dadosAluno.cursos
+        : [];
 
       if (novoCursoId && novaTurmaId) {
         const jaExiste = cursosAtualizados.some(
-          (c: any) =>
-            c.cursoId === novoCursoId && c.turmaId === novaTurmaId
+          (c) => c.cursoId === novoCursoId && c.turmaId === novaTurmaId
         );
 
         if (!jaExiste) {
@@ -149,7 +180,6 @@ export default function EditarAluno() {
           ];
         }
 
-        // 🔥 ADICIONAR ALUNO NA TURMA (SUBCOLEÇÃO)
         await updateDoc(
           doc(db, "cursos", novoCursoId, "turmas", novaTurmaId),
           {
@@ -158,8 +188,25 @@ export default function EditarAluno() {
         );
       }
 
+      // 🔥 UPDATE LIMPO
       await updateDoc(refAluno, {
-        ...dadosAluno,
+        nomeCompleto: dadosAluno.nomeCompleto,
+        rg: dadosAluno.rg,
+        cpf: dadosAluno.cpf,
+        endereco: dadosAluno.endereco,
+        email: dadosAluno.email,
+        telefone: dadosAluno.telefone,
+        nascimento: dadosAluno.nascimento,
+        menor: dadosAluno.menor,
+
+        responsavelNome: dadosAluno.responsavelNome,
+        responsavelEmail: dadosAluno.responsavelEmail,
+        responsavelTelefone: dadosAluno.responsavelTelefone,
+        responsavelCpf: dadosAluno.responsavelCpf,
+        responsavelRg: dadosAluno.responsavelRg,
+
+        status: dadosAluno.status,
+        observacoes: dadosAluno.observacoes,
         fotoURL,
         cursos: cursosAtualizados,
         atualizadoEm: new Date(),
@@ -177,12 +224,7 @@ export default function EditarAluno() {
     <div style={{ padding: 20 }}>
       <h1>Editar Aluno</h1>
 
-      <input
-        name="nomeCompleto"
-        value={dadosAluno.nomeCompleto}
-        onChange={handleChange}
-        placeholder="Nome completo"
-      />
+      <input name="nomeCompleto" value={dadosAluno.nomeCompleto} onChange={handleChange} placeholder="Nome completo" />
       <input name="rg" value={dadosAluno.rg} onChange={handleChange} placeholder="RG" />
       <input name="cpf" value={dadosAluno.cpf} onChange={handleChange} placeholder="CPF" />
       <input name="endereco" value={dadosAluno.endereco} onChange={handleChange} placeholder="Endereço" />
@@ -190,13 +232,7 @@ export default function EditarAluno() {
       <input name="telefone" value={dadosAluno.telefone} onChange={handleChange} placeholder="Telefone" />
 
       <label>
-        <input
-          type="checkbox"
-          name="menor"
-          checked={dadosAluno.menor}
-          onChange={handleChange}
-        />
-        Aluno é menor
+        <input type="checkbox" name="menor" checked={dadosAluno.menor} onChange={handleChange} /> Aluno é menor
       </label>
 
       {dadosAluno.menor && (
@@ -216,12 +252,7 @@ export default function EditarAluno() {
         <option value="inativo">Inativo</option>
       </select>
 
-      <textarea
-        name="observacoes"
-        value={dadosAluno.observacoes}
-        onChange={handleChange}
-        placeholder="Observações"
-      />
+      <textarea name="observacoes" value={dadosAluno.observacoes} onChange={handleChange} placeholder="Observações" />
 
       <h3>Foto</h3>
       <input type="file" onChange={(e) => setFoto(e.target.files?.[0] || null)} />
@@ -231,18 +262,14 @@ export default function EditarAluno() {
       <select value={novoCursoId} onChange={(e) => setNovoCursoId(e.target.value)}>
         <option value="">Curso</option>
         {cursos.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.nome}
-          </option>
+          <option key={c.id} value={c.id}>{c.nome}</option>
         ))}
       </select>
 
       <select value={novaTurmaId} onChange={(e) => setNovaTurmaId(e.target.value)}>
         <option value="">Turma</option>
         {turmas.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.nome}
-          </option>
+          <option key={t.id} value={t.id}>{t.nome}</option>
         ))}
       </select>
 
