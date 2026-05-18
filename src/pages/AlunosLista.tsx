@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../services/firebase";
@@ -14,20 +14,24 @@ type Aluno = {
 export default function AlunosLista() {
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [busca, setBusca] = useState("");
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    async function carregarAlunos() {
-      const snap = await getDocs(collection(db, "alunos"));
-      let lista: Aluno[] = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Aluno, "id">),
-      }));
-      lista.sort((a, b) => (a.nomeCompleto || "").localeCompare(b.nomeCompleto || ""));
-      setAlunos(lista);
-    }
-    carregarAlunos();
+  const carregarAlunos = useCallback(async () => {
+    setLoading(true);
+    const snap = await getDocs(collection(db, "alunos"));
+    let lista: Aluno[] = snap.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<Aluno, "id">),
+    }));
+    lista.sort((a, b) => (a.nomeCompleto || "").localeCompare(b.nomeCompleto || ""));
+    setAlunos(lista);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    carregarAlunos();
+  }, [carregarAlunos]);
 
   function calcularIdade(data: any) {
     if (!data) return "-";
@@ -39,14 +43,15 @@ export default function AlunosLista() {
     return idade;
   }
 
-  const alunosFiltrados = useMemo(() => {
-    const termo = busca.toLowerCase();
-    return alunos.filter(
-      (aluno) =>
-        aluno.nomeCompleto?.toLowerCase().includes(termo) ||
-        aluno.matricula?.toLowerCase().includes(termo)
-    );
-  }, [alunos, busca]);
+  const alunosFiltrados = busca
+    ? alunos.filter(
+        (aluno) =>
+          aluno.nomeCompleto?.toLowerCase().includes(busca.toLowerCase()) ||
+          aluno.matricula?.toLowerCase().includes(busca.toLowerCase())
+      )
+    : alunos;
+
+  if (loading) return <div>Carregando alunos...</div>;
 
   return (
     <div style={{ padding: 20 }}>
@@ -58,25 +63,35 @@ export default function AlunosLista() {
         style={{ marginBottom: 20, padding: 8, width: "100%", maxWidth: 400 }}
       />
       {alunosFiltrados.length === 0 && <p>Nenhum aluno encontrado</p>}
-      <table width="100%" cellPadding={8}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
-          <tr><th>Foto</th><th>Nome</th><th>Matrícula</th><th>Idade</th><th>Ações</th></tr>
+          <tr>
+            <th style={{ textAlign: "left", padding: 8 }}>Foto</th>
+            <th style={{ textAlign: "left", padding: 8 }}>Nome</th>
+            <th style={{ textAlign: "left", padding: 8 }}>Matrícula</th>
+            <th style={{ textAlign: "left", padding: 8 }}>Idade</th>
+            <th style={{ textAlign: "left", padding: 8 }}>Ações</th>
+          </tr>
         </thead>
         <tbody>
           {alunosFiltrados.map((aluno) => (
             <tr key={aluno.id}>
               <td>
                 <img
-                  src={aluno.fotoURL || "/avatar-placeholder.png"}
+                  src={aluno.fotoURL || "https://via.placeholder.com/50?text=Sem+foto"}
                   alt={aluno.nomeCompleto}
                   style={{ width: 50, height: 50, borderRadius: "50%", objectFit: "cover" }}
-                  onError={(e) => { (e.target as HTMLImageElement).src = "/avatar-placeholder.png"; }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://via.placeholder.com/50?text=Erro";
+                  }}
                 />
               </td>
-              <td>{aluno.nomeCompleto}</td>
-              <td>{aluno.matricula}</td>
-              <td>{aluno.nascimento ? `${calcularIdade(aluno.nascimento)} anos` : "-"}</td>
-              <td><button onClick={() => navigate(`/alunos/editar/${aluno.id}`)}>Editar</button></td>
+              <td style={{ padding: 8 }}>{aluno.nomeCompleto}</td>
+              <td style={{ padding: 8 }}>{aluno.matricula}</td>
+              <td style={{ padding: 8 }}>{aluno.nascimento ? `${calcularIdade(aluno.nascimento)} anos` : "-"}</td>
+              <td style={{ padding: 8 }}>
+                <button onClick={() => navigate(`/alunos/editar/${aluno.id}`)}>Editar</button>
+              </td>
             </tr>
           ))}
         </tbody>

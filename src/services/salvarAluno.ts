@@ -13,7 +13,7 @@ export async function salvarAluno({
 }) {
   if (!auth.currentUser) throw new Error("Usuário não autenticado");
 
-  // 1️⃣ Gera matrícula
+  // Gera matrícula
   const contadorRef = doc(db, "contadores", "matricula");
   const numeroMatricula = await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(contadorRef);
@@ -24,27 +24,32 @@ export async function salvarAluno({
   });
   const matricula = `IJP-${String(numeroMatricula).padStart(5, "0")}`;
 
-  // 2️⃣ Cria aluno
+  // Cria aluno (INCLUINDO cursoAtualId e turmaAtualId)
   const alunoRef = await addDoc(collection(db, "alunos"), {
     ...dadosAluno,
     matricula,
     matriculaNumero: numeroMatricula,
+    cursoAtualId: dadosAluno.cursoAtualId || null,
+    turmaAtualId: dadosAluno.turmaAtualId || null,
     criadoEm: new Date(),
   });
 
-  // 3️⃣ Foto
+  // Upload da foto
   let fotoURL = "";
   if (foto) {
-    const fotoRef = ref(storage, `alunos/${alunoRef.id}/foto.jpg`);
-    await uploadBytes(fotoRef, foto);
-    fotoURL = await getDownloadURL(fotoRef);
-    await updateDoc(alunoRef, { fotoURL });
+    try {
+      const fotoRef = ref(storage, `alunos/${alunoRef.id}/foto.jpg`);
+      await uploadBytes(fotoRef, foto);
+      fotoURL = await getDownloadURL(fotoRef);
+      await updateDoc(alunoRef, { fotoURL });
+    } catch (error) {
+      console.error("Erro no upload da foto:", error);
+    }
   }
 
-  // 4️⃣ Vincular à turma (e diminuir vagas)
+  // Vincular à turma e diminuir vagas
   if (dadosAluno.cursoAtualId && dadosAluno.turmaAtualId) {
     const turmaRef = doc(db, "cursos", dadosAluno.cursoAtualId, "turmas", dadosAluno.turmaAtualId);
-
     await runTransaction(db, async (transaction) => {
       const turmaSnap = await transaction.get(turmaRef);
       if (!turmaSnap.exists()) throw new Error("Turma não encontrada");
