@@ -7,82 +7,58 @@ import { salvarAluno } from "../services/salvarAluno";
 export default function AlunosCadastrar() {
   const navigate = useNavigate();
 
-  const [dadosAluno, setDadosAluno] = useState<any>({
+  const [dadosAluno, setDadosAluno] = useState({
     nomeCompleto: "",
     rg: "",
     cpf: "",
     endereco: "",
     email: "",
     telefone: "",
+    nascimento: "",
     menor: false,
-
     responsavelNome: "",
     responsavelEmail: "",
     responsavelTelefone: "",
     responsavelCpf: "",
     responsavelRg: "",
-
     cursoAtualId: "",
     turmaAtualId: "",
   });
 
+  const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [carregandoCursos, setCarregandoCursos] = useState(false);
   const [carregandoTurmas, setCarregandoTurmas] = useState(false);
 
-  // 🔹 CARREGAR CURSOS
   useEffect(() => {
     const carregarCursos = async () => {
       setCarregandoCursos(true);
-
       const q = query(collection(db, "cursos"), orderBy("nome"));
       const snap = await getDocs(q);
-
-      setCursos(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
-
+      setCursos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setCarregandoCursos(false);
     };
-
     carregarCursos();
   }, []);
 
-  // 🔹 CARREGAR TURMAS DO CURSO
   useEffect(() => {
     if (!dadosAluno.cursoAtualId) {
       setTurmas([]);
       return;
     }
-
     const carregarTurmas = async () => {
       setCarregandoTurmas(true);
-
-      const snap = await getDocs(
-        collection(db, "cursos", dadosAluno.cursoAtualId, "turmas")
-      );
-
-      setTurmas(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
-
+      const snap = await getDocs(collection(db, "cursos", dadosAluno.cursoAtualId, "turmas"));
+      setTurmas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setCarregandoTurmas(false);
     };
-
     carregarTurmas();
   }, [dadosAluno.cursoAtualId]);
 
   const handleChange = (e: any) => {
     const { name, value, type, checked } = e.target;
-
-    setDadosAluno((prev: any) => ({
+    setDadosAluno((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
@@ -94,17 +70,17 @@ export default function AlunosCadastrar() {
         alert("Informe o nome do aluno");
         return;
       }
-
       await salvarAluno({
         dadosAluno,
+        foto,
         onSucesso: (matricula) => {
           alert(`Aluno cadastrado com sucesso!\nMatrícula: ${matricula}`);
           navigate("/alunos");
         },
       });
-    } catch (error) {
-      console.error("Erro ao cadastrar aluno:", error);
-      alert("Erro ao cadastrar aluno. Veja o console.");
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message || "Erro ao cadastrar aluno");
     }
   };
 
@@ -118,6 +94,7 @@ export default function AlunosCadastrar() {
       <input name="endereco" placeholder="Endereço" value={dadosAluno.endereco} onChange={handleChange} />
       <input name="email" placeholder="Email" value={dadosAluno.email} onChange={handleChange} />
       <input name="telefone" placeholder="Telefone" value={dadosAluno.telefone} onChange={handleChange} />
+      <input type="date" name="nascimento" placeholder="Data de nascimento" value={dadosAluno.nascimento} onChange={handleChange} />
 
       <label style={{ display: "block", marginTop: 10 }}>
         <input type="checkbox" name="menor" checked={dadosAluno.menor} onChange={handleChange} />
@@ -136,12 +113,9 @@ export default function AlunosCadastrar() {
       )}
 
       <hr />
-
       <label>Curso</label>
       <select name="cursoAtualId" value={dadosAluno.cursoAtualId} onChange={handleChange}>
-        <option value="">
-          {carregandoCursos ? "Carregando cursos..." : "Selecione"}
-        </option>
+        <option value="">{carregandoCursos ? "Carregando..." : "Selecione"}</option>
         {cursos.map((c) => (
           <option key={c.id} value={c.id}>{c.nome}</option>
         ))}
@@ -154,16 +128,18 @@ export default function AlunosCadastrar() {
         onChange={handleChange}
         disabled={!dadosAluno.cursoAtualId || carregandoTurmas}
       >
-        <option value="">
-          {carregandoTurmas ? "Carregando turmas..." : "Selecione"}
-        </option>
+        <option value="">{carregandoTurmas ? "Carregando..." : "Selecione"}</option>
         {turmas.map((t) => (
           <option key={t.id} value={t.id}>{t.nome}</option>
         ))}
       </select>
 
-      <br /><br />
+      <hr />
+      <h3>Foto do aluno</h3>
+      <input type="file" accept="image/*" onChange={(e) => setFoto(e.target.files?.[0] || null)} />
+      {foto && <img src={URL.createObjectURL(foto)} width="100" style={{ marginTop: 8 }} alt="Prévia" />}
 
+      <br /><br />
       <button onClick={salvar}>Salvar Aluno</button>
     </div>
   );
