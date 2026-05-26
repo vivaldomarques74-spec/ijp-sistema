@@ -13,7 +13,7 @@ import AlunosCadastrar from "./pages/AlunosCadastrar";
 import AlunosEditar from "./pages/AlunosEditar";
 import Login from "./pages/Login";
 
-// Novas páginas do módulo Saúde
+// Módulo Saúde
 import Saude from "./pages/Saude";
 import SaudeFila from "./pages/SaudeFila";
 import SaudeAgenda from "./pages/SaudeAgenda";
@@ -26,6 +26,9 @@ import LoginProfissional from "./pages/LoginProfissional";
 import ProfissionalLayout from "./layout/ProfissionalLayout";
 import ProfissionalAgenda from "./pages/ProfissionalAgenda";
 import ProfissionalProntuario from "./pages/ProfissionalProntuario";
+
+// ⚠️ Temporário – apenas para migração
+import MigracaoPsicologia from "./pages/MigracaoPsicologia";
 
 export default function App() {
   return (
@@ -66,6 +69,9 @@ export default function App() {
           <Route path="pacientes" element={<SaudePacientes />} />
           <Route path="configuracoes" element={<SaudeConfiguracoes />} />
         </Route>
+
+        {/* 🔧 Temporário – remover após migração */}
+        <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
       </Route>
     </Routes>
   );
