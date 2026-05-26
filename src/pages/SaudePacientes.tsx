@@ -7,7 +7,7 @@ export default function SaudePacientes() {
   const [filtro, setFiltro] = useState("");
   const [tipos, setTipos] = useState<Record<string, string>>({});
 
-  // Carregar nomes dos serviços para exibição amigável
+  // Carregar nomes dos serviços
   useEffect(() => {
     const carregarTipos = async () => {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
@@ -20,7 +20,7 @@ export default function SaudePacientes() {
 
   useEffect(() => {
     const carregarPacientes = async () => {
-      // Buscar agendamentos ocupados que tenham alunoId (social)
+      // Busca TODOS os agendamentos com status "ocupado" e que tenham alunoId
       const agendamentosSnap = await getDocs(collection(db, "agendamentos"));
       const ocupados = agendamentosSnap.docs.filter(doc => 
         doc.data().status === "ocupado" && doc.data().alunoId
@@ -41,6 +41,8 @@ export default function SaudePacientes() {
             data: agData.data,
             horario: agData.horario,
             profissionalId: agData.profissionalId,
+            // Se for particular, terá pacienteInfo
+            particular: agData.tipoPaciente === "particular" ? agData.pacienteInfo : null,
           });
         }
       }
