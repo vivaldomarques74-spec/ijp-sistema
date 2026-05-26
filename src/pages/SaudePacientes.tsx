@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, addDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, deleteDoc, addDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function SaudePacientes() {
@@ -50,11 +50,11 @@ export default function SaudePacientes() {
   const trocarProfissional = async (paciente: any) => {
     if (!window.confirm(`Deseja remover ${paciente.nome} do horário atual e colocá-lo novamente na fila de espera?`)) return;
     
-    // 1. Remover o agendamento atual (ou apenas liberar o horário)
+    // 1. Remover o agendamento atual
     const agendamentoRef = doc(db, "agendamentos", paciente.id);
-    await deleteDoc(agendamentoRef); // ou updateDoc para status "livre"
+    await deleteDoc(agendamentoRef);
     
-    // 2. Verificar se o paciente já está na fila (evitar duplicidade)
+    // 2. Adicionar na fila de espera se já não estiver
     const filaQuery = query(
       collection(db, "filaEspera"),
       where("alunoId", "==", paciente.alunoId),
@@ -68,12 +68,12 @@ export default function SaudePacientes() {
         tipoId: paciente.servicoId,
         dataSolicitacao: new Date(),
         status: "aguardando",
-        modalidade: "presencial", // ou recuperar do aluno
+        modalidade: "presencial",
       });
     }
     
-    alert(`${paciente.nome} foi removido do horário e retornou à fila de espera. Agora você pode vinculá-lo a outro profissional.`);
-    carregarPacientes(); // recarregar lista
+    alert(`${paciente.nome} foi removido e retornou à fila de espera.`);
+    carregarPacientes();
   };
 
   const pacientesFiltrados = pacientes.filter(p =>
@@ -112,7 +112,7 @@ export default function SaudePacientes() {
                 <button onClick={() => trocarProfissional(p)} style={{ background: "#ffc107", color: "#000" }}>
                   Trocar profissional
                 </button>
-               </td>
+              </td>
             </tr>
           ))}
         </tbody>
