@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, addDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function SaudePacientes() {
@@ -7,7 +7,6 @@ export default function SaudePacientes() {
   const [filtro, setFiltro] = useState("");
   const [tipos, setTipos] = useState<Record<string, string>>({});
 
-  // Carregar nomes dos serviços
   useEffect(() => {
     const carregarTipos = async () => {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
@@ -18,38 +17,64 @@ export default function SaudePacientes() {
     carregarTipos();
   }, []);
 
-  useEffect(() => {
-    const carregarPacientes = async () => {
-      // Busca TODOS os agendamentos com status "ocupado" e que tenham alunoId
-      const agendamentosSnap = await getDocs(collection(db, "agendamentos"));
-      const ocupados = agendamentosSnap.docs.filter(doc => 
-        doc.data().status === "ocupado" && doc.data().alunoId
-      );
-
-      const lista = [];
-      for (const ag of ocupados) {
-        const agData = ag.data();
-        // Buscar dados do aluno
-        const alunoSnap = await getDocs(query(collection(db, "alunos"), where("__name__", "==", agData.alunoId)));
-        if (!alunoSnap.empty) {
-          const aluno = alunoSnap.docs[0].data();
-          lista.push({
-            id: agData.alunoId,
-            nome: aluno.nomeCompleto,
-            matricula: aluno.matricula,
-            servicoId: agData.tipoId,
-            data: agData.data,
-            horario: agData.horario,
-            profissionalId: agData.profissionalId,
-            // Se for particular, terá pacienteInfo
-            particular: agData.tipoPaciente === "particular" ? agData.pacienteInfo : null,
-          });
-        }
+  const carregarPacientes = async () => {
+    const agendamentosSnap = await getDocs(collection(db, "agendamentos"));
+    const ocupados = agendamentosSnap.docs.filter(doc => 
+      doc.data().status === "ocupado" && doc.data().alunoId
+    );
+    const lista = [];
+    for (const ag of ocupados) {
+      const agData = ag.data();
+      const alunoSnap = await getDocs(query(collection(db, "alunos"), where("__name__", "==", agData.alunoId)));
+      if (!alunoSnap.empty) {
+        const aluno = alunoSnap.docs[0].data();
+        lista.push({
+          id: ag.id,
+          alunoId: agData.alunoId,
+          nome: aluno.nomeCompleto,
+          matricula: aluno.matricula,
+          servicoId: agData.tipoId,
+          data: agData.data,
+          horario: agData.horario,
+          profissionalId: agData.profissionalId,
+        });
       }
-      setPacientes(lista);
-    };
+    }
+    setPacientes(lista);
+  };
+
+  useEffect(() => {
     carregarPacientes();
   }, []);
+
+  const trocarProfissional = async (paciente: any) => {
+    if (!window.confirm(`Deseja remover ${paciente.nome} do horário atual e colocá-lo novamente na fila de espera?`)) return;
+    
+    // 1. Remover o agendamento atual (ou apenas liberar o horário)
+    const agendamentoRef = doc(db, "agendamentos", paciente.id);
+    await deleteDoc(agendamentoRef); // ou updateDoc para status "livre"
+    
+    // 2. Verificar se o paciente já está na fila (evitar duplicidade)
+    const filaQuery = query(
+      collection(db, "filaEspera"),
+      where("alunoId", "==", paciente.alunoId),
+      where("tipoId", "==", paciente.servicoId),
+      where("status", "==", "aguardando")
+    );
+    const filaSnap = await getDocs(filaQuery);
+    if (filaSnap.empty) {
+      await addDoc(collection(db, "filaEspera"), {
+        alunoId: paciente.alunoId,
+        tipoId: paciente.servicoId,
+        dataSolicitacao: new Date(),
+        status: "aguardando",
+        modalidade: "presencial", // ou recuperar do aluno
+      });
+    }
+    
+    alert(`${paciente.nome} foi removido do horário e retornou à fila de espera. Agora você pode vinculá-lo a outro profissional.`);
+    carregarPacientes(); // recarregar lista
+  };
 
   const pacientesFiltrados = pacientes.filter(p =>
     p.nome?.toLowerCase().includes(filtro.toLowerCase()) ||
@@ -73,6 +98,7 @@ export default function SaudePacientes() {
             <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Matrícula</th>
             <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Serviço</th>
             <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Data/Horário</th>
+            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -82,6 +108,11 @@ export default function SaudePacientes() {
               <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.matricula}</td>
               <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{tipos[p.servicoId] || p.servicoId}</td>
               <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.data} {p.horario}</td>
+              <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                <button onClick={() => trocarProfissional(p)} style={{ background: "#ffc107", color: "#000" }}>
+                  Trocar profissional
+                </button>
+               </td>
             </tr>
           ))}
         </tbody>
