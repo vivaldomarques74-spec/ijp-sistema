@@ -1,4 +1,4 @@
-import { doc, runTransaction, arrayUnion, collection, addDoc, updateDoc } from "firebase/firestore";
+import { doc, runTransaction, arrayUnion, collection, addDoc, updateDoc, getDocs, query, where } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth } from "./firebase";
 
@@ -9,7 +9,7 @@ export async function salvarAluno({
 }: {
   dadosAluno: any;
   foto?: File | null;
-  onSucesso?: (matricula: string) => void;
+  onSucesso?: (matricula: string, alunoId: string) => void;
 }) {
   if (!auth.currentUser) throw new Error("Usuário não autenticado");
 
@@ -35,7 +35,7 @@ export async function salvarAluno({
     criadoEm: new Date(),
   });
 
-  // Upload da foto (OPCIONAL – se foto for passada e você quiser manter, mantenha; se não, remova)
+  // Upload da foto
   let fotoURL = "";
   if (foto) {
     try {
@@ -45,11 +45,10 @@ export async function salvarAluno({
       await updateDoc(alunoRef, { fotoURL });
     } catch (error) {
       console.error("Erro no upload da foto:", error);
-      // não impede o cadastro
     }
   }
 
-  // Vincular à turma do curso
+  // Vincular à turma do curso (se houver)
   if (dadosAluno.cursoAtualId && dadosAluno.turmaAtualId) {
     const turmaRef = doc(db, "cursos", dadosAluno.cursoAtualId, "turmas", dadosAluno.turmaAtualId);
     await runTransaction(db, async (transaction) => {
@@ -64,5 +63,28 @@ export async function salvarAluno({
     });
   }
 
-  if (onSucesso) onSucesso(matricula);
+  // *** Adicionar aluno à fila de espera para cada serviço marcado ***
+  if (dadosAluno.servicosAtivos && dadosAluno.servicosAtivos.length > 0) {
+    for (const servico of dadosAluno.servicosAtivos) {
+      // Verifica se já existe na fila
+      const filaQuery = query(
+        collection(db, "filaEspera"),
+        where("alunoId", "==", alunoRef.id),
+        where("tipoId", "==", servico.tipoId),
+        where("status", "==", "aguardando")
+      );
+      const filaSnap = await getDocs(filaQuery);
+      if (filaSnap.empty) {
+        await addDoc(collection(db, "filaEspera"), {
+          alunoId: alunoRef.id,
+          tipoId: servico.tipoId,
+          dataSolicitacao: new Date(),
+          status: "aguardando",
+          modalidade: servico.modalidade || "presencial",
+        });
+      }
+    }
+  }
+
+  if (onSucesso) onSucesso(matricula, alunoRef.id);
 }

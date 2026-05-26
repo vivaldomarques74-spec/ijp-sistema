@@ -27,7 +27,7 @@ import ProfissionalLayout from "./layout/ProfissionalLayout";
 import ProfissionalAgenda from "./pages/ProfissionalAgenda";
 import ProfissionalProntuario from "./pages/ProfissionalProntuario";
 
-// ⚠️ Temporário – apenas para migração
+// 🔧 Temporário – apenas para migração (após usar, remova a rota e o arquivo)
 import MigracaoPsicologia from "./pages/MigracaoPsicologia";
 
 export default function App() {
@@ -70,7 +70,7 @@ export default function App() {
           <Route path="configuracoes" element={<SaudeConfiguracoes />} />
         </Route>
 
-        {/* 🔧 Temporário – remover após migração */}
+        {/* ⚠️ Temporário: rota para migrar alunos antigos da psicologia */}
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
       </Route>
     </Routes>
