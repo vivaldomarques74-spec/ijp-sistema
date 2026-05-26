@@ -7,6 +7,8 @@ export default function SaudeAgenda() {
   const [tipos, setTipos] = useState<any[]>([]);
   const [horarios, setHorarios] = useState<any[]>([]);
   const [form, setForm] = useState({ profissionalId: "", tipoId: "", data: "", horario: "" });
+  const [recorrente, setRecorrente] = useState(false);
+  const [tipoRecorrencia, setTipoRecorrencia] = useState<"fixo" | "livre">("livre");
 
   const carregarDados = async () => {
     const p = await getDocs(collection(db, "profissionais"));
@@ -19,13 +21,68 @@ export default function SaudeAgenda() {
 
   useEffect(() => { carregarDados(); }, []);
 
+  function gerarDatasRecorrentes(dataInicio: string, semanas = 10) {
+    const datas = [];
+    let current = new Date(dataInicio);
+    for (let i = 0; i < semanas; i++) {
+      datas.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 7);
+    }
+    return datas;
+  }
+
   const adicionarHorario = async () => {
     if (!form.profissionalId || !form.tipoId || !form.data || !form.horario) return alert("Preencha tudo");
-    await addDoc(collection(db, "agendamentos"), {
-      ...form, status: "agendado", tipoPaciente: "social", createdAt: new Date(),
-    });
-    alert("Horário livre criado");
+    if (recorrente) {
+      const datas = gerarDatasRecorrentes(form.data);
+      if (tipoRecorrencia === "fixo") {
+        // Para vínculo fixo: cria um agendamento "mãe" com recorrência, mas ainda sem paciente.
+        // Na prática, você pode criar um único documento com campo `recorrente: true` e `datasGeradas` array,
+        // mas para simplificar, criaremos um agendamento para cada data com um `groupId` para identificá-los como um conjunto fixo.
+        // Contudo, para vínculo fixo, você provavelmente já tem o paciente em mente. Vamos pedir o pacienteId.
+        const pacienteId = prompt("Digite o ID do paciente (social) que terá este horário fixo todas as semanas:");
+        if (!pacienteId) return;
+        for (const data of datas) {
+          await addDoc(collection(db, "agendamentos"), {
+            ...form,
+            data,
+            horario: form.horario,
+            status: "ocupado",
+            tipoPaciente: "social",
+            alunoId: pacienteId,
+            recorrente: true,
+            grupoRecorrenteId: `${form.profissionalId}_${form.tipoId}_${form.horario}`,
+            createdAt: new Date(),
+          });
+        }
+        alert(`${datas.length} horários fixos criados para o paciente ${pacienteId}`);
+      } else {
+        // Slot livre recorrente: cria N horários livres independentes
+        for (const data of datas) {
+          await addDoc(collection(db, "agendamentos"), {
+            ...form,
+            data,
+            horario: form.horario,
+            status: "agendado",
+            tipoPaciente: "social",
+            recorrente: true,
+            createdAt: new Date(),
+          });
+        }
+        alert(`${datas.length} horários livres criados (sem paciente fixo)`);
+      }
+    } else {
+      // Único
+      await addDoc(collection(db, "agendamentos"), {
+        ...form,
+        status: "agendado",
+        tipoPaciente: "social",
+        createdAt: new Date(),
+      });
+      alert("Horário único criado");
+    }
     setForm({ profissionalId: "", tipoId: "", data: "", horario: "" });
+    setRecorrente(false);
     carregarDados();
   };
 
@@ -50,7 +107,6 @@ export default function SaudeAgenda() {
       pacienteInfo: { nome, telefone: telefone || "" },
       createdAt: new Date(),
     });
-    // Remove o horário livre original
     await deleteDoc(doc(db, "agendamentos", horarioId));
     alert("Paciente particular agendado");
     carregarDados();
@@ -58,7 +114,7 @@ export default function SaudeAgenda() {
 
   return (
     <div>
-      <h2>Criar horário livre</h2>
+      <h2>Criar horário</h2>
       <select value={form.profissionalId} onChange={e => setForm({ ...form, profissionalId: e.target.value })}>
         <option value="">Profissional</option>
         {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
@@ -69,20 +125,24 @@ export default function SaudeAgenda() {
       </select>
       <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })} />
       <input type="time" value={form.horario} onChange={e => setForm({ ...form, horario: e.target.value })} />
-      <button onClick={adicionarHorario}>Adicionar horário livre</button>
+      <label>
+        <input type="checkbox" checked={recorrente} onChange={e => setRecorrente(e.target.checked)} />
+        Repetir semanalmente (10 semanas)
+      </label>
+      {recorrente && (
+        <select value={tipoRecorrencia} onChange={e => setTipoRecorrencia(e.target.value as any)}>
+          <option value="livre">Slot livre (pacientes diferentes)</option>
+          <option value="fixo">Vínculo fixo (mesmo paciente todas as semanas)</option>
+        </select>
+      )}
+      <button onClick={adicionarHorario}>Adicionar</button>
 
       <hr />
       <h2>Horários cadastrados</h2>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Data</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Horário</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Profissional</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Tipo</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Status</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Paciente</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: 8 }}>Ações</th>
+            <th>Data</th><th>Horário</th><th>Profissional</th><th>Tipo</th><th>Status</th><th>Paciente</th><th>Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -92,26 +152,14 @@ export default function SaudeAgenda() {
             const isLivre = h.status === "agendado" && !h.alunoId && !h.pacienteInfo;
             return (
               <tr key={h.id}>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.data}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.horario}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{prof?.nome || h.profissionalId}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{tipo?.nome || h.tipoId}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.status}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                  {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
-                </td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                <td>{h.data}</td><td>{h.horario}</td><td>{prof?.nome || h.profissionalId}</td>
+                <td>{tipo?.nome || h.tipoId}</td><td>{h.status}</td>
+                <td>{h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}</td>
+                <td>
                   {isLivre && (
-                    <button
-                      onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)}
-                      style={{ background: "#28a745", marginRight: 8, color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4 }}
-                    >
-                      Particular
-                    </button>
+                    <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8 }}>Particular</button>
                   )}
-                  <button onClick={() => excluirHorario(h.id)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4 }}>
-                    Excluir
-                  </button>
+                  <button onClick={() => excluirHorario(h.id)}>Excluir</button>
                 </td>
               </tr>
             );
