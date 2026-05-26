@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function SaudeProfissionais() {
@@ -29,6 +29,13 @@ export default function SaudeProfissionais() {
     carregar();
   };
 
+  const excluir = async (id: string, nome: string) => {
+    if (window.confirm(`Excluir ${nome}? Isso não removerá agendamentos passados, mas ele não poderá mais ser vinculado.`)) {
+      await deleteDoc(doc(db, "profissionais", id));
+      carregar();
+    }
+  };
+
   return (
     <div>
       <h2>Profissionais</h2>
@@ -50,10 +57,17 @@ export default function SaudeProfissionais() {
         <button onClick={salvar}>Cadastrar</button>
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr><th>Código</th><th>Nome</th><th>Tipo</th><th>Especialidade</th><th>Modalidade</th></tr></thead>
+        <thead><tr><th>Código</th><th>Nome</th><th>Tipo</th><th>Especialidade</th><th>Modalidade</th><th>Ações</th></tr></thead>
         <tbody>
           {profissionais.map(p => (
-            <tr key={p.id}><td>{p.codigo}</td><td>{p.nome}</td><td>{p.tipo}</td><td>{p.especialidade}</td><td>{p.modalidade}</td></tr>
+            <tr key={p.id}>
+              <td>{p.codigo}</td>
+              <td>{p.nome}</td>
+              <td>{p.tipo}</td>
+              <td>{p.especialidade}</td>
+              <td>{p.modalidade}</td>
+              <td><button onClick={() => excluir(p.id, p.nome)}>Excluir</button></td>
+            </tr>
           ))}
         </tbody>
       </table>

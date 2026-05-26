@@ -7,12 +7,21 @@ import { salvarAluno } from "../services/salvarAluno";
 export default function AlunosCadastrar() {
   const navigate = useNavigate();
   const [dadosAluno, setDadosAluno] = useState({
-    nomeCompleto: "", rg: "", cpf: "", endereco: "", email: "", telefone: "", nascimento: "", menor: false,
-    responsavelNome: "", responsavelEmail: "", responsavelTelefone: "", responsavelCpf: "", responsavelRg: "",
-    cursoAtualId: "", turmaAtualId: "",
-    servicosAtivos: [] as string[],
+    nomeCompleto: "",
+    cpf: "",
+    endereco: "",
+    email: "",
+    telefone: "",
+    nascimento: "",
+    menor: false,
+    responsavelNome: "",
+    responsavelEmail: "",
+    responsavelTelefone: "",
+    responsavelCpf: "",
+    cursoAtualId: "",
+    turmaAtualId: "",
+    servicosAtivos: [] as { tipoId: string; modalidade: "presencial" | "online" }[],
   });
-  const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
@@ -33,7 +42,10 @@ export default function AlunosCadastrar() {
   }, []);
 
   useEffect(() => {
-    if (!dadosAluno.cursoAtualId) { setTurmas([]); return; }
+    if (!dadosAluno.cursoAtualId) {
+      setTurmas([]);
+      return;
+    }
     const carregarTurmas = async () => {
       const snap = await getDocs(collection(db, "cursos", dadosAluno.cursoAtualId, "turmas"));
       setTurmas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -46,13 +58,15 @@ export default function AlunosCadastrar() {
     setDadosAluno(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   };
 
-  const toggleServico = (servicoId: string) => {
-    setDadosAluno(prev => ({
-      ...prev,
-      servicosAtivos: prev.servicosAtivos.includes(servicoId)
-        ? prev.servicosAtivos.filter(id => id !== servicoId)
-        : [...prev.servicosAtivos, servicoId]
-    }));
+  const toggleServico = (tipoId: string, modalidade: "presencial" | "online") => {
+    setDadosAluno(prev => {
+      const existe = prev.servicosAtivos.find(s => s.tipoId === tipoId);
+      if (existe) {
+        return { ...prev, servicosAtivos: prev.servicosAtivos.filter(s => s.tipoId !== tipoId) };
+      } else {
+        return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade }] };
+      }
+    });
   };
 
   const salvar = async () => {
@@ -61,7 +75,6 @@ export default function AlunosCadastrar() {
     try {
       await salvarAluno({
         dadosAluno,
-        foto,
         onSucesso: (matricula) => {
           alert(`Aluno cadastrado! Matrícula: ${matricula}`);
           navigate("/alunos");
@@ -77,8 +90,8 @@ export default function AlunosCadastrar() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Cadastrar Aluno</h1>
+
       <input name="nomeCompleto" placeholder="Nome completo" value={dadosAluno.nomeCompleto} onChange={handleChange} />
-      <input name="rg" placeholder="RG" onChange={handleChange} />
       <input name="cpf" placeholder="CPF" onChange={handleChange} />
       <input name="endereco" placeholder="Endereço" onChange={handleChange} />
       <input name="email" placeholder="Email" onChange={handleChange} />
@@ -93,7 +106,6 @@ export default function AlunosCadastrar() {
           <input name="responsavelEmail" placeholder="Email" onChange={handleChange} />
           <input name="responsavelTelefone" placeholder="Telefone" onChange={handleChange} />
           <input name="responsavelCpf" placeholder="CPF" onChange={handleChange} />
-          <input name="responsavelRg" placeholder="RG" onChange={handleChange} />
         </>
       )}
 
@@ -110,18 +122,34 @@ export default function AlunosCadastrar() {
 
       <hr />
       <h3>Serviços de Saúde (marque quantos quiser)</h3>
-      {tiposAtendimento.map(t => (
-        <label key={t.id} style={{ display: "block" }}>
-          <input type="checkbox" checked={dadosAluno.servicosAtivos.includes(t.id)} onChange={() => toggleServico(t.id)} />
-          {t.nome}
-        </label>
-      ))}
+      {tiposAtendimento.length === 0 && <p>Nenhum tipo de atendimento cadastrado. Crie no Firestore.</p>}
+      {tiposAtendimento.map(t => {
+        const servico = dadosAluno.servicosAtivos.find(s => s.tipoId === t.id);
+        return (
+          <div key={t.id} style={{ marginBottom: 8 }}>
+            <label>
+              <input
+                type="checkbox"
+                checked={!!servico}
+                onChange={() => toggleServico(t.id, servico?.modalidade || "presencial")}
+              />
+              {t.nome}
+            </label>
+            {servico && (
+              <select
+                value={servico.modalidade}
+                onChange={(e) => toggleServico(t.id, e.target.value as "presencial" | "online")}
+                style={{ marginLeft: 12 }}
+              >
+                <option value="presencial">Presencial</option>
+                <option value="online">Online</option>
+              </select>
+            )}
+          </div>
+        );
+      })}
 
-      <hr />
-      <h3>Foto</h3>
-      <input type="file" accept="image/*" onChange={e => setFoto(e.target.files?.[0] || null)} />
-      {foto && <img src={URL.createObjectURL(foto)} width="100" />}
-      <br /><br />
+      <br />
       <button onClick={salvar} disabled={carregando}>Salvar</button>
     </div>
   );

@@ -24,17 +24,18 @@ export async function salvarAluno({
   });
   const matricula = `IJP-${String(numeroMatricula).padStart(5, "0")}`;
 
-  // Cria aluno (INCLUINDO cursoAtualId e turmaAtualId)
+  // Cria aluno
   const alunoRef = await addDoc(collection(db, "alunos"), {
     ...dadosAluno,
     matricula,
     matriculaNumero: numeroMatricula,
     cursoAtualId: dadosAluno.cursoAtualId || null,
     turmaAtualId: dadosAluno.turmaAtualId || null,
+    servicosAtivos: dadosAluno.servicosAtivos || [],
     criadoEm: new Date(),
   });
 
-  // Upload da foto
+  // Upload da foto (OPCIONAL – se foto for passada e você quiser manter, mantenha; se não, remova)
   let fotoURL = "";
   if (foto) {
     try {
@@ -44,10 +45,11 @@ export async function salvarAluno({
       await updateDoc(alunoRef, { fotoURL });
     } catch (error) {
       console.error("Erro no upload da foto:", error);
+      // não impede o cadastro
     }
   }
 
-  // Vincular à turma e diminuir vagas
+  // Vincular à turma do curso
   if (dadosAluno.cursoAtualId && dadosAluno.turmaAtualId) {
     const turmaRef = doc(db, "cursos", dadosAluno.cursoAtualId, "turmas", dadosAluno.turmaAtualId);
     await runTransaction(db, async (transaction) => {

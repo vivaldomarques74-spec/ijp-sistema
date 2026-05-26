@@ -8,7 +8,6 @@ type Aluno = {
   nomeCompleto?: string;
   matricula?: string;
   nascimento?: any;
-  servicosAtivos?: string[];
 };
 
 export default function AlunosLista() {
@@ -28,13 +27,12 @@ export default function AlunosLista() {
           nomeCompleto: data.nomeCompleto || "",
           matricula: data.matricula || "",
           nascimento: data.nascimento || null,
-          servicosAtivos: data.servicosAtivos || [],
         };
       });
       lista.sort((a, b) => (a.nomeCompleto || "").localeCompare(b.nomeCompleto || ""));
       setAlunos(lista);
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao carregar alunos:", error);
     } finally {
       setLoading(false);
     }
@@ -69,7 +67,9 @@ export default function AlunosLista() {
     );
   }, [alunos, busca]);
 
-  if (loading) return <div style={{ padding: 20 }}>Carregando alunos...</div>;
+  if (loading) {
+    return <div style={{ padding: 20 }}>Carregando alunos...</div>;
+  }
 
   return (
     <div style={{ padding: 20 }}>
@@ -79,7 +79,14 @@ export default function AlunosLista() {
         placeholder="Buscar por nome ou matrícula"
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
-        style={{ marginBottom: 20, padding: 8, width: "100%", maxWidth: 400 }}
+        style={{
+          marginBottom: 20,
+          padding: 8,
+          width: "100%",
+          maxWidth: 400,
+          border: "1px solid #ccc",
+          borderRadius: 4,
+        }}
       />
       {alunosFiltrados.length === 0 && <p>Nenhum aluno encontrado.</p>}
       <div style={{ overflowX: "auto" }}>
@@ -89,7 +96,6 @@ export default function AlunosLista() {
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Nome</th>
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Matrícula</th>
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Idade</th>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Serviços Ativos</th>
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Ações</th>
             </tr>
           </thead>
@@ -99,9 +105,18 @@ export default function AlunosLista() {
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{aluno.nomeCompleto || "-"}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{aluno.matricula || "-"}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{calcularIdade(aluno.nascimento)}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{(aluno.servicosAtivos || []).join(", ")}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                  <button onClick={() => navigate(`/alunos/editar/${aluno.id}`)} style={{ padding: "4px 12px", cursor: "pointer" }}>
+                  <button
+                    onClick={() => navigate(`/alunos/editar/${aluno.id}`)}
+                    style={{
+                      padding: "4px 12px",
+                      cursor: "pointer",
+                      background: "#0070f3",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                    }}
+                  >
                     Editar
                   </button>
                 </td>
