@@ -8,7 +8,7 @@ export default function SaudeAgenda() {
   const [horarios, setHorarios] = useState<any[]>([]);
   const [form, setForm] = useState({ profissionalId: "", tipoId: "", data: "", horario: "" });
   const [recorrente, setRecorrente] = useState(false);
-  const [tipoRecorrencia, setTipoRecorrencia] = useState<"fixo" | "livre">("livre");
+  const [tipoRecorrencia, setTipoRecorrencia] = useState<"livre" | "fixo">("livre");
 
   const carregarDados = async () => {
     const p = await getDocs(collection(db, "profissionais"));
@@ -35,47 +35,25 @@ export default function SaudeAgenda() {
     if (!form.profissionalId || !form.tipoId || !form.data || !form.horario) return alert("Preencha tudo");
     if (recorrente) {
       const datas = gerarDatasRecorrentes(form.data);
-      if (tipoRecorrencia === "fixo") {
-        // Para vínculo fixo: cria um agendamento "mãe" com recorrência, mas ainda sem paciente.
-        // Na prática, você pode criar um único documento com campo `recorrente: true` e `datasGeradas` array,
-        // mas para simplificar, criaremos um agendamento para cada data com um `groupId` para identificá-los como um conjunto fixo.
-        // Contudo, para vínculo fixo, você provavelmente já tem o paciente em mente. Vamos pedir o pacienteId.
-        const pacienteId = prompt("Digite o ID do paciente (social) que terá este horário fixo todas as semanas:");
-        if (!pacienteId) return;
-        for (const data of datas) {
-          await addDoc(collection(db, "agendamentos"), {
-            ...form,
-            data,
-            horario: form.horario,
-            status: "ocupado",
-            tipoPaciente: "social",
-            alunoId: pacienteId,
-            recorrente: true,
-            grupoRecorrenteId: `${form.profissionalId}_${form.tipoId}_${form.horario}`,
-            createdAt: new Date(),
-          });
-        }
-        alert(`${datas.length} horários fixos criados para o paciente ${pacienteId}`);
-      } else {
-        // Slot livre recorrente: cria N horários livres independentes
-        for (const data of datas) {
-          await addDoc(collection(db, "agendamentos"), {
-            ...form,
-            data,
-            horario: form.horario,
-            status: "agendado",
-            tipoPaciente: "social",
-            recorrente: true,
-            createdAt: new Date(),
-          });
-        }
-        alert(`${datas.length} horários livres criados (sem paciente fixo)`);
+      const groupId = `${form.profissionalId}_${form.tipoId}_${form.horario}_${Date.now()}`;
+      for (const data of datas) {
+        await addDoc(collection(db, "agendamentos"), {
+          ...form,
+          data,
+          horario: form.horario,
+          status: tipoRecorrencia === "fixo" ? "aguardandoVinculo" : "livre",
+          tipoPaciente: "social",
+          recorrente: true,
+          recorrenteTipo: tipoRecorrencia,
+          groupId: groupId,
+          createdAt: new Date(),
+        });
       }
+      alert(`${datas.length} horários ${tipoRecorrencia === "fixo" ? "fixos (aguardando vínculo)" : "livres recorrentes"} criados.`);
     } else {
-      // Único
       await addDoc(collection(db, "agendamentos"), {
         ...form,
-        status: "agendado",
+        status: "livre",
         tipoPaciente: "social",
         createdAt: new Date(),
       });
@@ -135,7 +113,7 @@ export default function SaudeAgenda() {
           <option value="fixo">Vínculo fixo (mesmo paciente todas as semanas)</option>
         </select>
       )}
-      <button onClick={adicionarHorario}>Adicionar</button>
+      <button onClick={adicionarHorario}>Adicionar horários</button>
 
       <hr />
       <h2>Horários cadastrados</h2>
@@ -149,12 +127,17 @@ export default function SaudeAgenda() {
           {horarios.map(h => {
             const prof = profissionais.find(p => p.id === h.profissionalId);
             const tipo = tipos.find(t => t.id === h.tipoId);
-            const isLivre = h.status === "agendado" && !h.alunoId && !h.pacienteInfo;
+            const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
             return (
               <tr key={h.id}>
-                <td>{h.data}</td><td>{h.horario}</td><td>{prof?.nome || h.profissionalId}</td>
-                <td>{tipo?.nome || h.tipoId}</td><td>{h.status}</td>
-                <td>{h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}</td>
+                <td>{h.data}</td>
+                <td>{h.horario}</td>
+                <td>{prof?.nome || h.profissionalId}</td>
+                <td>{tipo?.nome || h.tipoId}</td>
+                <td>{h.status}</td>
+                <td>
+                  {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
+                </td>
                 <td>
                   {isLivre && (
                     <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8 }}>Particular</button>
