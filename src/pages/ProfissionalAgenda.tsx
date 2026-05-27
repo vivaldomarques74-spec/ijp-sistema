@@ -17,12 +17,21 @@ interface Agendamento {
   groupId?: string;
 }
 
+// Função para obter data local no formato YYYY-MM-DD
+function getLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function ProfissionalAgenda() {
   const { codigo } = useParams();
   const [profissional, setProfissional] = useState<any>(null);
   const [agenda, setAgenda] = useState<Agendamento[]>([]);
-  const [dataSelecionada, setDataSelecionada] = useState(new Date().toISOString().split("T")[0]);
+  const [dataSelecionada, setDataSelecionada] = useState(getLocalDate(new Date()));
   const [profissionalId, setProfissionalId] = useState("");
+  const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
     const carregarProfissional = async () => {
@@ -40,33 +49,40 @@ export default function ProfissionalAgenda() {
   useEffect(() => {
     if (!profissionalId) return;
     const carregarAgenda = async () => {
-      const snap = await getDocs(collection(db, "agendamentos"));
-      let horarios = snap.docs
-        .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
-        .map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            profissionalId: data.profissionalId,
-            tipoId: data.tipoId,
-            data: data.data,
-            horario: data.horario,
-            status: data.status,
-            tipoPaciente: data.tipoPaciente,
-            alunoId: data.alunoId,
-            pacienteInfo: data.pacienteInfo,
-            groupId: data.groupId,
-          } as Agendamento;
-        });
+      setCarregando(true);
+      try {
+        const snap = await getDocs(collection(db, "agendamentos"));
+        let horarios = snap.docs
+          .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
+          .map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              profissionalId: data.profissionalId,
+              tipoId: data.tipoId,
+              data: data.data,
+              horario: data.horario,
+              status: data.status,
+              tipoPaciente: data.tipoPaciente,
+              alunoId: data.alunoId,
+              pacienteInfo: data.pacienteInfo,
+              groupId: data.groupId,
+            } as Agendamento;
+          });
 
-      for (const h of horarios) {
-        if (h.alunoId) {
-          const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
-          if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
+        for (const h of horarios) {
+          if (h.alunoId) {
+            const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
+            if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
+          }
         }
+        horarios.sort((a, b) => a.horario.localeCompare(b.horario));
+        setAgenda(horarios);
+      } catch (error) {
+        console.error("Erro ao carregar agenda:", error);
+      } finally {
+        setCarregando(false);
       }
-      horarios.sort((a, b) => a.horario.localeCompare(b.horario));
-      setAgenda(horarios);
     };
     carregarAgenda();
   }, [profissionalId, dataSelecionada]);
@@ -132,6 +148,7 @@ export default function ProfissionalAgenda() {
       }
     }
 
+    // Recarregar agenda
     const snap = await getDocs(collection(db, "agendamentos"));
     let horarios = snap.docs
       .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
@@ -160,52 +177,72 @@ export default function ProfissionalAgenda() {
     setAgenda(horarios);
   };
 
+  const formatarDataExibicao = (dataISO: string) => {
+    const partes = dataISO.split("-");
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  };
+
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
         <h2>Agenda do Profissional</h2>
         <p><strong>Código:</strong> {codigo} | <strong>Nome:</strong> {profissional?.nome || "Carregando..."}</p>
         <label>Data: </label>
-        <input type="date" value={dataSelecionada} onChange={e => setDataSelecionada(e.target.value)} />
+        <input
+          type="date"
+          value={dataSelecionada}
+          onChange={e => setDataSelecionada(e.target.value)}
+        />
       </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th>Horário</th>
-              <th>Paciente</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agenda.map(ag => (
-              <tr key={ag.id}>
-                <td>{ag.horario}</td>
-                <td>{ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}</td>
-                <td>
-                  {ag.alunoId && (ag.status === "agendado" || ag.status === "ocupado") && (
-                    <>
-                      <button onClick={() => registrarPresenca(ag, "presente")}>Compareceu</button>
-                      <button onClick={() => registrarPresenca(ag, "faltaJustificada")}>Falta justificada</button>
-                      <button onClick={() => registrarPresenca(ag, "faltaInjustificada")}>Falta injustificada</button>
-                    </>
-                  )}
-                  {ag.status === "realizado" && "Atendido"}
-                  {ag.status === "faltaJustificada" && "Falta justificada"}
-                  {ag.status === "faltaInjustificada" && "Falta injustificada"}
-                  {!ag.alunoId && "Livre"}
-                  {ag.alunoId && <button onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")}>Ficha</button>}
-                </td>
-              </tr>
-            ))}
-            {agenda.length === 0 && (
+      {carregando && <p>Carregando horários...</p>}
+      {!carregando && (
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
+            <thead>
               <tr>
-                <td colSpan={3}>Nenhum horário para esta data.</td>
+                <th style={{ textAlign: "left", padding: 8 }}>Horário</th>
+                <th style={{ textAlign: "left", padding: 8 }}>Paciente</th>
+                <th style={{ textAlign: "left", padding: 8 }}>Ações</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {agenda.map(ag => (
+                <tr key={ag.id}>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{ag.horario}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                    {ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}
+                  </td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                    {ag.alunoId && (ag.status === "agendado" || ag.status === "ocupado") && (
+                      <>
+                        <button onClick={() => registrarPresenca(ag, "presente")} style={{ marginRight: 4 }}>Compareceu</button>
+                        <button onClick={() => registrarPresenca(ag, "faltaJustificada")} style={{ marginRight: 4 }}>Falta justificada</button>
+                        <button onClick={() => registrarPresenca(ag, "faltaInjustificada")}>Falta injustificada</button>
+                      </>
+                    )}
+                    {ag.status === "realizado" && "Atendido"}
+                    {ag.status === "faltaJustificada" && "Falta justificada"}
+                    {ag.status === "faltaInjustificada" && "Falta injustificada"}
+                    {!ag.alunoId && "Livre"}
+                    {ag.alunoId && (
+                      <button onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")} style={{ marginLeft: 8 }}>
+                        Ficha
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {agenda.length === 0 && (
+                <tr>
+                  <td colSpan={3} style={{ padding: 8, textAlign: "center" }}>
+                    Nenhum horário para esta data.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
