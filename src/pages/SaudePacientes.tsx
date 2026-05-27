@@ -2,17 +2,14 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, doc, getDoc, addDoc, query, where, deleteDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
-// Interface para tipar os dados do agendamento
-interface AgendamentoData {
+interface Agendamento {
   id: string;
   profissionalId: string;
   tipoId: string;
   data: string;
   horario: string;
+  alunoId: string;
   status: string;
-  tipoPaciente: string;
-  alunoId?: string;
-  pacienteInfo?: { nome: string; telefone: string };
 }
 
 export default function SaudePacientes() {
@@ -38,22 +35,17 @@ export default function SaudePacientes() {
     setCarregando(true);
     try {
       const snap = await getDocs(collection(db, "agendamentos"));
-      let agendamentos: AgendamentoData[] = snap.docs
-        .filter(d => {
-          const data = d.data();
-          return data.status === "ocupado" && data.alunoId;
-        })
+      let agendamentos: Agendamento[] = snap.docs
+        .filter(d => d.data().status === "ocupado" && d.data().alunoId)
         .map(d => ({
           id: d.id,
           profissionalId: d.data().profissionalId,
           tipoId: d.data().tipoId,
           data: d.data().data,
           horario: d.data().horario,
-          status: d.data().status,
-          tipoPaciente: d.data().tipoPaciente,
           alunoId: d.data().alunoId,
-          pacienteInfo: d.data().pacienteInfo,
-        } as AgendamentoData));
+          status: d.data().status,
+        }));
 
       if (filtroData) agendamentos = agendamentos.filter(a => a.data === filtroData);
       if (filtroProfissional) agendamentos = agendamentos.filter(a => a.profissionalId === filtroProfissional);
@@ -66,7 +58,6 @@ export default function SaudePacientes() {
 
       const lista = [];
       for (const ag of agendamentos) {
-        if (!ag.alunoId) continue;
         const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
         if (alunoSnap.exists()) {
           const aluno = alunoSnap.data();
@@ -140,12 +131,12 @@ export default function SaudePacientes() {
           <tbody>
             {pacientes.map(p => (
               <tr key={p.id}>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.nome}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.matricula}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.servicoNome}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.data} {p.horario}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.profissionalNome}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}><button onClick={() => trocarProfissional(p)}>Trocar profissional</button></td>
+                <td style={{ padding: 8 }}>{p.nome}</td>
+                <td style={{ padding: 8 }}>{p.matricula}</td>
+                <td style={{ padding: 8 }}>{p.servicoNome}</td>
+                <td style={{ padding: 8 }}>{p.data} {p.horario}</td>
+                <td style={{ padding: 8 }}>{p.profissionalNome}</td>
+                <td style={{ padding: 8 }}><button onClick={() => trocarProfissional(p)}>Trocar profissional</button></td>
               </tr>
             ))}
           </tbody>
