@@ -2,14 +2,30 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, doc, updateDoc, query, where, getDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
+// Tipo para os dados do agendamento (vindo do Firestore)
+interface AgendamentoData {
+  id: string;
+  profissionalId: string;
+  tipoId: string;
+  data: string;
+  horario: string;
+  status: string;
+  tipoPaciente: string;
+  alunoId?: string;
+  pacienteInfo?: { nome: string; telefone: string };
+  recorrenteTipo?: string;
+  groupId?: string;
+}
+
 export default function SaudeFila() {
   const [tipos, setTipos] = useState<any[]>([]);
   const [tipoId, setTipoId] = useState("");
   const [fila, setFila] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
-  const [horarios, setHorarios] = useState<any[]>([]);
-  // Armazenar, para cada paciente, o profissional e horário selecionados
-  const [selecoes, setSelecoes] = useState<Record<string, { profissionalId: string; horarioId: string }>>({});
+  const [profissionalId, setProfissionalId] = useState("");
+  const [horarios, setHorarios] = useState<AgendamentoData[]>([]);
+  const [horarioId, setHorarioId] = useState("");
+  const [pacienteSelecionadoId, setPacienteSelecionadoId] = useState("");
 
   useEffect(() => {
     const carregarTipos = async () => {
@@ -32,110 +48,114 @@ export default function SaudeFila() {
       const lista = [];
       for (const docFil of snap.docs) {
         const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
-        const alunoData = alunoSnap.data();
         lista.push({
           id: docFil.id,
           alunoId: docFil.data().alunoId,
-          nome: alunoData?.nomeCompleto,
-          matricula: alunoData?.matricula || "",
-          dataSolicitacao: docFil.data().dataSolicitacao,
+          nome: alunoSnap.data()?.nomeCompleto,
         });
       }
-      // Ordenar por matrícula (assumindo que matrículas mais antigas têm números menores)
-      lista.sort((a, b) => {
-        const numA = parseInt(a.matricula.split('-')[1] || '0');
-        const numB = parseInt(b.matricula.split('-')[1] || '0');
-        return numA - numB;
-      });
       setFila(lista);
-      // Resetar seleções
-      setSelecoes({});
+      setPacienteSelecionadoId("");
     };
     carregarFila();
   }, [tipoId]);
 
-  // Carregar horários do profissional selecionado para um determinado paciente
-  const carregarHorariosParaProfissional = async (pacienteId: string, profId: string) => {
-    if (!profId) return;
-    const snap = await getDocs(collection(db, "agendamentos"));
-    const livres = snap.docs.filter(d => 
-      d.data().profissionalId === profId && 
-      (d.data().status === "livre" || d.data().status === "aguardandoVinculo") && 
-      !d.data().alunoId && 
-      !d.data().pacienteInfo
-    );
-    const horariosList = livres.map(d => ({ id: d.id, ...d.data() }));
-    setHorarios(horariosList);
-    // Atualizar seleção do paciente com o profissional escolhido
-    setSelecoes(prev => ({
-      ...prev,
-      [pacienteId]: { ...prev[pacienteId], profissionalId: profId, horarioId: "" }
-    }));
-  };
+  useEffect(() => {
+    if (!profissionalId) return;
+    const carregarHorarios = async () => {
+      const hoje = new Date().toISOString().split("T")[0];
+      const snap = await getDocs(collection(db, "agendamentos"));
+      let todos: AgendamentoData[] = snap.docs
+        .filter(d => {
+          const data = d.data();
+          return data.profissionalId === profissionalId &&
+                 (data.status === "livre" || data.status === "aguardandoVinculo") &&
+                 !data.alunoId &&
+                 !data.pacienteInfo &&
+                 data.data >= hoje;
+        })
+        .map(d => ({ id: d.id, ...d.data() } as AgendamentoData));
 
-  const handleProfissionalChange = (pacienteId: string, profId: string) => {
-    carregarHorariosParaProfissional(pacienteId, profId);
-  };
+      // Separar fixos (com groupId) e avulsos
+      const fixos = todos.filter(a => a.groupId);
+      const avulsos = todos.filter(a => !a.groupId);
 
-  const handleHorarioChange = (pacienteId: string, horarioId: string) => {
-    setSelecoes(prev => ({
-      ...prev,
-      [pacienteId]: { ...prev[pacienteId], horarioId }
-    }));
-  };
+      // Agrupar fixos por groupId e pegar o mais próximo (menor data)
+      const gruposFixos = new Map<string, AgendamentoData>();
+      for (const fixo of fixos) {
+        const existing = gruposFixos.get(fixo.groupId!);
+        if (!existing || fixo.data < existing.data) {
+          gruposFixos.set(fixo.groupId!, fixo);
+        }
+      }
+      const horariosFixos = Array.from(gruposFixos.values());
 
-  const vincular = async (paciente: any) => {
-    const selecao = selecoes[paciente.alunoId];
-    if (!selecao || !selecao.profissionalId || !selecao.horarioId) {
-      alert("Selecione profissional e horário para este paciente");
-      return;
-    }
-    const horarioRef = doc(db, "agendamentos", selecao.horarioId);
+      // Juntar e ordenar por data e horário (crescente)
+      let todosHorarios = [...horariosFixos, ...avulsos];
+      todosHorarios.sort((a, b) => {
+        if (a.data < b.data) return -1;
+        if (a.data > b.data) return 1;
+        return a.horario.localeCompare(b.horario);
+      });
+
+      setHorarios(todosHorarios);
+    };
+    carregarHorarios();
+  }, [profissionalId]);
+
+  const vincular = async () => {
+    if (!pacienteSelecionadoId) return alert("Selecione um paciente da fila");
+    if (!horarioId) return alert("Selecione um horário");
+
+    const horarioRef = doc(db, "agendamentos", horarioId);
     const horarioSnap = await getDoc(horarioRef);
-    const horarioData = horarioSnap.data();
+    const horarioData = horarioSnap.data() as AgendamentoData;
 
-    if (horarioData?.recorrenteTipo === "fixo" && horarioData?.groupId) {
-      const q = query(collection(db, "agendamentos"), where("groupId", "==", horarioData.groupId));
-      const groupSnap = await getDocs(q);
+    if (horarioData?.groupId) {
+      // Vínculo fixo: ocupar todos os horários do grupo
+      const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", horarioData.groupId));
+      const groupSnap = await getDocs(groupQuery);
       for (const docHor of groupSnap.docs) {
         await updateDoc(docHor.ref, {
-          alunoId: paciente.alunoId,
+          alunoId: pacienteSelecionadoId,
           status: "ocupado",
         });
       }
       alert("Paciente vinculado a todas as ocorrências do grupo fixo.");
     } else {
+      // Vínculo normal
       await updateDoc(horarioRef, {
-        alunoId: paciente.alunoId,
+        alunoId: pacienteSelecionadoId,
         status: "ocupado",
       });
       alert("Paciente vinculado ao horário.");
     }
 
-    // Remover da fila
-    await updateDoc(doc(db, "filaEspera", paciente.id), { status: "atendido" });
+    // Remover paciente da fila
+    const filaDoc = fila.find(f => f.alunoId === pacienteSelecionadoId);
+    if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
 
-    // Recarregar a fila
+    // Recarregar fila e horários
+    setProfissionalId("");
+    setHorarioId("");
+    setPacienteSelecionadoId("");
     const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
     const snap = await getDocs(q);
     const lista = [];
     for (const docFil of snap.docs) {
       const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
-      const alunoData = alunoSnap.data();
       lista.push({
         id: docFil.id,
         alunoId: docFil.data().alunoId,
-        nome: alunoData?.nomeCompleto,
-        matricula: alunoData?.matricula || "",
+        nome: alunoSnap.data()?.nomeCompleto,
       });
     }
-    lista.sort((a, b) => {
-      const numA = parseInt(a.matricula.split('-')[1] || '0');
-      const numB = parseInt(b.matricula.split('-')[1] || '0');
-      return numA - numB;
-    });
     setFila(lista);
-    setSelecoes({});
+  };
+
+  const formatarData = (dataISO: string) => {
+    const [ano, mes, dia] = dataISO.split("-");
+    return `${dia}/${mes}/${ano}`;
   };
 
   return (
@@ -148,36 +168,48 @@ export default function SaudeFila() {
 
       {tipoId && (
         <div style={{ marginTop: 20 }}>
-          {fila.length === 0 && <p>Nenhum paciente aguardando.</p>}
-          {fila.map(paciente => {
-            const selecao = selecoes[paciente.alunoId] || { profissionalId: "", horarioId: "" };
-            const horariosDisponiveis = horarios.filter(h => h.profissionalId === selecao.profissionalId);
-            return (
-              <div key={paciente.alunoId} style={{ border: "1px solid #ccc", padding: 12, marginBottom: 12, borderRadius: 8 }}>
-                <div><strong>{paciente.nome}</strong> (Matrícula: {paciente.matricula})</div>
-                <div style={{ marginTop: 8 }}>
-                  <select
-                    value={selecao.profissionalId}
-                    onChange={e => handleProfissionalChange(paciente.alunoId, e.target.value)}
-                    style={{ marginRight: 8 }}
-                  >
-                    <option value="">Selecione profissional</option>
-                    {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
-                  </select>
-                  <select
-                    value={selecao.horarioId}
-                    onChange={e => handleHorarioChange(paciente.alunoId, e.target.value)}
-                    disabled={!selecao.profissionalId}
-                    style={{ marginRight: 8 }}
-                  >
-                    <option value="">Horário livre</option>
-                    {horariosDisponiveis.map(h => <option key={h.id} value={h.id}>{h.data} {h.horario}</option>)}
-                  </select>
-                  <button onClick={() => vincular(paciente)}>Vincular</button>
-                </div>
-              </div>
-            );
-          })}
+          <div style={{ marginBottom: 20 }}>
+            <h3>Pacientes aguardando:</h3>
+            <select
+              value={pacienteSelecionadoId}
+              onChange={e => setPacienteSelecionadoId(e.target.value)}
+              style={{ width: "100%", padding: 8 }}
+            >
+              <option value="">Selecione um paciente</option>
+              {fila.map(f => <option key={f.alunoId} value={f.alunoId}>{f.nome}</option>)}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <h3>Vincular a horário:</h3>
+            <select
+              value={profissionalId}
+              onChange={e => setProfissionalId(e.target.value)}
+              style={{ width: "100%", padding: 8, marginBottom: 8 }}
+            >
+              <option value="">Selecione o profissional</option>
+              {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
+            </select>
+
+            <select
+              value={horarioId}
+              onChange={e => setHorarioId(e.target.value)}
+              disabled={!profissionalId}
+              style={{ width: "100%", padding: 8 }}
+            >
+              <option value="">Horário livre</option>
+              {horarios.map(h => {
+                const descricao = h.groupId
+                  ? `${formatarData(h.data)} ${h.horario} (fixo)`
+                  : `${formatarData(h.data)} ${h.horario}`;
+                return <option key={h.id} value={h.id}>{descricao}</option>;
+              })}
+            </select>
+          </div>
+
+          <button onClick={vincular} disabled={!pacienteSelecionadoId || !horarioId}>
+            Vincular paciente ao horário
+          </button>
         </div>
       )}
     </div>
