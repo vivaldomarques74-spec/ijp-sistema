@@ -16,7 +16,23 @@ export default function SaudeAgenda() {
     const a = await getDocs(collection(db, "agendamentos"));
     setProfissionais(p.docs.map(d => ({ id: d.id, ...d.data() })));
     setTipos(t.docs.map(d => ({ id: d.id, ...d.data() })));
-    setHorarios(a.docs.map(d => ({ id: d.id, ...d.data() })));
+    // Mapeamento explícito para evitar erro de tipo
+    const horariosData = a.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        profissionalId: data.profissionalId,
+        tipoId: data.tipoId,
+        data: data.data,
+        horario: data.horario,
+        status: data.status,
+        tipoPaciente: data.tipoPaciente,
+        alunoId: data.alunoId,
+        pacienteInfo: data.pacienteInfo,
+        groupId: data.groupId,
+      };
+    });
+    setHorarios(horariosData);
   };
 
   useEffect(() => { carregarDados(); }, []);
@@ -38,7 +54,8 @@ export default function SaudeAgenda() {
       const groupId = `${form.profissionalId}_${form.tipoId}_${form.horario}_${Date.now()}`;
       for (const data of datas) {
         await addDoc(collection(db, "agendamentos"), {
-          ...form,
+          profissionalId: form.profissionalId,
+          tipoId: form.tipoId,
           data,
           horario: form.horario,
           status: tipoRecorrencia === "fixo" ? "aguardandoVinculo" : "livre",
@@ -52,7 +69,10 @@ export default function SaudeAgenda() {
       alert(`${datas.length} horários ${tipoRecorrencia === "fixo" ? "fixos (aguardando vínculo)" : "livres recorrentes"} criados.`);
     } else {
       await addDoc(collection(db, "agendamentos"), {
-        ...form,
+        profissionalId: form.profissionalId,
+        tipoId: form.tipoId,
+        data: form.data,
+        horario: form.horario,
         status: "livre",
         tipoPaciente: "social",
         createdAt: new Date(),
@@ -133,26 +153,24 @@ export default function SaudeAgenda() {
               const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
               return (
                 <tr key={h.id}>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.data}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.horario}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{prof?.nome || h.profissionalId}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{tipo?.nome || h.tipoId}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.status}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 8 }}>{h.data}</td>
+                  <td style={{ padding: 8 }}>{h.horario}</td>
+                  <td style={{ padding: 8 }}>{prof?.nome || h.profissionalId}</td>
+                  <td style={{ padding: 8 }}>{tipo?.nome || h.tipoId}</td>
+                  <td style={{ padding: 8 }}>{h.status}</td>
+                  <td style={{ padding: 8 }}>
                     {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
                   </td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 8 }}>
                     {isLivre && (
-                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8, color: "#fff" }}>Particular</button>
+                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8 }}>Particular</button>
                     )}
                     <button onClick={() => excluirHorario(h.id)}>Excluir</button>
                   </td>
                 </tr>
               );
             })}
-            {horarios.length === 0 && (
-              <tr><td colSpan={7}>Nenhum horário cadastrado.</td></tr>
-            )}
+            {horarios.length === 0 && <tr><td colSpan={7}>Nenhum horário cadastrado.</td></tr>}
           </tbody>
         </table>
       </div>
