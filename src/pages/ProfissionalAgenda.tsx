@@ -17,43 +17,63 @@ interface Agendamento {
   groupId?: string;
 }
 
-// Obtém a data atual no formato YYYY-MM-DD baseado no fuso do dispositivo
-function getLocalDate(): string {
-  return new Date().toLocaleDateString('en-CA'); // 'en-CA' produz YYYY-MM-DD
+// Retorna a data atual no formato YYYY-MM-DD sem conversão de fuso (local)
+function getTodayLocal(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export default function ProfissionalAgenda() {
   const { codigo } = useParams();
   const [profissional, setProfissional] = useState<any>(null);
   const [agenda, setAgenda] = useState<Agendamento[]>([]);
-  const [dataSelecionada, setDataSelecionada] = useState(getLocalDate());
+  const [dataSelecionada, setDataSelecionada] = useState(getTodayLocal());
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     const carregarProfissional = async () => {
-      const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const docProf = snap.docs[0];
-        setProfissional({ id: docProf.id, ...docProf.data() });
-        setProfissionalId(docProf.id);
-      } else {
-        setErro("Profissional não encontrado.");
+      try {
+        const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const docProf = snap.docs[0];
+          setProfissional({ id: docProf.id, ...docProf.data() });
+          setProfissionalId(docProf.id);
+        } else {
+          setErro("Profissional não encontrado.");
+        }
+      } catch (err: any) {
+        console.error("Erro ao carregar profissional:", err);
+        setErro(`Erro ao carregar profissional: ${err.message}`);
       }
     };
-    carregarProfissional();
+    if (codigo) carregarProfissional();
   }, [codigo]);
 
   const carregarAgenda = async () => {
-    if (!profissionalId) return;
+    if (!profissionalId) {
+      setErro("Profissional não identificado. Aguarde o carregamento.");
+      return;
+    }
     setCarregando(true);
     setErro(null);
     try {
+      console.log("Carregando agenda para profissional:", profissionalId, "data:", dataSelecionada);
       const snap = await getDocs(collection(db, "agendamentos"));
+      console.log("Total de agendamentos lidos:", snap.docs.length);
+      
       let horarios = snap.docs
-        .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
+        .filter(d => {
+          const data = d.data();
+          const ok = data.profissionalId === profissionalId && data.data === dataSelecionada;
+          if (ok) console.log("Encontrado agendamento:", data);
+          return ok;
+        })
         .map(d => {
           const data = d.data();
           return {
@@ -78,16 +98,18 @@ export default function ProfissionalAgenda() {
       }
       horarios.sort((a, b) => a.horario.localeCompare(b.horario));
       setAgenda(horarios);
-    } catch (error) {
-      console.error("Erro ao carregar agenda:", error);
-      setErro("Erro ao carregar dados. Tente novamente.");
+      console.log("Agenda carregada com sucesso. Quantidade:", horarios.length);
+    } catch (err: any) {
+      console.error("Erro ao carregar agenda:", err);
+      setErro(`Erro ao carregar dados: ${err.message}. Tente novamente.`);
+      alert(`Erro: ${err.message}`); // Alerta para depuração
     } finally {
       setCarregando(false);
     }
   };
 
   useEffect(() => {
-    carregarAgenda();
+    if (profissionalId) carregarAgenda();
   }, [profissionalId, dataSelecionada]);
 
   const registrarPresenca = async (ag: Agendamento, tipo: string) => {
@@ -97,62 +119,65 @@ export default function ProfissionalAgenda() {
     else if (tipo === "faltaJustificada") novoStatus = "faltaJustificada";
     else novoStatus = "faltaInjustificada";
 
-    await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
+    try {
+      await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
 
-    if (tipo === "faltaInjustificada" && ag.alunoId) {
-      const faltasQuery = query(
-        collection(db, "agendamentos"),
-        where("alunoId", "==", ag.alunoId),
-        where("profissionalId", "==", profissionalId),
-        where("tipoId", "==", ag.tipoId),
-        where("status", "==", "faltaInjustificada")
-      );
-      const faltasSnap = await getDocs(faltasQuery);
-      const faltasCount = faltasSnap.size;
-      if (faltasCount >= 2) {
-        if (ag.groupId) {
-          const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", ag.groupId));
-          const groupSnap = await getDocs(groupQuery);
-          for (const docHor of groupSnap.docs) {
-            await updateDoc(docHor.ref, { alunoId: null, status: "livre" });
-          }
-        } else {
-          await updateDoc(doc(db, "agendamentos", ag.id), { alunoId: null, status: "livre" });
-        }
-        const filaQuery = query(
-          collection(db, "filaEspera"),
+      if (tipo === "faltaInjustificada" && ag.alunoId) {
+        const faltasQuery = query(
+          collection(db, "agendamentos"),
           where("alunoId", "==", ag.alunoId),
+          where("profissionalId", "==", profissionalId),
           where("tipoId", "==", ag.tipoId),
-          where("status", "==", "aguardando")
+          where("status", "==", "faltaInjustificada")
         );
-        const filaSnap = await getDocs(filaQuery);
-        if (filaSnap.empty) {
-          await addDoc(collection(db, "filaEspera"), {
+        const faltasSnap = await getDocs(faltasQuery);
+        const faltasCount = faltasSnap.size;
+        if (faltasCount >= 2) {
+          if (ag.groupId) {
+            const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", ag.groupId));
+            const groupSnap = await getDocs(groupQuery);
+            for (const docHor of groupSnap.docs) {
+              await updateDoc(docHor.ref, { alunoId: null, status: "livre" });
+            }
+          } else {
+            await updateDoc(doc(db, "agendamentos", ag.id), { alunoId: null, status: "livre" });
+          }
+          const filaQuery = query(
+            collection(db, "filaEspera"),
+            where("alunoId", "==", ag.alunoId),
+            where("tipoId", "==", ag.tipoId),
+            where("status", "==", "aguardando")
+          );
+          const filaSnap = await getDocs(filaQuery);
+          if (filaSnap.empty) {
+            await addDoc(collection(db, "filaEspera"), {
+              alunoId: ag.alunoId,
+              tipoId: ag.tipoId,
+              dataSolicitacao: new Date(),
+              status: "aguardando",
+              modalidade: "presencial",
+            });
+          }
+          let nomePaciente = "Paciente";
+          if (ag.alunoId) {
+            const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
+            if (alunoSnap.exists()) nomePaciente = alunoSnap.data().nomeCompleto;
+          }
+          await addDoc(collection(db, "notificacoes"), {
+            mensagem: `Paciente ${nomePaciente} retornou à fila por 2 faltas injustificadas. Horário disponível: ${ag.data} ${ag.horario}.`,
+            lida: false,
+            createdAt: new Date(),
+            tipo: "falta",
             alunoId: ag.alunoId,
-            tipoId: ag.tipoId,
-            dataSolicitacao: new Date(),
-            status: "aguardando",
-            modalidade: "presencial",
           });
+          alert("Paciente removido do horário (2 faltas injustificadas) e voltou à fila. Notificação enviada.");
         }
-        let nomePaciente = "Paciente";
-        if (ag.alunoId) {
-          const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
-          if (alunoSnap.exists()) nomePaciente = alunoSnap.data().nomeCompleto;
-        }
-        await addDoc(collection(db, "notificacoes"), {
-          mensagem: `Paciente ${nomePaciente} retornou à fila por 2 faltas injustificadas. Horário disponível: ${ag.data} ${ag.horario}.`,
-          lida: false,
-          createdAt: new Date(),
-          tipo: "falta",
-          alunoId: ag.alunoId,
-        });
-        alert("Paciente removido do horário (2 faltas injustificadas) e voltou à fila. Notificação enviada.");
       }
+      await carregarAgenda();
+    } catch (err: any) {
+      console.error("Erro ao registrar presença:", err);
+      alert("Erro ao registrar presença: " + err.message);
     }
-
-    // Recarregar agenda após ação
-    await carregarAgenda();
   };
 
   return (
@@ -217,7 +242,7 @@ export default function ProfissionalAgenda() {
                 </tr>
               )}
             </tbody>
-          </table>
+        </table>
         </div>
       )}
     </div>
