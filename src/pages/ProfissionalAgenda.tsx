@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { collection, getDocs, doc, updateDoc, getDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, getDoc, query, where, addDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
-// Interface para tipar os dados do agendamento
 interface Agendamento {
   id: string;
   profissionalId: string;
@@ -15,6 +14,7 @@ interface Agendamento {
   alunoId?: string;
   pacienteInfo?: { nome: string; telefone: string };
   nomeAluno?: string;
+  groupId?: string;
 }
 
 export default function ProfissionalAgenda() {
@@ -24,7 +24,6 @@ export default function ProfissionalAgenda() {
   const [dataSelecionada, setDataSelecionada] = useState(new Date().toISOString().split("T")[0]);
   const [profissionalId, setProfissionalId] = useState("");
 
-  // Carregar dados do profissional
   useEffect(() => {
     const carregarProfissional = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
@@ -38,16 +37,12 @@ export default function ProfissionalAgenda() {
     carregarProfissional();
   }, [codigo]);
 
-  // Carregar agenda do profissional para a data selecionada
   useEffect(() => {
     if (!profissionalId) return;
     const carregarAgenda = async () => {
       const snap = await getDocs(collection(db, "agendamentos"));
-      const horarios: Agendamento[] = snap.docs
-        .filter(d => {
-          const data = d.data();
-          return data.profissionalId === profissionalId && data.data === dataSelecionada;
-        })
+      let horarios = snap.docs
+        .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
         .map(d => {
           const data = d.data();
           return {
@@ -60,16 +55,14 @@ export default function ProfissionalAgenda() {
             tipoPaciente: data.tipoPaciente,
             alunoId: data.alunoId,
             pacienteInfo: data.pacienteInfo,
+            groupId: data.groupId,
           } as Agendamento;
         });
 
-      // Buscar nome do aluno para cada horário
       for (const h of horarios) {
         if (h.alunoId) {
           const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
-          if (alunoSnap.exists()) {
-            h.nomeAluno = alunoSnap.data().nomeCompleto;
-          }
+          if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
         }
       }
       horarios.sort((a, b) => a.horario.localeCompare(b.horario));
@@ -86,15 +79,62 @@ export default function ProfissionalAgenda() {
     else novoStatus = "faltaInjustificada";
 
     await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
-    alert(`Registrado como ${tipo === "presente" ? "Compareceu" : tipo === "faltaJustificada" ? "Falta justificada" : "Falta injustificada"}`);
 
-    // Recarregar agenda
+    if (tipo === "faltaInjustificada" && ag.alunoId) {
+      const faltasQuery = query(
+        collection(db, "agendamentos"),
+        where("alunoId", "==", ag.alunoId),
+        where("profissionalId", "==", profissionalId),
+        where("tipoId", "==", ag.tipoId),
+        where("status", "==", "faltaInjustificada")
+      );
+      const faltasSnap = await getDocs(faltasQuery);
+      const faltasCount = faltasSnap.size;
+      if (faltasCount >= 2) {
+        if (ag.groupId) {
+          const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", ag.groupId));
+          const groupSnap = await getDocs(groupQuery);
+          for (const docHor of groupSnap.docs) {
+            await updateDoc(docHor.ref, { alunoId: null, status: "livre" });
+          }
+        } else {
+          await updateDoc(doc(db, "agendamentos", ag.id), { alunoId: null, status: "livre" });
+        }
+        const filaQuery = query(
+          collection(db, "filaEspera"),
+          where("alunoId", "==", ag.alunoId),
+          where("tipoId", "==", ag.tipoId),
+          where("status", "==", "aguardando")
+        );
+        const filaSnap = await getDocs(filaQuery);
+        if (filaSnap.empty) {
+          await addDoc(collection(db, "filaEspera"), {
+            alunoId: ag.alunoId,
+            tipoId: ag.tipoId,
+            dataSolicitacao: new Date(),
+            status: "aguardando",
+            modalidade: "presencial",
+          });
+        }
+        let nomePaciente = "Paciente";
+        if (ag.alunoId) {
+          const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
+          if (alunoSnap.exists()) nomePaciente = alunoSnap.data().nomeCompleto;
+        }
+        await addDoc(collection(db, "notificacoes"), {
+          mensagem: `Paciente ${nomePaciente} retornou à fila por 2 faltas injustificadas. Horário disponível: ${ag.data} ${ag.horario}.`,
+          lida: false,
+          createdAt: new Date(),
+          tipo: "falta",
+          alunoId: ag.alunoId,
+        });
+        alert("Paciente removido do horário (2 faltas injustificadas) e voltou à fila. Notificação enviada.");
+      }
+    }
+
     const snap = await getDocs(collection(db, "agendamentos"));
-    const horarios: Agendamento[] = snap.docs
-      .filter(d => {
-        const data = d.data();
-        return data.profissionalId === profissionalId && data.data === dataSelecionada;
-      })
+    let horarios = snap.docs
+      .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
       .map(d => {
         const data = d.data();
         return {
@@ -107,6 +147,7 @@ export default function ProfissionalAgenda() {
           tipoPaciente: data.tipoPaciente,
           alunoId: data.alunoId,
           pacienteInfo: data.pacienteInfo,
+          groupId: data.groupId,
         } as Agendamento;
       });
     for (const h of horarios) {

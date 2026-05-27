@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, updateDoc, doc, Timestamp } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, Timestamp, getDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 type Notificacao = {
@@ -8,6 +8,7 @@ type Notificacao = {
   lida: boolean;
   createdAt: Timestamp;
   tipo?: string;
+  alunoId?: string;
 };
 
 export default function Notificacoes() {
@@ -22,6 +23,16 @@ export default function Notificacoes() {
           id: doc.id,
           ...doc.data(),
         })) as Notificacao[];
+
+        // Substituir possíveis IDs remanescentes pelo nome do paciente
+        for (const n of lista) {
+          if (n.alunoId && n.mensagem.includes(n.alunoId)) {
+            const alunoSnap = await getDoc(doc(db, "alunos", n.alunoId));
+            if (alunoSnap.exists()) {
+              n.mensagem = n.mensagem.replace(n.alunoId, alunoSnap.data().nomeCompleto);
+            }
+          }
+        }
         lista.sort((a, b) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0));
         setNotificacoes(lista);
       } catch (error) {
@@ -41,10 +52,7 @@ export default function Notificacoes() {
   const naoLidas = notificacoes.filter(n => !n.lida).length;
 
   if (carregando) return <div style={{ padding: 20 }}>Carregando notificações...</div>;
-
-  if (notificacoes.length === 0) {
-    return <div style={{ padding: 20 }}>Nenhuma notificação encontrada.</div>;
-  }
+  if (notificacoes.length === 0) return <div style={{ padding: 20 }}>Nenhuma notificação encontrada.</div>;
 
   return (
     <div style={{ padding: 20 }}>

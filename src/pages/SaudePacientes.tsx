@@ -17,18 +17,24 @@ export default function SaudePacientes() {
   const [filtroData, setFiltroData] = useState("");
   const [filtroProfissional, setFiltroProfissional] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
-  const [profissionais, setProfissionais] = useState<any[]>([]);
-  const [servicos, setServicos] = useState<any[]>([]);
+  const [profissionaisMap, setProfissionaisMap] = useState<Map<string, string>>(new Map());
+  const [servicosMap, setServicosMap] = useState<Map<string, string>>(new Map());
   const [carregando, setCarregando] = useState(false);
 
+  // Carregar profissionais e serviços uma vez (criar Map para acesso rápido)
   useEffect(() => {
-    const carregarAux = async () => {
+    const carregarMaps = async () => {
       const profSnap = await getDocs(collection(db, "profissionais"));
-      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      const profMap = new Map<string, string>();
+      profSnap.docs.forEach(d => profMap.set(d.id, d.data().nome));
+      setProfissionaisMap(profMap);
+
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
-      setServicos(servSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      const servMap = new Map<string, string>();
+      servSnap.docs.forEach(d => servMap.set(d.id, d.data().nome));
+      setServicosMap(servMap);
     };
-    carregarAux();
+    carregarMaps();
   }, []);
 
   const carregarPacientes = async () => {
@@ -47,10 +53,12 @@ export default function SaudePacientes() {
           status: d.data().status,
         }));
 
+      // Filtrar
       if (filtroData) agendamentos = agendamentos.filter(a => a.data === filtroData);
       if (filtroProfissional) agendamentos = agendamentos.filter(a => a.profissionalId === filtroProfissional);
       if (filtroServico) agendamentos = agendamentos.filter(a => a.tipoId === filtroServico);
 
+      // Ordenar
       agendamentos.sort((a, b) => {
         if (a.data === b.data) return a.horario.localeCompare(b.horario);
         return a.data.localeCompare(b.data);
@@ -61,17 +69,17 @@ export default function SaudePacientes() {
         const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
         if (alunoSnap.exists()) {
           const aluno = alunoSnap.data();
-          const prof = profissionais.find(p => p.id === ag.profissionalId);
-          const serv = servicos.find(s => s.id === ag.tipoId);
+          const nomeProf = profissionaisMap.get(ag.profissionalId) || "Desconhecido";
+          const nomeServ = servicosMap.get(ag.tipoId) || ag.tipoId;
           lista.push({
             id: ag.id,
             alunoId: ag.alunoId,
             nome: aluno.nomeCompleto,
             matricula: aluno.matricula,
-            servicoNome: serv?.nome || ag.tipoId,
+            servicoNome: nomeServ,
             data: ag.data,
             horario: ag.horario,
-            profissionalNome: prof?.nome || "Desconhecido",
+            profissionalNome: nomeProf,
             tipoId: ag.tipoId,
           });
         }
@@ -85,8 +93,8 @@ export default function SaudePacientes() {
   };
 
   useEffect(() => {
-    carregarPacientes();
-  }, [filtroData, filtroProfissional, filtroServico]);
+    if (profissionaisMap.size > 0 || servicosMap.size > 0) carregarPacientes();
+  }, [filtroData, filtroProfissional, filtroServico, profissionaisMap, servicosMap]);
 
   const trocarProfissional = async (paciente: any) => {
     if (!confirm(`Remover ${paciente.nome} do horário e colocar na fila?`)) return;
@@ -110,8 +118,18 @@ export default function SaudePacientes() {
       <h2>Pacientes em atendimento</h2>
       <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
         <div><label>Data: </label><input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)} /></div>
-        <div><label>Profissional: </label><select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)}><option value="">Todos</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
-        <div><label>Serviço: </label><select value={filtroServico} onChange={e => setFiltroServico(e.target.value)}><option value="">Todos</option>{servicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
+        <div><label>Profissional: </label>
+          <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)}>
+            <option value="">Todos</option>
+            {Array.from(profissionaisMap.entries()).map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+          </select>
+        </div>
+        <div><label>Serviço: </label>
+          <select value={filtroServico} onChange={e => setFiltroServico(e.target.value)}>
+            <option value="">Todos</option>
+            {Array.from(servicosMap.entries()).map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+          </select>
+        </div>
         <button onClick={carregarPacientes}>Buscar</button>
       </div>
       {carregando && <p>Carregando...</p>}

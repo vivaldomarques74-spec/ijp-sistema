@@ -9,6 +9,9 @@ export default function SaudeAgenda() {
   const [form, setForm] = useState({ profissionalId: "", tipoId: "", data: "", horario: "" });
   const [recorrente, setRecorrente] = useState(false);
   const [tipoRecorrencia, setTipoRecorrencia] = useState<"livre" | "fixo">("livre");
+  const [filtroProfissional, setFiltroProfissional] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("");
+  const [filtroData, setFiltroData] = useState("");
 
   const carregarDados = async () => {
     const p = await getDocs(collection(db, "profissionais"));
@@ -16,7 +19,6 @@ export default function SaudeAgenda() {
     const a = await getDocs(collection(db, "agendamentos"));
     setProfissionais(p.docs.map(d => ({ id: d.id, ...d.data() })));
     setTipos(t.docs.map(d => ({ id: d.id, ...d.data() })));
-    // Mapeamento explícito para evitar erro de tipo
     const horariosData = a.docs.map(d => {
       const data = d.data();
       return {
@@ -110,6 +112,16 @@ export default function SaudeAgenda() {
     carregarDados();
   };
 
+  // Filtros
+  let horariosFiltrados = [...horarios];
+  if (filtroProfissional) horariosFiltrados = horariosFiltrados.filter(h => h.profissionalId === filtroProfissional);
+  if (filtroTipo) horariosFiltrados = horariosFiltrados.filter(h => h.tipoId === filtroTipo);
+  if (filtroData) horariosFiltrados = horariosFiltrados.filter(h => h.data === filtroData);
+  horariosFiltrados.sort((a, b) => {
+    if (a.data === b.data) return a.horario.localeCompare(b.horario);
+    return a.data.localeCompare(b.data);
+  });
+
   return (
     <div>
       <h2>Criar horário</h2>
@@ -138,39 +150,61 @@ export default function SaudeAgenda() {
       </div>
 
       <hr />
+      <h2>Filtros</h2>
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+        <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)}>
+          <option value="">Todos os profissionais</option>
+          {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        </select>
+        <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
+          <option value="">Todos os tipos</option>
+          {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+        </select>
+        <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)} />
+        <button onClick={() => { setFiltroProfissional(""); setFiltroTipo(""); setFiltroData(""); }}>Limpar filtros</button>
+      </div>
+
       <h2>Horários cadastrados</h2>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th>Data</th><th>Horário</th><th>Profissional</th><th>Tipo</th><th>Status</th><th>Paciente</th><th>Ações</th>
+              <th>Data</th>
+              <th>Horário</th>
+              <th>Profissional</th>
+              <th>Tipo</th>
+              <th>Status</th>
+              <th>Paciente</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
-            {horarios.map(h => {
+            {horariosFiltrados.map(h => {
               const prof = profissionais.find(p => p.id === h.profissionalId);
               const tipo = tipos.find(t => t.id === h.tipoId);
               const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
               return (
                 <tr key={h.id}>
-                  <td style={{ padding: 8 }}>{h.data}</td>
-                  <td style={{ padding: 8 }}>{h.horario}</td>
-                  <td style={{ padding: 8 }}>{prof?.nome || h.profissionalId}</td>
-                  <td style={{ padding: 8 }}>{tipo?.nome || h.tipoId}</td>
-                  <td style={{ padding: 8 }}>{h.status}</td>
-                  <td style={{ padding: 8 }}>
-                    {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
-                  </td>
-                  <td style={{ padding: 8 }}>
+                  <td>{h.data}</td>
+                  <td>{h.horario}</td>
+                  <td>{prof?.nome || h.profissionalId}</td>
+                  <td>{tipo?.nome || h.tipoId}</td>
+                  <td>{h.status}</td>
+                  <td>{h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}</td>
+                  <td>
                     {isLivre && (
-                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8 }}>Particular</button>
+                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)}>Particular</button>
                     )}
                     <button onClick={() => excluirHorario(h.id)}>Excluir</button>
                   </td>
                 </tr>
               );
             })}
-            {horarios.length === 0 && <tr><td colSpan={7}>Nenhum horário cadastrado.</td></tr>}
+            {horariosFiltrados.length === 0 && (
+              <tr>
+                <td colSpan={7}>Nenhum horário cadastrado.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
