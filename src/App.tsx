@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./layout/Layout";
 import PrivateRoute from "./auth/PrivateRoute";
+
 import Dashboard from "./pages/Dashboard";
 import Cursos from "./pages/Cursos";
 import CursoNovo from "./pages/CursoNovo";
@@ -10,6 +11,7 @@ import AlunosLista from "./pages/AlunosLista";
 import AlunosCadastrar from "./pages/AlunosCadastrar";
 import AlunosEditar from "./pages/AlunosEditar";
 import Login from "./pages/Login";
+
 import Saude from "./pages/Saude";
 import SaudeFila from "./pages/SaudeFila";
 import SaudeAgenda from "./pages/SaudeAgenda";
@@ -17,11 +19,14 @@ import SaudeProfissionais from "./pages/SaudeProfissionais";
 import SaudePacientes from "./pages/SaudePacientes";
 import SaudeConfiguracoes from "./pages/SaudeConfiguracoes";
 import SaudeFilaOrdemChegada from "./pages/SaudeFilaOrdemChegada";
+
 import LoginProfissional from "./pages/LoginProfissional";
 import ProfissionalLayout from "./layout/ProfissionalLayout";
 import ProfissionalAgenda from "./pages/ProfissionalAgenda";
 import ProfissionalProntuario from "./pages/ProfissionalProntuario";
+
 import MigracaoPsicologia from "./pages/MigracaoPsicologia";
+import Notificacoes from "./pages/Notificacoes";
 
 export default function App() {
   return (
@@ -58,6 +63,7 @@ export default function App() {
         </Route>
 
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
+        <Route path="/notificacoes" element={<Notificacoes />} />
       </Route>
     </Routes>
   );

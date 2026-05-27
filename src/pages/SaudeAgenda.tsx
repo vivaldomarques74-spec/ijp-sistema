@@ -45,7 +45,7 @@ export default function SaudeAgenda() {
           tipoPaciente: "social",
           recorrente: true,
           recorrenteTipo: tipoRecorrencia,
-          groupId: groupId,
+          groupId: tipoRecorrencia === "fixo" ? groupId : null,
           createdAt: new Date(),
         });
       }
@@ -93,62 +93,69 @@ export default function SaudeAgenda() {
   return (
     <div>
       <h2>Criar horário</h2>
-      <select value={form.profissionalId} onChange={e => setForm({ ...form, profissionalId: e.target.value })}>
-        <option value="">Profissional</option>
-        {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
-      </select>
-      <select value={form.tipoId} onChange={e => setForm({ ...form, tipoId: e.target.value })}>
-        <option value="">Tipo de atendimento</option>
-        {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-      </select>
-      <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })} />
-      <input type="time" value={form.horario} onChange={e => setForm({ ...form, horario: e.target.value })} />
-      <label>
-        <input type="checkbox" checked={recorrente} onChange={e => setRecorrente(e.target.checked)} />
-        Repetir semanalmente (10 semanas)
-      </label>
-      {recorrente && (
-        <select value={tipoRecorrencia} onChange={e => setTipoRecorrencia(e.target.value as any)}>
-          <option value="livre">Slot livre (pacientes diferentes)</option>
-          <option value="fixo">Vínculo fixo (mesmo paciente todas as semanas)</option>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+        <select value={form.profissionalId} onChange={e => setForm({ ...form, profissionalId: e.target.value })}>
+          <option value="">Profissional</option>
+          {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
         </select>
-      )}
-      <button onClick={adicionarHorario}>Adicionar horários</button>
+        <select value={form.tipoId} onChange={e => setForm({ ...form, tipoId: e.target.value })}>
+          <option value="">Tipo de atendimento</option>
+          {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+        </select>
+        <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })} />
+        <input type="time" value={form.horario} onChange={e => setForm({ ...form, horario: e.target.value })} />
+        <label>
+          <input type="checkbox" checked={recorrente} onChange={e => setRecorrente(e.target.checked)} />
+          Repetir semanalmente (10 semanas)
+        </label>
+        {recorrente && (
+          <select value={tipoRecorrencia} onChange={e => setTipoRecorrencia(e.target.value as any)}>
+            <option value="livre">Slot livre (pacientes diferentes)</option>
+            <option value="fixo">Vínculo fixo (mesmo paciente todas as semanas)</option>
+          </select>
+        )}
+        <button onClick={adicionarHorario}>Adicionar horários</button>
+      </div>
 
       <hr />
       <h2>Horários cadastrados</h2>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>Data</th><th>Horário</th><th>Profissional</th><th>Tipo</th><th>Status</th><th>Paciente</th><th>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {horarios.map(h => {
-            const prof = profissionais.find(p => p.id === h.profissionalId);
-            const tipo = tipos.find(t => t.id === h.tipoId);
-            const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
-            return (
-              <tr key={h.id}>
-                <td>{h.data}</td>
-                <td>{h.horario}</td>
-                <td>{prof?.nome || h.profissionalId}</td>
-                <td>{tipo?.nome || h.tipoId}</td>
-                <td>{h.status}</td>
-                <td>
-                  {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
-                </td>
-                <td>
-                  {isLivre && (
-                    <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8 }}>Particular</button>
-                  )}
-                  <button onClick={() => excluirHorario(h.id)}>Excluir</button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th>Data</th><th>Horário</th><th>Profissional</th><th>Tipo</th><th>Status</th><th>Paciente</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {horarios.map(h => {
+              const prof = profissionais.find(p => p.id === h.profissionalId);
+              const tipo = tipos.find(t => t.id === h.tipoId);
+              const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
+              return (
+                <tr key={h.id}>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.data}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.horario}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{prof?.nome || h.profissionalId}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{tipo?.nome || h.tipoId}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{h.status}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                    {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
+                  </td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                    {isLivre && (
+                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", marginRight: 8, color: "#fff" }}>Particular</button>
+                    )}
+                    <button onClick={() => excluirHorario(h.id)}>Excluir</button>
+                  </td>
+                </tr>
+              );
+            })}
+            {horarios.length === 0 && (
+              <tr><td colSpan={7}>Nenhum horário cadastrado.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

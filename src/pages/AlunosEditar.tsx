@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { doc, getDoc, updateDoc, collection, getDocs, arrayUnion, runTransaction } from "firebase/firestore";
-import { db } from "../services/firebase";
+import { doc, getDoc, updateDoc, collection, getDocs, arrayUnion, runTransaction, addDoc, query, where } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../services/firebase";
 
 export default function AlunosEditar() {
   const { id } = useParams();
@@ -10,9 +11,10 @@ export default function AlunosEditar() {
   const [dadosAluno, setDadosAluno] = useState<any>({
     nomeCompleto: "", cpf: "", endereco: "", email: "", telefone: "", nascimento: "", menor: false,
     responsavelNome: "", responsavelEmail: "", responsavelTelefone: "", responsavelCpf: "",
-    status: "ativo", observacoes: "", cursos: [],
+    status: "ativo", observacoes: "", cursos: [], fotoURL: "",
     servicosAtivos: [] as { tipoId: string; modalidade: string }[],
   });
+  const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
@@ -31,7 +33,7 @@ export default function AlunosEditar() {
           responsavelNome: data.responsavelNome || "", responsavelEmail: data.responsavelEmail || "",
           responsavelTelefone: data.responsavelTelefone || "", responsavelCpf: data.responsavelCpf || "",
           status: data.status || "ativo", observacoes: data.observacoes || "",
-          cursos: Array.isArray(data.cursos) ? data.cursos : [],
+          cursos: Array.isArray(data.cursos) ? data.cursos : [], fotoURL: data.fotoURL || "",
           servicosAtivos: data.servicosAtivos || [],
         });
       }
@@ -78,6 +80,12 @@ export default function AlunosEditar() {
     try {
       if (!id) return;
       const alunoRef = doc(db, "alunos", id);
+      let fotoURL = dadosAluno.fotoURL;
+      if (foto) {
+        const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
+        await uploadBytes(fotoRef, foto);
+        fotoURL = await getDownloadURL(fotoRef);
+      }
       let cursosAtualizados = [...dadosAluno.cursos];
       if (novoCursoId && novaTurmaId) {
         const jaExiste = cursosAtualizados.some((c: any) => c.cursoId === novoCursoId && c.turmaId === novaTurmaId);
@@ -95,11 +103,35 @@ export default function AlunosEditar() {
       }
       await updateDoc(alunoRef, {
         ...dadosAluno,
+        fotoURL,
         cursos: cursosAtualizados,
         servicosAtivos: dadosAluno.servicosAtivos,
         atualizadoEm: new Date(),
       });
-      alert("Aluno atualizado");
+
+      // *** Adicionar à fila de espera para novos serviços (se ainda não estiver) ***
+      if (dadosAluno.servicosAtivos && dadosAluno.servicosAtivos.length > 0) {
+        for (const servico of dadosAluno.servicosAtivos) {
+          const filaQuery = query(
+            collection(db, "filaEspera"),
+            where("alunoId", "==", id),
+            where("tipoId", "==", servico.tipoId),
+            where("status", "==", "aguardando")
+          );
+          const filaSnap = await getDocs(filaQuery);
+          if (filaSnap.empty) {
+            await addDoc(collection(db, "filaEspera"), {
+              alunoId: id,
+              tipoId: servico.tipoId,
+              dataSolicitacao: new Date(),
+              status: "aguardando",
+              modalidade: servico.modalidade || "presencial",
+            });
+          }
+        }
+      }
+
+      alert("Aluno atualizado com sucesso");
       navigate("/alunos");
     } catch (error: any) {
       alert(error.message);
@@ -134,6 +166,11 @@ export default function AlunosEditar() {
       </select>
 
       <textarea name="observacoes" value={dadosAluno.observacoes} onChange={handleChange} placeholder="Observações" />
+
+      <h3>Foto atual</h3>
+      {dadosAluno.fotoURL && <img src={dadosAluno.fotoURL} width="100" alt="Foto" />}
+      <input type="file" accept="image/*" onChange={e => setFoto(e.target.files?.[0] || null)} />
+      {foto && <img src={URL.createObjectURL(foto)} width="100" />}
 
       <h3>Adicionar em Novo Curso</h3>
       <select value={novoCursoId} onChange={e => setNovoCursoId(e.target.value)}>

@@ -19,7 +19,16 @@ export default function Layout() {
 
   return (
     <>
-      <header style={{ padding: "12px 24px", borderBottom: "1px solid #ddd", display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+      <header
+        style={{
+          padding: "12px 24px",
+          borderBottom: "1px solid #ddd",
+          display: "flex",
+          gap: 16,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
         <strong>IJP</strong>
         <Link to="/">Início</Link>
         <Link to="/alunos">Alunos</Link>
@@ -30,16 +39,18 @@ export default function Layout() {
         <Link to="/notificacoes" style={{ position: "relative", marginLeft: "auto" }}>
           🔔
           {notificacoesNaoLidas > 0 && (
-            <span style={{
-              position: "absolute",
-              top: -8,
-              right: -12,
-              backgroundColor: "red",
-              color: "white",
-              borderRadius: "50%",
-              padding: "2px 6px",
-              fontSize: 12,
-            }}>
+            <span
+              style={{
+                position: "absolute",
+                top: -8,
+                right: -12,
+                backgroundColor: "red",
+                color: "white",
+                borderRadius: "50%",
+                padding: "2px 6px",
+                fontSize: 12,
+              }}
+            >
               {notificacoesNaoLidas}
             </span>
           )}

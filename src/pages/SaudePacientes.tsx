@@ -1,122 +1,156 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, doc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, addDoc, query, where, deleteDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+
+// Interface para tipar os dados do agendamento
+interface AgendamentoData {
+  id: string;
+  profissionalId: string;
+  tipoId: string;
+  data: string;
+  horario: string;
+  status: string;
+  tipoPaciente: string;
+  alunoId?: string;
+  pacienteInfo?: { nome: string; telefone: string };
+}
 
 export default function SaudePacientes() {
   const [pacientes, setPacientes] = useState<any[]>([]);
-  const [filtro, setFiltro] = useState("");
-  const [tipos, setTipos] = useState<Record<string, string>>({});
+  const [filtroData, setFiltroData] = useState("");
+  const [filtroProfissional, setFiltroProfissional] = useState("");
+  const [filtroServico, setFiltroServico] = useState("");
+  const [profissionais, setProfissionais] = useState<any[]>([]);
+  const [servicos, setServicos] = useState<any[]>([]);
+  const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
-    const carregarTipos = async () => {
-      const snap = await getDocs(collection(db, "tiposAtendimento"));
-      const map: Record<string, string> = {};
-      snap.docs.forEach(d => { map[d.id] = d.data().nome; });
-      setTipos(map);
+    const carregarAux = async () => {
+      const profSnap = await getDocs(collection(db, "profissionais"));
+      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      const servSnap = await getDocs(collection(db, "tiposAtendimento"));
+      setServicos(servSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
     };
-    carregarTipos();
+    carregarAux();
   }, []);
 
   const carregarPacientes = async () => {
-    const agendamentosSnap = await getDocs(collection(db, "agendamentos"));
-    const ocupados = agendamentosSnap.docs.filter(doc => 
-      doc.data().status === "ocupado" && doc.data().alunoId
-    );
-    const lista = [];
-    for (const ag of ocupados) {
-      const agData = ag.data();
-      const alunoSnap = await getDocs(query(collection(db, "alunos"), where("__name__", "==", agData.alunoId)));
-      if (!alunoSnap.empty) {
-        const aluno = alunoSnap.docs[0].data();
-        lista.push({
-          id: ag.id,
-          alunoId: agData.alunoId,
-          nome: aluno.nomeCompleto,
-          matricula: aluno.matricula,
-          servicoId: agData.tipoId,
-          data: agData.data,
-          horario: agData.horario,
-          profissionalId: agData.profissionalId,
-        });
+    setCarregando(true);
+    try {
+      const snap = await getDocs(collection(db, "agendamentos"));
+      let agendamentos: AgendamentoData[] = snap.docs
+        .filter(d => {
+          const data = d.data();
+          return data.status === "ocupado" && data.alunoId;
+        })
+        .map(d => ({
+          id: d.id,
+          profissionalId: d.data().profissionalId,
+          tipoId: d.data().tipoId,
+          data: d.data().data,
+          horario: d.data().horario,
+          status: d.data().status,
+          tipoPaciente: d.data().tipoPaciente,
+          alunoId: d.data().alunoId,
+          pacienteInfo: d.data().pacienteInfo,
+        } as AgendamentoData));
+
+      if (filtroData) agendamentos = agendamentos.filter(a => a.data === filtroData);
+      if (filtroProfissional) agendamentos = agendamentos.filter(a => a.profissionalId === filtroProfissional);
+      if (filtroServico) agendamentos = agendamentos.filter(a => a.tipoId === filtroServico);
+
+      agendamentos.sort((a, b) => {
+        if (a.data === b.data) return a.horario.localeCompare(b.horario);
+        return a.data.localeCompare(b.data);
+      });
+
+      const lista = [];
+      for (const ag of agendamentos) {
+        if (!ag.alunoId) continue;
+        const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
+        if (alunoSnap.exists()) {
+          const aluno = alunoSnap.data();
+          const prof = profissionais.find(p => p.id === ag.profissionalId);
+          const serv = servicos.find(s => s.id === ag.tipoId);
+          lista.push({
+            id: ag.id,
+            alunoId: ag.alunoId,
+            nome: aluno.nomeCompleto,
+            matricula: aluno.matricula,
+            servicoNome: serv?.nome || ag.tipoId,
+            data: ag.data,
+            horario: ag.horario,
+            profissionalNome: prof?.nome || "Desconhecido",
+            tipoId: ag.tipoId,
+          });
+        }
       }
+      setPacientes(lista);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setCarregando(false);
     }
-    setPacientes(lista);
   };
 
   useEffect(() => {
     carregarPacientes();
-  }, []);
+  }, [filtroData, filtroProfissional, filtroServico]);
 
   const trocarProfissional = async (paciente: any) => {
-    if (!window.confirm(`Deseja remover ${paciente.nome} do horário atual e colocá-lo novamente na fila de espera?`)) return;
-    
-    // 1. Remover o agendamento atual
-    const agendamentoRef = doc(db, "agendamentos", paciente.id);
-    await deleteDoc(agendamentoRef);
-    
-    // 2. Adicionar na fila de espera se já não estiver
-    const filaQuery = query(
-      collection(db, "filaEspera"),
-      where("alunoId", "==", paciente.alunoId),
-      where("tipoId", "==", paciente.servicoId),
-      where("status", "==", "aguardando")
-    );
+    if (!confirm(`Remover ${paciente.nome} do horário e colocar na fila?`)) return;
+    await deleteDoc(doc(db, "agendamentos", paciente.id));
+    const filaQuery = query(collection(db, "filaEspera"), where("alunoId", "==", paciente.alunoId), where("status", "==", "aguardando"));
     const filaSnap = await getDocs(filaQuery);
     if (filaSnap.empty) {
       await addDoc(collection(db, "filaEspera"), {
         alunoId: paciente.alunoId,
-        tipoId: paciente.servicoId,
+        tipoId: paciente.tipoId,
         dataSolicitacao: new Date(),
         status: "aguardando",
-        modalidade: "presencial",
       });
     }
-    
-    alert(`${paciente.nome} foi removido e retornou à fila de espera.`);
+    alert("Paciente retornou à fila.");
     carregarPacientes();
   };
-
-  const pacientesFiltrados = pacientes.filter(p =>
-    p.nome?.toLowerCase().includes(filtro.toLowerCase()) ||
-    p.matricula?.toLowerCase().includes(filtro.toLowerCase())
-  );
 
   return (
     <div>
       <h2>Pacientes em atendimento</h2>
-      <input
-        placeholder="Buscar por nome ou matrícula"
-        value={filtro}
-        onChange={e => setFiltro(e.target.value)}
-        style={{ marginBottom: 20, padding: 8, width: "100%", maxWidth: 400 }}
-      />
-      {pacientesFiltrados.length === 0 && <p>Nenhum paciente vinculado a horário.</p>}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Nome</th>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Matrícula</th>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Serviço</th>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Data/Horário</th>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pacientesFiltrados.map(p => (
-            <tr key={p.id}>
-              <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.nome}</td>
-              <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.matricula}</td>
-              <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{tipos[p.servicoId] || p.servicoId}</td>
-              <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.data} {p.horario}</td>
-              <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                <button onClick={() => trocarProfissional(p)} style={{ background: "#ffc107", color: "#000" }}>
-                  Trocar profissional
-                </button>
-              </td>
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+        <div><label>Data: </label><input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)} /></div>
+        <div><label>Profissional: </label><select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)}><option value="">Todos</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
+        <div><label>Serviço: </label><select value={filtroServico} onChange={e => setFiltroServico(e.target.value)}><option value="">Todos</option>{servicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
+        <button onClick={carregarPacientes}>Buscar</button>
+      </div>
+      {carregando && <p>Carregando...</p>}
+      {!carregando && pacientes.length === 0 && <p>Nenhum paciente encontrado.</p>}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Matrícula</th>
+              <th>Serviço</th>
+              <th>Data/Horário</th>
+              <th>Profissional</th>
+              <th>Ações</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {pacientes.map(p => (
+              <tr key={p.id}>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.nome}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.matricula}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.servicoNome}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.data} {p.horario}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{p.profissionalNome}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}><button onClick={() => trocarProfissional(p)}>Trocar profissional</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
