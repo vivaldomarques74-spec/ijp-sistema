@@ -19,20 +19,33 @@ export default function Notificacoes() {
     const carregar = async () => {
       try {
         const snap = await getDocs(collection(db, "notificacoes"));
-        const lista = snap.docs.map(doc => ({
+        let lista = snap.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         })) as Notificacao[];
 
-        // Substituir possíveis IDs remanescentes pelo nome do paciente
-        for (const n of lista) {
-          if (n.alunoId && n.mensagem.includes(n.alunoId)) {
+        // Para cada notificação, tentar substituir o ID do paciente pelo nome
+        for (let i = 0; i < lista.length; i++) {
+          const n = lista[i];
+          if (n.alunoId) {
             const alunoSnap = await getDoc(doc(db, "alunos", n.alunoId));
             if (alunoSnap.exists()) {
-              n.mensagem = n.mensagem.replace(n.alunoId, alunoSnap.data().nomeCompleto);
+              const nome = alunoSnap.data().nomeCompleto;
+              // Substituir na mensagem qualquer ocorrência do ID pelo nome
+              lista[i].mensagem = lista[i].mensagem.replace(n.alunoId, nome);
+            }
+          }
+          // Fallback: se ainda houver um padrão de ID na mensagem (formato com 20 caracteres alfanuméricos), tentar extrair e buscar
+          const idMatch = lista[i].mensagem.match(/[A-Za-z0-9]{20}/);
+          if (idMatch && !lista[i].alunoId) {
+            const possivelId = idMatch[0];
+            const alunoSnap = await getDoc(doc(db, "alunos", possivelId));
+            if (alunoSnap.exists()) {
+              lista[i].mensagem = lista[i].mensagem.replace(possivelId, alunoSnap.data().nomeCompleto);
             }
           }
         }
+
         lista.sort((a, b) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0));
         setNotificacoes(lista);
       } catch (error) {
