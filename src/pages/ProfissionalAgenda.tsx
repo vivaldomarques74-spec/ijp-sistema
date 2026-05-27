@@ -177,11 +177,6 @@ export default function ProfissionalAgenda() {
     setAgenda(horarios);
   };
 
-  const formatarDataExibicao = (dataISO: string) => {
-    const partes = dataISO.split("-");
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
-  };
-
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
