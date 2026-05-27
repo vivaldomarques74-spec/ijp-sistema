@@ -17,21 +17,19 @@ interface Agendamento {
   groupId?: string;
 }
 
-// Função para obter data local no formato YYYY-MM-DD
-function getLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+// Obtém a data atual no formato YYYY-MM-DD baseado no fuso do dispositivo
+function getLocalDate(): string {
+  return new Date().toLocaleDateString('en-CA'); // 'en-CA' produz YYYY-MM-DD
 }
 
 export default function ProfissionalAgenda() {
   const { codigo } = useParams();
   const [profissional, setProfissional] = useState<any>(null);
   const [agenda, setAgenda] = useState<Agendamento[]>([]);
-  const [dataSelecionada, setDataSelecionada] = useState(getLocalDate(new Date()));
+  const [dataSelecionada, setDataSelecionada] = useState(getLocalDate());
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     const carregarProfissional = async () => {
@@ -41,49 +39,54 @@ export default function ProfissionalAgenda() {
         const docProf = snap.docs[0];
         setProfissional({ id: docProf.id, ...docProf.data() });
         setProfissionalId(docProf.id);
+      } else {
+        setErro("Profissional não encontrado.");
       }
     };
     carregarProfissional();
   }, [codigo]);
 
-  useEffect(() => {
+  const carregarAgenda = async () => {
     if (!profissionalId) return;
-    const carregarAgenda = async () => {
-      setCarregando(true);
-      try {
-        const snap = await getDocs(collection(db, "agendamentos"));
-        let horarios = snap.docs
-          .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
-          .map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              profissionalId: data.profissionalId,
-              tipoId: data.tipoId,
-              data: data.data,
-              horario: data.horario,
-              status: data.status,
-              tipoPaciente: data.tipoPaciente,
-              alunoId: data.alunoId,
-              pacienteInfo: data.pacienteInfo,
-              groupId: data.groupId,
-            } as Agendamento;
-          });
+    setCarregando(true);
+    setErro(null);
+    try {
+      const snap = await getDocs(collection(db, "agendamentos"));
+      let horarios = snap.docs
+        .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
+        .map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            profissionalId: data.profissionalId,
+            tipoId: data.tipoId,
+            data: data.data,
+            horario: data.horario,
+            status: data.status,
+            tipoPaciente: data.tipoPaciente,
+            alunoId: data.alunoId,
+            pacienteInfo: data.pacienteInfo,
+            groupId: data.groupId,
+          } as Agendamento;
+        });
 
-        for (const h of horarios) {
-          if (h.alunoId) {
-            const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
-            if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
-          }
+      for (const h of horarios) {
+        if (h.alunoId) {
+          const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
+          if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
         }
-        horarios.sort((a, b) => a.horario.localeCompare(b.horario));
-        setAgenda(horarios);
-      } catch (error) {
-        console.error("Erro ao carregar agenda:", error);
-      } finally {
-        setCarregando(false);
       }
-    };
+      horarios.sort((a, b) => a.horario.localeCompare(b.horario));
+      setAgenda(horarios);
+    } catch (error) {
+      console.error("Erro ao carregar agenda:", error);
+      setErro("Erro ao carregar dados. Tente novamente.");
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  useEffect(() => {
     carregarAgenda();
   }, [profissionalId, dataSelecionada]);
 
@@ -148,33 +151,8 @@ export default function ProfissionalAgenda() {
       }
     }
 
-    // Recarregar agenda
-    const snap = await getDocs(collection(db, "agendamentos"));
-    let horarios = snap.docs
-      .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
-      .map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          profissionalId: data.profissionalId,
-          tipoId: data.tipoId,
-          data: data.data,
-          horario: data.horario,
-          status: data.status,
-          tipoPaciente: data.tipoPaciente,
-          alunoId: data.alunoId,
-          pacienteInfo: data.pacienteInfo,
-          groupId: data.groupId,
-        } as Agendamento;
-      });
-    for (const h of horarios) {
-      if (h.alunoId) {
-        const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
-        if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
-      }
-    }
-    horarios.sort((a, b) => a.horario.localeCompare(b.horario));
-    setAgenda(horarios);
+    // Recarregar agenda após ação
+    await carregarAgenda();
   };
 
   return (
@@ -182,15 +160,19 @@ export default function ProfissionalAgenda() {
       <div style={{ marginBottom: 20 }}>
         <h2>Agenda do Profissional</h2>
         <p><strong>Código:</strong> {codigo} | <strong>Nome:</strong> {profissional?.nome || "Carregando..."}</p>
-        <label>Data: </label>
-        <input
-          type="date"
-          value={dataSelecionada}
-          onChange={e => setDataSelecionada(e.target.value)}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <label>Data: </label>
+          <input
+            type="date"
+            value={dataSelecionada}
+            onChange={e => setDataSelecionada(e.target.value)}
+          />
+          <button onClick={carregarAgenda} style={{ padding: "4px 8px" }}>Recarregar</button>
+        </div>
       </div>
       {carregando && <p>Carregando horários...</p>}
-      {!carregando && (
+      {erro && <p style={{ color: "red" }}>{erro}</p>}
+      {!carregando && !erro && (
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
             <thead>
@@ -230,7 +212,7 @@ export default function ProfissionalAgenda() {
               {agenda.length === 0 && (
                 <tr>
                   <td colSpan={3} style={{ padding: 8, textAlign: "center" }}>
-                    Nenhum horário para esta data.
+                    Nenhum horário para esta data. Verifique a data ou clique em "Recarregar".
                   </td>
                 </tr>
               )}
