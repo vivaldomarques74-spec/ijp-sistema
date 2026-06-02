@@ -4,6 +4,13 @@ import { collection, getDocs, query, orderBy, where, getDoc, doc } from "firebas
 import { db } from "../services/firebase";
 import { salvarAluno } from "../services/salvarAluno";
 
+type Senha = {
+  id: string;
+  numero: string;
+  tipo: string;
+  usado: boolean;
+};
+
 export default function AlunosCadastrar() {
   const navigate = useNavigate();
   const [dadosAluno, setDadosAluno] = useState({
@@ -22,11 +29,10 @@ export default function AlunosCadastrar() {
     turmaAtualId: "",
     servicosAtivos: [] as { tipoId: string; modalidade: string; senhaId?: string; senhaNumero?: string; prioridade?: boolean }[],
   });
-  const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
-  const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, any[]>>({});
+  const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, Senha[]>>({});
   const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
@@ -55,16 +61,22 @@ export default function AlunosCadastrar() {
     carregarTurmas();
   }, [dadosAluno.cursoAtualId]);
 
-  // Carregar senhas disponíveis para serviços do tipo fila que foram selecionados
+  // Carregar senhas disponíveis para serviços do tipo fila
   useEffect(() => {
     const carregarSenhas = async () => {
-      const novasSenhas: Record<string, any[]> = {};
+      const novasSenhas: Record<string, Senha[]> = {};
       for (const serv of dadosAluno.servicosAtivos) {
         const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
         if (tipo?.tipoAgendamento === "fila" && !senhasDisponiveis[serv.tipoId]) {
           const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
           const snap = await getDocs(q);
-          novasSenhas[serv.tipoId] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
+          lista.sort((a, b) => {
+            const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+            const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+            return numA - numB;
+          });
+          novasSenhas[serv.tipoId] = lista;
         }
       }
       setSenhasDisponiveis(prev => ({ ...prev, ...novasSenhas }));
@@ -95,7 +107,7 @@ export default function AlunosCadastrar() {
   const selecionarSenha = async (tipoId: string, senhaId: string) => {
     const senhaDoc = await getDoc(doc(db, "tiposAtendimento", tipoId, "senhas", senhaId));
     if (senhaDoc.exists()) {
-      const senhaData = senhaDoc.data();
+      const senhaData = senhaDoc.data() as Senha;
       setDadosAluno(prev => ({
         ...prev,
         servicosAtivos: prev.servicosAtivos.map(s =>
@@ -111,7 +123,7 @@ export default function AlunosCadastrar() {
     try {
       await salvarAluno({
         dadosAluno,
-        foto,
+        foto: null,
         onSucesso: (matricula) => {
           alert(`Aluno cadastrado! Matrícula: ${matricula}`);
           navigate("/alunos");
@@ -180,10 +192,12 @@ export default function AlunosCadastrar() {
                 >
                   <option value="">Selecione uma senha</option>
                   {senhasDisponiveis[t.id]?.map(s => (
-                    <option key={s.id} value={s.id}>{s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}
+                    </option>
                   ))}
                 </select>
-                {servico.senhaNumero && <span>Senha: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+                {servico.senhaNumero && <span>Senha selecionada: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
               </div>
             )}
             {servico && !isFila && (
@@ -207,11 +221,7 @@ export default function AlunosCadastrar() {
         );
       })}
 
-      <hr />
-      <h3>Foto</h3>
-      <input type="file" accept="image/*" onChange={e => setFoto(e.target.files?.[0] || null)} />
-      {foto && <img src={URL.createObjectURL(foto)} width="100" />}
-      <br /><br />
+      <br />
       <button onClick={salvar} disabled={carregando}>Salvar</button>
     </div>
   );

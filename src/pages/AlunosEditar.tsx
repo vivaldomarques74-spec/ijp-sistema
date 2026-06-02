@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc, updateDoc, collection, getDocs, arrayUnion, runTransaction, query, where } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../services/firebase";
+import { db } from "../services/firebase";
+
+type Senha = {
+  id: string;
+  numero: string;
+  tipo: string;
+  usado: boolean;
+};
 
 export default function AlunosEditar() {
   const { id } = useParams();
@@ -11,14 +17,13 @@ export default function AlunosEditar() {
   const [dadosAluno, setDadosAluno] = useState<any>({
     nomeCompleto: "", cpf: "", endereco: "", email: "", telefone: "", nascimento: "", menor: false,
     responsavelNome: "", responsavelEmail: "", responsavelTelefone: "", responsavelCpf: "",
-    status: "ativo", observacoes: "", cursos: [], fotoURL: "",
+    status: "ativo", observacoes: "", cursos: [],
     servicosAtivos: [] as { tipoId: string; modalidade: string; senhaId?: string; senhaNumero?: string; prioridade?: boolean }[],
   });
-  const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
-  const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, any[]>>({});
+  const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, Senha[]>>({});
   const [novoCursoId, setNovoCursoId] = useState("");
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
@@ -34,7 +39,7 @@ export default function AlunosEditar() {
           responsavelNome: data.responsavelNome || "", responsavelEmail: data.responsavelEmail || "",
           responsavelTelefone: data.responsavelTelefone || "", responsavelCpf: data.responsavelCpf || "",
           status: data.status || "ativo", observacoes: data.observacoes || "",
-          cursos: Array.isArray(data.cursos) ? data.cursos : [], fotoURL: data.fotoURL || "",
+          cursos: Array.isArray(data.cursos) ? data.cursos : [],
           servicosAtivos: data.servicosAtivos || [],
         });
       }
@@ -45,22 +50,29 @@ export default function AlunosEditar() {
     }
     async function carregarTipos() {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
-      setTiposAtendimento(snap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      setTiposAtendimento(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipoAgendamento: d.data().tipoAgendamento })));
     }
     carregarAluno();
     carregarCursos();
     carregarTipos();
   }, [id]);
 
+  // Carregar senhas disponíveis para serviços do tipo fila (apenas quando o serviço for marcado)
   useEffect(() => {
     const carregarSenhas = async () => {
-      const novasSenhas: Record<string, any[]> = {};
+      const novasSenhas: Record<string, Senha[]> = {};
       for (const serv of dadosAluno.servicosAtivos) {
         const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
         if (tipo?.tipoAgendamento === "fila" && !senhasDisponiveis[serv.tipoId]) {
           const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
           const snap = await getDocs(q);
-          novasSenhas[serv.tipoId] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
+          lista.sort((a, b) => {
+            const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+            const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+            return numA - numB;
+          });
+          novasSenhas[serv.tipoId] = lista;
         }
       }
       setSenhasDisponiveis(prev => ({ ...prev, ...novasSenhas }));
@@ -100,7 +112,7 @@ export default function AlunosEditar() {
   const selecionarSenha = async (tipoId: string, senhaId: string) => {
     const senhaDoc = await getDoc(doc(db, "tiposAtendimento", tipoId, "senhas", senhaId));
     if (senhaDoc.exists()) {
-      const senhaData = senhaDoc.data();
+      const senhaData = senhaDoc.data() as Senha;
       setDadosAluno((prev: any) => ({
         ...prev,
         servicosAtivos: prev.servicosAtivos.map((s: any) =>
@@ -114,12 +126,6 @@ export default function AlunosEditar() {
     try {
       if (!id) return;
       const alunoRef = doc(db, "alunos", id);
-      let fotoURL = dadosAluno.fotoURL;
-      if (foto) {
-        const fotoRef = ref(storage, `alunos/${id}/foto.jpg`);
-        await uploadBytes(fotoRef, foto);
-        fotoURL = await getDownloadURL(fotoRef);
-      }
       let cursosAtualizados = [...dadosAluno.cursos];
       if (novoCursoId && novaTurmaId) {
         const jaExiste = cursosAtualizados.some((c: any) => c.cursoId === novoCursoId && c.turmaId === novaTurmaId);
@@ -137,7 +143,6 @@ export default function AlunosEditar() {
       }
       await updateDoc(alunoRef, {
         ...dadosAluno,
-        fotoURL,
         cursos: cursosAtualizados,
         servicosAtivos: dadosAluno.servicosAtivos,
         atualizadoEm: new Date(),
@@ -178,11 +183,6 @@ export default function AlunosEditar() {
 
       <textarea name="observacoes" value={dadosAluno.observacoes} onChange={handleChange} placeholder="Observações" />
 
-      <h3>Foto atual</h3>
-      {dadosAluno.fotoURL && <img src={dadosAluno.fotoURL} width="100" alt="Foto" />}
-      <input type="file" accept="image/*" onChange={e => setFoto(e.target.files?.[0] || null)} />
-      {foto && <img src={URL.createObjectURL(foto)} width="100" />}
-
       <h3>Adicionar em Novo Curso</h3>
       <select value={novoCursoId} onChange={e => setNovoCursoId(e.target.value)}>
         <option value="">Curso</option>
@@ -198,7 +198,7 @@ export default function AlunosEditar() {
         const servico = dadosAluno.servicosAtivos.find((s: any) => s.tipoId === t.id);
         const isFila = t.tipoAgendamento === "fila";
         return (
-          <div key={t.id}>
+          <div key={t.id} style={{ marginBottom: 8 }}>
             <label>
               <input type="checkbox" checked={!!servico} onChange={() => toggleServico(t.id, t.tipoAgendamento)} />
               {t.nome}
@@ -212,10 +212,12 @@ export default function AlunosEditar() {
                 >
                   <option value="">Selecione uma senha</option>
                   {senhasDisponiveis[t.id]?.map(s => (
-                    <option key={s.id} value={s.id}>{s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}
+                    </option>
                   ))}
                 </select>
-                {servico.senhaNumero && <span>Senha: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+                {servico.senhaNumero && <span>Senha selecionada: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
               </div>
             )}
             {servico && !isFila && (
