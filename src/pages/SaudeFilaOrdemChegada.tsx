@@ -27,27 +27,43 @@ export default function SaudeFilaOrdemChegada() {
       where("status", "==", "aguardando")
     );
     const snap = await getDocs(q);
-    let lista = [];
+    const priorityList = [];
+    const normalList = [];
     for (const docFil of snap.docs) {
       const data = docFil.data();
       const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-      lista.push({
+      const paciente = {
         id: docFil.id,
         alunoId: data.alunoId,
         nome: alunoSnap.data()?.nomeCompleto,
         dataSolicitacao: data.dataSolicitacao.toDate(),
         prioridade: data.prioridade || false,
         senha: data.senhaNumero || "",
-      });
+      };
+      if (paciente.prioridade) priorityList.push(paciente);
+      else normalList.push(paciente);
     }
-    // Ordenar: prioridade primeiro, depois número da senha
-    lista.sort((a, b) => {
-      if (a.prioridade !== b.prioridade) return a.prioridade ? -1 : 1;
+    const sortBySenha = (a: any, b: any) => {
       const numA = parseInt(a.senha.replace(/\D/g, "") || "999999");
       const numB = parseInt(b.senha.replace(/\D/g, "") || "999999");
       return numA - numB;
-    });
-    setFila(lista);
+    };
+    priorityList.sort(sortBySenha);
+    normalList.sort(sortBySenha);
+
+    const intercalada = [];
+    let pIdx = 0, nIdx = 0;
+    while (pIdx < priorityList.length || nIdx < normalList.length) {
+      if (pIdx < priorityList.length) {
+        intercalada.push(priorityList[pIdx++]);
+      }
+      for (let i = 0; i < 2; i++) {
+        if (nIdx < normalList.length) {
+          intercalada.push(normalList[nIdx++]);
+        }
+      }
+    }
+    setFila(intercalada);
 
     const atSnap = await getDocs(query(
       collection(db, "filaEspera"),
@@ -140,13 +156,13 @@ export default function SaudeFilaOrdemChegada() {
               </tr>
             </thead>
             <tbody>
-              {fila.map((p) => (
+              {fila.map(p => (
                 <tr key={p.id}>
-                  <td>{p.senha || "-"}</td>
-                  <td>{p.prioridade ? "Prioritário" : "Normal"}</td>
-                  <td>{p.nome}</td>
-                  <td>{p.dataSolicitacao.toLocaleString()}</td>
-                  <td>
+                  <td style={{ padding: 8 }}>{p.senha || "-"}</td>
+                  <td style={{ padding: 8 }}>{p.prioridade ? "Prioritário" : "Normal"}</td>
+                  <td style={{ padding: 8 }}>{p.nome}</td>
+                  <td style={{ padding: 8 }}>{p.dataSolicitacao.toLocaleString()}</td>
+                  <td style={{ padding: 8 }}>
                     <button onClick={() => cancelarAtendimento(p.id, p.nome)}>Cancelar</button>
                   </td>
                 </tr>
@@ -157,7 +173,7 @@ export default function SaudeFilaOrdemChegada() {
                 </tr>
               )}
             </tbody>
-        </table>
+          </table>
         </div>
       )}
     </div>

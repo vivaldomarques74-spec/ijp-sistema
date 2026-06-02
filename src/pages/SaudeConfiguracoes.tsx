@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function SaudeConfiguracoes() {
@@ -7,7 +7,8 @@ export default function SaudeConfiguracoes() {
   const [novoTipo, setNovoTipo] = useState({ nome: "", tipoAgendamento: "agendado" });
   const [gerenciandoTipoId, setGerenciandoTipoId] = useState<string | null>(null);
   const [senhas, setSenhas] = useState<any[]>([]);
-  const [novaSenha, setNovaSenha] = useState({ numero: "", tipo: "normal" });
+  const [loteNormal, setLoteNormal] = useState(0);
+  const [lotePrioridade, setLotePrioridade] = useState(0);
 
   useEffect(() => {
     carregarTipos();
@@ -33,15 +34,46 @@ export default function SaudeConfiguracoes() {
     setGerenciandoTipoId(tipoId);
   };
 
-  const adicionarSenha = async () => {
-    if (!novaSenha.numero) return alert("Informe o número da senha");
-    await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId!, "senhas"), {
-      numero: novaSenha.numero,
-      tipo: novaSenha.tipo,
-      usado: false,
-    });
-    setNovaSenha({ numero: "", tipo: "normal" });
-    carregarSenhas(gerenciandoTipoId!);
+  const extrairNumero = (str: string): number => {
+    const match = str.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
+  };
+
+  const gerarSenhasEmLote = async () => {
+    if (loteNormal === 0 && lotePrioridade === 0) return alert("Informe ao menos uma quantidade");
+    if (!gerenciandoTipoId) return;
+
+    const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
+    const existentes = snap.docs.map(d => d.data().numero);
+    let maxNum = 0;
+    for (const num of existentes) {
+      const n = extrairNumero(num);
+      if (n > maxNum) maxNum = n;
+    }
+
+    for (let i = 1; i <= loteNormal; i++) {
+      const novoNumero = maxNum + i;
+      const senhaNumero = String(novoNumero).padStart(3, "0");
+      await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
+        numero: senhaNumero,
+        tipo: "normal",
+        usado: false,
+      });
+    }
+    maxNum += loteNormal;
+    for (let i = 1; i <= lotePrioridade; i++) {
+      const novoNumero = maxNum + i;
+      const senhaNumero = String(novoNumero).padStart(3, "0");
+      await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
+        numero: senhaNumero,
+        tipo: "prioridade",
+        usado: false,
+      });
+    }
+    alert(`${loteNormal} senhas normais e ${lotePrioridade} prioritárias geradas.`);
+    setLoteNormal(0);
+    setLotePrioridade(0);
+    carregarSenhas(gerenciandoTipoId);
   };
 
   const excluirSenha = async (senhaId: string) => {
@@ -85,27 +117,33 @@ export default function SaudeConfiguracoes() {
 
       {gerenciandoTipoId && (
         <div style={{ marginTop: 20, borderTop: "1px solid #ccc", paddingTop: 16 }}>
-          <h3>Senhas disponíveis</h3>
-          <div>
-            <input
-              placeholder="Número da senha (ex: 001, P01, 23)"
-              value={novaSenha.numero}
-              onChange={e => setNovaSenha({ ...novaSenha, numero: e.target.value })}
-            />
-            <select
-              value={novaSenha.tipo}
-              onChange={e => setNovaSenha({ ...novaSenha, tipo: e.target.value })}
-            >
-              <option value="normal">Normal</option>
-              <option value="prioridade">Prioridade</option>
-            </select>
-            <button onClick={adicionarSenha}>Adicionar senha</button>
-            <button onClick={() => setGerenciandoTipoId(null)} style={{ marginLeft: 8 }}>
-              Fechar
-            </button>
+          <h3>Gerenciar senhas</h3>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+            <div>
+              <label>Senhas normais: </label>
+              <input
+                type="number"
+                min="0"
+                value={loteNormal}
+                onChange={e => setLoteNormal(parseInt(e.target.value) || 0)}
+                style={{ width: 80 }}
+              />
+            </div>
+            <div>
+              <label>Senhas prioritárias: </label>
+              <input
+                type="number"
+                min="0"
+                value={lotePrioridade}
+                onChange={e => setLotePrioridade(parseInt(e.target.value) || 0)}
+                style={{ width: 80 }}
+              />
+            </div>
+            <button onClick={gerarSenhasEmLote}>Gerar lote</button>
+            <button onClick={() => setGerenciandoTipoId(null)}>Fechar</button>
           </div>
 
-          <table style={{ marginTop: 12, width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th>Número</th>
@@ -123,11 +161,11 @@ export default function SaudeConfiguracoes() {
                   <td>
                     {!s.usado && <button onClick={() => excluirSenha(s.id)}>Excluir</button>}
                   </td>
-                </tr>
+                <tr>
               ))}
               {senhas.length === 0 && (
                 <tr>
-                  <td colSpan={4}>Nenhuma senha cadastrada para este serviço. Adicione acima.</td>
+                  <td colSpan={4}>Nenhuma senha cadastrada. Use o lote acima.</td>
                 </tr>
               )}
             </tbody>
