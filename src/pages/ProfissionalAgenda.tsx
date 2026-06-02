@@ -17,8 +17,7 @@ interface Agendamento {
   groupId?: string;
 }
 
-// Retorna a data atual no formato YYYY-MM-DD sem conversão de fuso (local)
-function getTodayLocal(): string {
+function getLocalDate(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -30,50 +29,30 @@ export default function ProfissionalAgenda() {
   const { codigo } = useParams();
   const [profissional, setProfissional] = useState<any>(null);
   const [agenda, setAgenda] = useState<Agendamento[]>([]);
-  const [dataSelecionada, setDataSelecionada] = useState(getTodayLocal());
+  const [dataSelecionada, setDataSelecionada] = useState(getLocalDate());
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     const carregarProfissional = async () => {
-      try {
-        const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const docProf = snap.docs[0];
-          setProfissional({ id: docProf.id, ...docProf.data() });
-          setProfissionalId(docProf.id);
-        } else {
-          setErro("Profissional não encontrado.");
-        }
-      } catch (err: any) {
-        console.error("Erro ao carregar profissional:", err);
-        setErro(`Erro ao carregar profissional: ${err.message}`);
+      const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docProf = snap.docs[0];
+        setProfissional({ id: docProf.id, ...docProf.data() });
+        setProfissionalId(docProf.id);
       }
     };
-    if (codigo) carregarProfissional();
+    carregarProfissional();
   }, [codigo]);
 
   const carregarAgenda = async () => {
-    if (!profissionalId) {
-      setErro("Profissional não identificado. Aguarde o carregamento.");
-      return;
-    }
+    if (!profissionalId) return;
     setCarregando(true);
-    setErro(null);
     try {
-      console.log("Carregando agenda para profissional:", profissionalId, "data:", dataSelecionada);
       const snap = await getDocs(collection(db, "agendamentos"));
-      console.log("Total de agendamentos lidos:", snap.docs.length);
-      
       let horarios = snap.docs
-        .filter(d => {
-          const data = d.data();
-          const ok = data.profissionalId === profissionalId && data.data === dataSelecionada;
-          if (ok) console.log("Encontrado agendamento:", data);
-          return ok;
-        })
+        .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
         .map(d => {
           const data = d.data();
           return {
@@ -90,6 +69,7 @@ export default function ProfissionalAgenda() {
           } as Agendamento;
         });
 
+      // Buscar nomes dos alunos
       for (const h of horarios) {
         if (h.alunoId) {
           const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
@@ -98,22 +78,25 @@ export default function ProfissionalAgenda() {
       }
       horarios.sort((a, b) => a.horario.localeCompare(b.horario));
       setAgenda(horarios);
-      console.log("Agenda carregada com sucesso. Quantidade:", horarios.length);
-    } catch (err: any) {
-      console.error("Erro ao carregar agenda:", err);
-      setErro(`Erro ao carregar dados: ${err.message}. Tente novamente.`);
-      alert(`Erro: ${err.message}`); // Alerta para depuração
+    } catch (error) {
+      console.error("Erro ao carregar agenda:", error);
+      alert("Erro ao carregar agenda. Tente recarregar a página.");
     } finally {
       setCarregando(false);
     }
   };
 
   useEffect(() => {
-    if (profissionalId) carregarAgenda();
+    carregarAgenda();
   }, [profissionalId, dataSelecionada]);
 
   const registrarPresenca = async (ag: Agendamento, tipo: string) => {
-    if (ag.data !== dataSelecionada) return alert("Só é possível registrar presença no dia do atendimento.");
+    // Verificar se a data é a mesma da agenda (ou pode permitir registrar em dias passados? Vamos permitir, mas avisar)
+    if (ag.data !== dataSelecionada) {
+      if (!confirm(`A data do atendimento é ${ag.data}. Deseja registrar mesmo assim?`)) return;
+    }
+    if (!ag.alunoId) return alert("Este horário não tem paciente vinculado.");
+
     let novoStatus = "";
     if (tipo === "presente") novoStatus = "realizado";
     else if (tipo === "faltaJustificada") novoStatus = "faltaJustificada";
@@ -121,8 +104,10 @@ export default function ProfissionalAgenda() {
 
     try {
       await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
-
-      if (tipo === "faltaInjustificada" && ag.alunoId) {
+      alert(`Registrado como ${tipo === "presente" ? "Compareceu" : tipo === "faltaJustificada" ? "Falta justificada" : "Falta injustificada"}`);
+      
+      // Se falta injustificada, verificar faltas do paciente
+      if (tipo === "faltaInjustificada") {
         const faltasQuery = query(
           collection(db, "agendamentos"),
           where("alunoId", "==", ag.alunoId),
@@ -131,8 +116,9 @@ export default function ProfissionalAgenda() {
           where("status", "==", "faltaInjustificada")
         );
         const faltasSnap = await getDocs(faltasQuery);
-        const faltasCount = faltasSnap.size;
+        const faltasCount = faltasSnap.size; // inclui a atual
         if (faltasCount >= 2) {
+          // Remover paciente do horário (e do grupo fixo se houver)
           if (ag.groupId) {
             const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", ag.groupId));
             const groupSnap = await getDocs(groupQuery);
@@ -142,6 +128,7 @@ export default function ProfissionalAgenda() {
           } else {
             await updateDoc(doc(db, "agendamentos", ag.id), { alunoId: null, status: "livre" });
           }
+          // Adicionar à fila de espera
           const filaQuery = query(
             collection(db, "filaEspera"),
             where("alunoId", "==", ag.alunoId),
@@ -158,6 +145,7 @@ export default function ProfissionalAgenda() {
               modalidade: "presencial",
             });
           }
+          // Buscar nome do paciente para notificação
           let nomePaciente = "Paciente";
           if (ag.alunoId) {
             const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
@@ -173,10 +161,12 @@ export default function ProfissionalAgenda() {
           alert("Paciente removido do horário (2 faltas injustificadas) e voltou à fila. Notificação enviada.");
         }
       }
+      
+      // Recarregar agenda
       await carregarAgenda();
-    } catch (err: any) {
-      console.error("Erro ao registrar presença:", err);
-      alert("Erro ao registrar presença: " + err.message);
+    } catch (error: any) {
+      console.error("Erro ao registrar presença:", error);
+      alert(`Erro: ${error.message}`);
     }
   };
 
@@ -191,15 +181,15 @@ export default function ProfissionalAgenda() {
             type="date"
             value={dataSelecionada}
             onChange={e => setDataSelecionada(e.target.value)}
+            style={{ padding: 4 }}
           />
           <button onClick={carregarAgenda} style={{ padding: "4px 8px" }}>Recarregar</button>
         </div>
       </div>
       {carregando && <p>Carregando horários...</p>}
-      {erro && <p style={{ color: "red" }}>{erro}</p>}
-      {!carregando && !erro && (
+      {!carregando && (
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "500px" }}>
             <thead>
               <tr>
                 <th style={{ textAlign: "left", padding: 8 }}>Horário</th>
@@ -210,24 +200,22 @@ export default function ProfissionalAgenda() {
             <tbody>
               {agenda.map(ag => (
                 <tr key={ag.id}>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{ag.horario}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                    {ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}
-                  </td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 8 }}>{ag.horario}</td>
+                  <td style={{ padding: 8 }}>{ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}</td>
+                  <td style={{ padding: 8 }}>
                     {ag.alunoId && (ag.status === "agendado" || ag.status === "ocupado") && (
-                      <>
-                        <button onClick={() => registrarPresenca(ag, "presente")} style={{ marginRight: 4 }}>Compareceu</button>
-                        <button onClick={() => registrarPresenca(ag, "faltaJustificada")} style={{ marginRight: 4 }}>Falta justificada</button>
-                        <button onClick={() => registrarPresenca(ag, "faltaInjustificada")}>Falta injustificada</button>
-                      </>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        <button onClick={() => registrarPresenca(ag, "presente")} style={{ background: "#28a745", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>Compareceu</button>
+                        <button onClick={() => registrarPresenca(ag, "faltaJustificada")} style={{ background: "#ffc107", color: "#000", border: "none", padding: "6px 10px", borderRadius: 4 }}>Falta justificada</button>
+                        <button onClick={() => registrarPresenca(ag, "faltaInjustificada")} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>Falta injustificada</button>
+                      </div>
                     )}
                     {ag.status === "realizado" && "Atendido"}
                     {ag.status === "faltaJustificada" && "Falta justificada"}
                     {ag.status === "faltaInjustificada" && "Falta injustificada"}
                     {!ag.alunoId && "Livre"}
                     {ag.alunoId && (
-                      <button onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")} style={{ marginLeft: 8 }}>
+                      <button onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")} style={{ marginLeft: 8, background: "#0070f3", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>
                         Ficha
                       </button>
                     )}
@@ -237,13 +225,13 @@ export default function ProfissionalAgenda() {
               {agenda.length === 0 && (
                 <tr>
                   <td colSpan={3} style={{ padding: 8, textAlign: "center" }}>
-                    Nenhum horário para esta data. Verifique a data ou clique em "Recarregar".
+                    Nenhum horário para esta data. Clique em "Recarregar" se necessário.
                   </td>
                 </tr>
               )}
             </tbody>
         </table>
-        </div>
+      </div>
       )}
     </div>
   );
