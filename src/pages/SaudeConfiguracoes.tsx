@@ -28,49 +28,49 @@ export default function SaudeConfiguracoes() {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTipos(lista);
-      console.log("Tipos carregados:", lista);
     } catch (error) {
       console.error("Erro ao carregar tipos:", error);
     }
   };
 
   const salvarTipo = async () => {
-    if (!novoTipo.nome) return;
-    const id = novoTipo.nome.toLowerCase().replace(/\s/g, "");
+    if (!novoTipo.nome) return alert("Informe o nome do serviço");
+    const nomeNormalizado = novoTipo.nome.trim();
+    const existe = tipos.some(t => t.nome.toLowerCase() === nomeNormalizado.toLowerCase());
+    if (existe) return alert(`Já existe um tipo com o nome "${nomeNormalizado}".`);
     try {
-      await addDoc(collection(db, "tiposAtendimento"), { ...novoTipo, id });
-      alert("Tipo criado");
+      await addDoc(collection(db, "tiposAtendimento"), {
+        nome: nomeNormalizado,
+        tipoAgendamento: novoTipo.tipoAgendamento,
+        createdAt: new Date(),
+      });
+      alert("Tipo criado com sucesso");
       setNovoTipo({ nome: "", tipoAgendamento: "agendado" });
       await carregarTipos();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao criar tipo:", error);
-      alert("Erro ao criar tipo. Verifique as regras de segurança.");
+      alert(`Erro ao criar tipo: ${error.message}`);
     }
   };
 
   const excluirTipo = async (id: string, nome: string) => {
     if (!window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) return;
     try {
-      // 1. Excluir todas as senhas da subcoleção
       const senhasSnap = await getDocs(collection(db, "tiposAtendimento", id, "senhas"));
       for (const senhaDoc of senhasSnap.docs) {
         await deleteDoc(senhaDoc.ref);
-        console.log(`Senha ${senhaDoc.id} excluída.`);
       }
-      // 2. Excluir o tipo
       await deleteDoc(doc(db, "tiposAtendimento", id));
-      console.log(`Tipo ${id} excluído com sucesso.`);
-      alert("Tipo excluído com sucesso.");
-      // 3. Recarregar a lista imediatamente
+      setTipos(prev => prev.filter(t => t.id !== id));
       await carregarTipos();
-      // 4. Se o tipo excluído era o que estava sendo gerenciado, fechar painel
       if (gerenciandoTipoId === id) {
         setGerenciandoTipoId(null);
         setSenhas([]);
       }
-    } catch (error) {
+      alert("Tipo excluído com sucesso.");
+    } catch (error: any) {
       console.error("Erro ao excluir tipo:", error);
-      alert("Erro ao excluir tipo. Verifique as regras de segurança e se o documento existe.");
+      alert(`Erro ao excluir tipo: ${error.message}`);
     }
   };
 
@@ -248,33 +248,18 @@ export default function SaudeConfiguracoes() {
             <button onClick={() => setGerenciandoTipoId(null)}>Fechar</button>
           </div>
 
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th>Número</th>
-                <th>Tipo</th>
-                <th>Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {senhas.map(s => (
-                <tr key={s.id}>
-                  <td style={{ padding: 8 }}>{s.numero}</td>
-                  <td style={{ padding: 8 }}>{s.tipo === "prioridade" ? "Prioritário" : "Normal"}</td>
-                  <td style={{ padding: 8 }}>{s.usado ? "Usada" : "Disponível"}</td>
-                  <td style={{ padding: 8 }}>
-                    {!s.usado && <button onClick={() => excluirSenha(s.id)}>Excluir</button>}
-                  </td>
-                </tr>
-              ))}
-              {senhas.length === 0 && (
-                <tr>
-                  <td colSpan={4}>Nenhuma senha cadastrada. Use o lote acima.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {/* Listagem de senhas usando divs em vez de tabela para evitar erro JSX */}
+          <div style={{ marginTop: 16 }}>
+            {senhas.length === 0 && <p>Nenhuma senha cadastrada. Use o lote acima.</p>}
+            {senhas.map(s => (
+              <div key={s.id} style={{ display: "flex", gap: 12, marginBottom: 8, alignItems: "center" }}>
+                <span style={{ width: 80 }}>{s.numero}</span>
+                <span style={{ width: 100 }}>{s.tipo === "prioridade" ? "Prioritário" : "Normal"}</span>
+                <span style={{ width: 80 }}>{s.usado ? "Usada" : "Disponível"}</span>
+                {!s.usado && <button onClick={() => excluirSenha(s.id)}>Excluir</button>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
