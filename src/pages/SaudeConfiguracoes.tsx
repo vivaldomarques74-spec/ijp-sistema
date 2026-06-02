@@ -16,6 +16,8 @@ export default function SaudeConfiguracoes() {
   const [senhas, setSenhas] = useState<Senha[]>([]);
   const [loteNormal, setLoteNormal] = useState(0);
   const [lotePrioridade, setLotePrioridade] = useState(0);
+  const [inicioLote, setInicioLote] = useState("");
+  const [apagarExistentes, setApagarExistentes] = useState(false);
 
   useEffect(() => {
     carregarTipos();
@@ -29,18 +31,33 @@ export default function SaudeConfiguracoes() {
   const salvarTipo = async () => {
     if (!novoTipo.nome) return;
     const id = novoTipo.nome.toLowerCase().replace(/\s/g, "");
-    await addDoc(collection(db, "tiposAtendimento"), { ...novoTipo, id });
-    alert("Tipo criado");
-    setNovoTipo({ nome: "", tipoAgendamento: "agendado" });
-    carregarTipos();
+    try {
+      await addDoc(collection(db, "tiposAtendimento"), { ...novoTipo, id });
+      alert("Tipo criado");
+      setNovoTipo({ nome: "", tipoAgendamento: "agendado" });
+      carregarTipos();
+    } catch (error) {
+      console.error("Erro ao criar tipo:", error);
+      alert("Erro ao criar tipo. Verifique as regras de segurança.");
+    }
   };
 
   const excluirTipo = async (id: string, nome: string) => {
-    if (window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) {
+    if (!window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) return;
+    try {
+      // Excluir todas as senhas da subcoleção
+      const senhasSnap = await getDocs(collection(db, "tiposAtendimento", id, "senhas"));
+      for (const senhaDoc of senhasSnap.docs) {
+        await deleteDoc(senhaDoc.ref);
+      }
+      // Excluir o tipo
       await deleteDoc(doc(db, "tiposAtendimento", id));
-      alert("Tipo excluído.");
+      alert("Tipo excluído com sucesso.");
       carregarTipos();
       if (gerenciandoTipoId === id) setGerenciandoTipoId(null);
+    } catch (error) {
+      console.error("Erro ao excluir tipo:", error);
+      alert("Erro ao excluir tipo. Verifique as regras de segurança.");
     }
   };
 
@@ -65,18 +82,36 @@ export default function SaudeConfiguracoes() {
     if (loteNormal === 0 && lotePrioridade === 0) return alert("Informe ao menos uma quantidade");
     if (!gerenciandoTipoId) return;
 
-    const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
-    const existentes = snap.docs.map(d => d.data().numero as string);
-    let maxNum = 0;
-    for (const num of existentes) {
-      const n = extrairNumero(num);
-      if (n > maxNum) maxNum = n;
+    // Se apagarExistentes for true, deleta todas as senhas atuais
+    if (apagarExistentes) {
+      const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
+      for (const docSenha of snap.docs) {
+        await deleteDoc(docSenha.ref);
+      }
     }
 
-    let currentNum = maxNum;
-    for (let i = 1; i <= lotePrioridade; i++) {
-      const novoNumero = currentNum + i;
-      const senhaNumero = String(novoNumero).padStart(3, "0");
+    // Determinar o número inicial
+    let startNum = 0;
+    if (inicioLote && !isNaN(parseInt(inicioLote))) {
+      startNum = parseInt(inicioLote, 10);
+    } else if (!apagarExistentes) {
+      // Se não apagou e não informou início, calcular o maior número existente + 1
+      const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
+      let maxNum = 0;
+      for (const docSenha of snap.docs) {
+        const num = extrairNumero(docSenha.data().numero);
+        if (num > maxNum) maxNum = num;
+      }
+      startNum = maxNum + 1;
+    } else {
+      // Se apagou e não informou início, começar de 1
+      startNum = 1;
+    }
+
+    let currentNum = startNum;
+    // Gerar prioritárias
+    for (let i = 0; i < lotePrioridade; i++) {
+      const senhaNumero = String(currentNum + i).padStart(3, "0");
       await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
         numero: senhaNumero,
         tipo: "prioridade",
@@ -84,9 +119,9 @@ export default function SaudeConfiguracoes() {
       });
     }
     currentNum += lotePrioridade;
-    for (let i = 1; i <= loteNormal; i++) {
-      const novoNumero = currentNum + i;
-      const senhaNumero = String(novoNumero).padStart(3, "0");
+    // Gerar normais
+    for (let i = 0; i < loteNormal; i++) {
+      const senhaNumero = String(currentNum + i).padStart(3, "0");
       await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
         numero: senhaNumero,
         tipo: "normal",
@@ -94,9 +129,11 @@ export default function SaudeConfiguracoes() {
       });
     }
 
-    alert(`${lotePrioridade} senhas prioritárias e ${loteNormal} normais geradas.`);
+    alert(`${lotePrioridade} senhas prioritárias e ${loteNormal} normais geradas a partir de ${startNum}.`);
     setLoteNormal(0);
     setLotePrioridade(0);
+    setInicioLote("");
+    setApagarExistentes(false);
     carregarSenhas(gerenciandoTipoId);
   };
 
@@ -145,9 +182,9 @@ export default function SaudeConfiguracoes() {
       {gerenciandoTipoId && (
         <div style={{ marginTop: 20, borderTop: "1px solid #ccc", paddingTop: 16 }}>
           <h3>Gerenciar senhas</h3>
-          <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <div>
-              <label>Senhas prioritárias: </label>
+              <label>Prioritárias: </label>
               <input
                 type="number"
                 min="0"
@@ -157,7 +194,7 @@ export default function SaudeConfiguracoes() {
               />
             </div>
             <div>
-              <label>Senhas normais: </label>
+              <label>Normais: </label>
               <input
                 type="number"
                 min="0"
@@ -166,6 +203,25 @@ export default function SaudeConfiguracoes() {
                 style={{ width: 80 }}
               />
             </div>
+            <div>
+              <label>Iniciar em (opcional): </label>
+              <input
+                type="number"
+                min="1"
+                value={inicioLote}
+                onChange={e => setInicioLote(e.target.value)}
+                style={{ width: 100 }}
+                placeholder="ex: 1"
+              />
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={apagarExistentes}
+                onChange={e => setApagarExistentes(e.target.checked)}
+              />
+              Apagar senhas existentes antes de gerar
+            </label>
             <button onClick={gerarSenhasEmLote}>Gerar lote</button>
             <button onClick={() => setGerenciandoTipoId(null)}>Fechar</button>
           </div>
@@ -192,7 +248,7 @@ export default function SaudeConfiguracoes() {
               ))}
               {senhas.length === 0 && (
                 <tr>
-                  <td colSpan={4}>Nenhuma senha cadastrada. Use o lote acima.</td>
+                  <td colSpan={4}>Nenhuma senha cadastrada. Use o lote acima.ERC20</td>
                 </tr>
               )}
             </tbody>

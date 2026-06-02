@@ -24,9 +24,11 @@ export default function AlunosEditar() {
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
   const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, Senha[]>>({});
+  const [carregandoSenhas, setCarregandoSenhas] = useState<Record<string, boolean>>({});
   const [novoCursoId, setNovoCursoId] = useState("");
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
+  // Carregar dados do aluno, cursos e tipos
   useEffect(() => {
     async function carregarAluno() {
       if (!id) return;
@@ -57,27 +59,36 @@ export default function AlunosEditar() {
     carregarTipos();
   }, [id]);
 
-  // Carregar senhas disponíveis para serviços do tipo fila (apenas quando o serviço for marcado)
+  // Carregar senhas disponíveis para serviços do tipo fila (sempre que a lista de serviços ativos mudar)
   useEffect(() => {
-    const carregarSenhas = async () => {
+    const carregarSenhasParaServicos = async () => {
       const novasSenhas: Record<string, Senha[]> = {};
+      const novosCarregando: Record<string, boolean> = {};
       for (const serv of dadosAluno.servicosAtivos) {
         const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
-        if (tipo?.tipoAgendamento === "fila" && !senhasDisponiveis[serv.tipoId]) {
-          const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
-          const snap = await getDocs(q);
-          let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
-          lista.sort((a, b) => {
-            const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
-            const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
-            return numA - numB;
-          });
-          novasSenhas[serv.tipoId] = lista;
+        if (tipo?.tipoAgendamento === "fila") {
+          if (!senhasDisponiveis[serv.tipoId] && !carregandoSenhas[serv.tipoId]) {
+            novosCarregando[serv.tipoId] = true;
+            setCarregandoSenhas(prev => ({ ...prev, [serv.tipoId]: true }));
+            const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
+            const snap = await getDocs(q);
+            let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
+            lista.sort((a, b) => {
+              const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+              const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+              return numA - numB;
+            });
+            novasSenhas[serv.tipoId] = lista;
+            delete novosCarregando[serv.tipoId];
+          }
         }
       }
       setSenhasDisponiveis(prev => ({ ...prev, ...novasSenhas }));
+      setCarregandoSenhas(prev => ({ ...prev, ...novosCarregando }));
     };
-    carregarSenhas();
+    if (tiposAtendimento.length > 0) {
+      carregarSenhasParaServicos();
+    }
   }, [dadosAluno.servicosAtivos, tiposAtendimento]);
 
   useEffect(() => {
@@ -205,19 +216,25 @@ export default function AlunosEditar() {
             </label>
             {servico && isFila && (
               <div style={{ marginLeft: 12, marginTop: 4 }}>
-                <select
-                  value={servico.senhaId || ""}
-                  onChange={e => selecionarSenha(t.id, e.target.value)}
-                  style={{ width: 200, marginRight: 8 }}
-                >
-                  <option value="">Selecione uma senha</option>
-                  {senhasDisponiveis[t.id]?.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}
-                    </option>
-                  ))}
-                </select>
-                {servico.senhaNumero && <span>Senha selecionada: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+                {carregandoSenhas[t.id] ? (
+                  <span>Carregando senhas...</span>
+                ) : (
+                  <>
+                    <select
+                      value={servico.senhaId || ""}
+                      onChange={e => selecionarSenha(t.id, e.target.value)}
+                      style={{ width: 200, marginRight: 8 }}
+                    >
+                      <option value="">Selecione uma senha</option>
+                      {senhasDisponiveis[t.id]?.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}
+                        </option>
+                      ))}
+                    </select>
+                    {servico.senhaNumero && <span>Senha selecionada: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+                  </>
+                )}
               </div>
             )}
             {servico && !isFila && (
