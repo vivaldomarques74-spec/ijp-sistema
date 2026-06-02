@@ -2,11 +2,18 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
+type Senha = {
+  id: string;
+  numero: string;
+  tipo: string;
+  usado: boolean;
+};
+
 export default function SaudeConfiguracoes() {
   const [tipos, setTipos] = useState<any[]>([]);
   const [novoTipo, setNovoTipo] = useState({ nome: "", tipoAgendamento: "agendado" });
   const [gerenciandoTipoId, setGerenciandoTipoId] = useState<string | null>(null);
-  const [senhas, setSenhas] = useState<any[]>([]);
+  const [senhas, setSenhas] = useState<Senha[]>([]);
   const [loteNormal, setLoteNormal] = useState(0);
   const [lotePrioridade, setLotePrioridade] = useState(0);
 
@@ -39,7 +46,13 @@ export default function SaudeConfiguracoes() {
 
   const carregarSenhas = async (tipoId: string) => {
     const snap = await getDocs(collection(db, "tiposAtendimento", tipoId, "senhas"));
-    setSenhas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
+    lista.sort((a, b) => {
+      const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+      return numA - numB;
+    });
+    setSenhas(lista);
     setGerenciandoTipoId(tipoId);
   };
 
@@ -53,25 +66,16 @@ export default function SaudeConfiguracoes() {
     if (!gerenciandoTipoId) return;
 
     const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
-    const existentes = snap.docs.map(d => d.data().numero);
+    const existentes = snap.docs.map(d => d.data().numero as string);
     let maxNum = 0;
     for (const num of existentes) {
       const n = extrairNumero(num);
       if (n > maxNum) maxNum = n;
     }
 
-    for (let i = 1; i <= loteNormal; i++) {
-      const novoNumero = maxNum + i;
-      const senhaNumero = String(novoNumero).padStart(3, "0");
-      await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
-        numero: senhaNumero,
-        tipo: "normal",
-        usado: false,
-      });
-    }
-    maxNum += loteNormal;
+    let currentNum = maxNum;
     for (let i = 1; i <= lotePrioridade; i++) {
-      const novoNumero = maxNum + i;
+      const novoNumero = currentNum + i;
       const senhaNumero = String(novoNumero).padStart(3, "0");
       await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
         numero: senhaNumero,
@@ -79,7 +83,18 @@ export default function SaudeConfiguracoes() {
         usado: false,
       });
     }
-    alert(`${loteNormal} senhas normais e ${lotePrioridade} prioritárias geradas.`);
+    currentNum += lotePrioridade;
+    for (let i = 1; i <= loteNormal; i++) {
+      const novoNumero = currentNum + i;
+      const senhaNumero = String(novoNumero).padStart(3, "0");
+      await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
+        numero: senhaNumero,
+        tipo: "normal",
+        usado: false,
+      });
+    }
+
+    alert(`${lotePrioridade} senhas prioritárias e ${loteNormal} normais geradas.`);
     setLoteNormal(0);
     setLotePrioridade(0);
     carregarSenhas(gerenciandoTipoId);
@@ -132,22 +147,22 @@ export default function SaudeConfiguracoes() {
           <h3>Gerenciar senhas</h3>
           <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <div>
-              <label>Senhas normais: </label>
-              <input
-                type="number"
-                min="0"
-                value={loteNormal}
-                onChange={e => setLoteNormal(parseInt(e.target.value) || 0)}
-                style={{ width: 80 }}
-              />
-            </div>
-            <div>
               <label>Senhas prioritárias: </label>
               <input
                 type="number"
                 min="0"
                 value={lotePrioridade}
                 onChange={e => setLotePrioridade(parseInt(e.target.value) || 0)}
+                style={{ width: 80 }}
+              />
+            </div>
+            <div>
+              <label>Senhas normais: </label>
+              <input
+                type="number"
+                min="0"
+                value={loteNormal}
+                onChange={e => setLoteNormal(parseInt(e.target.value) || 0)}
                 style={{ width: 80 }}
               />
             </div>
