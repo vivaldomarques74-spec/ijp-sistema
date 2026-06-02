@@ -28,67 +28,46 @@ export default function AlunosEditar() {
   const [novoCursoId, setNovoCursoId] = useState("");
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
+  // Carregar dados iniciais
   useEffect(() => {
-    async function carregarCursos() {
-      const snap = await getDocs(collection(db, "cursos"));
-      setCursos(snap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
-    }
-    async function carregarTipos() {
-      const snap = await getDocs(collection(db, "tiposAtendimento"));
-      setTiposAtendimento(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipoAgendamento: d.data().tipoAgendamento })));
-    }
-    async function carregarAluno() {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "alunos", id));
-      if (snap.exists()) {
-        const data = snap.data();
-        let servicosFiltrados = data.servicosAtivos || [];
-        if (tiposAtendimento.length > 0) {
-          servicosFiltrados = servicosFiltrados.filter((serv: any) =>
-            tiposAtendimento.some(t => t.id === serv.tipoId)
-          );
+    async function carregarDados() {
+      // Carregar cursos
+      const cursosSnap = await getDocs(collection(db, "cursos"));
+      setCursos(cursosSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      // Carregar tipos de atendimento
+      const tiposSnap = await getDocs(collection(db, "tiposAtendimento"));
+      setTiposAtendimento(tiposSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // Carregar aluno
+      if (id) {
+        const alunoSnap = await getDoc(doc(db, "alunos", id));
+        if (alunoSnap.exists()) {
+          const data = alunoSnap.data();
+          setDadosAluno({
+            nomeCompleto: data.nomeCompleto || "", cpf: data.cpf || "", endereco: data.endereco || "",
+            email: data.email || "", telefone: data.telefone || "", nascimento: data.nascimento || "", menor: data.menor || false,
+            responsavelNome: data.responsavelNome || "", responsavelEmail: data.responsavelEmail || "",
+            responsavelTelefone: data.responsavelTelefone || "", responsavelCpf: data.responsavelCpf || "",
+            status: data.status || "ativo", observacoes: data.observacoes || "",
+            cursos: Array.isArray(data.cursos) ? data.cursos : [],
+            servicosAtivos: data.servicosAtivos || [],
+          });
         }
-        setDadosAluno({
-          nomeCompleto: data.nomeCompleto || "", cpf: data.cpf || "", endereco: data.endereco || "",
-          email: data.email || "", telefone: data.telefone || "", nascimento: data.nascimento || "", menor: data.menor || false,
-          responsavelNome: data.responsavelNome || "", responsavelEmail: data.responsavelEmail || "",
-          responsavelTelefone: data.responsavelTelefone || "", responsavelCpf: data.responsavelCpf || "",
-          status: data.status || "ativo", observacoes: data.observacoes || "",
-          cursos: Array.isArray(data.cursos) ? data.cursos : [],
-          servicosAtivos: servicosFiltrados,
-        });
       }
     }
-    carregarCursos();
-    carregarTipos();
-    carregarAluno();
+    carregarDados();
   }, [id]);
 
-  useEffect(() => {
-    async function revalidarServicos() {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "alunos", id));
-      if (snap.exists()) {
-        const data = snap.data();
-        let servicosFiltrados = data.servicosAtivos || [];
-        if (tiposAtendimento.length > 0) {
-          servicosFiltrados = servicosFiltrados.filter((serv: any) =>
-            tiposAtendimento.some(t => t.id === serv.tipoId)
-          );
-        }
-        setDadosAluno((prev: any) => ({ ...prev, servicosAtivos: servicosFiltrados }));
-      }
-    }
-    if (tiposAtendimento.length > 0) revalidarServicos();
-  }, [tiposAtendimento, id]);
-
+  // Carregar senhas sempre que a lista de serviços ativos mudar (ex: ao marcar/desmarcar)
   useEffect(() => {
     const carregarSenhasParaServicos = async () => {
+      const novosSenhas: Record<string, Senha[]> = {};
+      const novosCarregando: Record<string, boolean> = {};
       for (const serv of dadosAluno.servicosAtivos) {
         const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
         if (tipo?.tipoAgendamento === "fila") {
           if (!senhasDisponiveis[serv.tipoId] && !carregandoSenhas[serv.tipoId]) {
-            setCarregandoSenhas((prev: Record<string, boolean>) => ({ ...prev, [serv.tipoId]: true }));
+            novosCarregando[serv.tipoId] = true;
+            setCarregandoSenhas(prev => ({ ...prev, [serv.tipoId]: true }));
             try {
               const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
               const snap = await getDocs(q);
@@ -98,21 +77,23 @@ export default function AlunosEditar() {
                 const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
                 return numA - numB;
               });
-              setSenhasDisponiveis((prev: Record<string, Senha[]>) => ({ ...prev, [serv.tipoId]: lista }));
+              novosSenhas[serv.tipoId] = lista;
             } catch (error) {
               console.error(`Erro ao carregar senhas para ${serv.tipoId}:`, error);
             } finally {
-              setCarregandoSenhas((prev: Record<string, boolean>) => ({ ...prev, [serv.tipoId]: false }));
+              setCarregandoSenhas(prev => ({ ...prev, [serv.tipoId]: false }));
             }
           }
         }
       }
+      setSenhasDisponiveis(prev => ({ ...prev, ...novosSenhas }));
     };
     if (tiposAtendimento.length > 0) {
       carregarSenhasParaServicos();
     }
-  }, [dadosAluno.servicosAtivos, tiposAtendimento, senhasDisponiveis, carregandoSenhas]);
+  }, [dadosAluno.servicosAtivos, tiposAtendimento]);
 
+  // Carregar turmas quando curso selecionado
   useEffect(() => {
     if (!novoCursoId) { setTurmas([]); setNovaTurmaId(""); return; }
     async function carregarTurmas() {
@@ -232,13 +213,13 @@ export default function AlunosEditar() {
         const servico = dadosAluno.servicosAtivos.find((s: any) => s.tipoId === t.id);
         const isFila = t.tipoAgendamento === "fila";
         return (
-          <div key={t.id} style={{ marginBottom: 8 }}>
+          <div key={t.id} style={{ marginBottom: 12 }}>
             <label>
               <input type="checkbox" checked={!!servico} onChange={() => toggleServico(t.id, t.tipoAgendamento)} />
               {t.nome}
             </label>
             {servico && isFila && (
-              <div style={{ marginLeft: 12, marginTop: 4 }}>
+              <div style={{ marginLeft: 24, marginTop: 4 }}>
                 {carregandoSenhas[t.id] ? (
                   <span>Carregando senhas...</span>
                 ) : (
@@ -246,7 +227,7 @@ export default function AlunosEditar() {
                     <select
                       value={servico.senhaId || ""}
                       onChange={e => selecionarSenha(t.id, e.target.value)}
-                      style={{ width: 200, marginRight: 8 }}
+                      style={{ width: 220, marginRight: 8 }}
                     >
                       <option value="">Selecione uma senha</option>
                       {senhasDisponiveis[t.id]?.map(s => (
@@ -255,27 +236,33 @@ export default function AlunosEditar() {
                         </option>
                       ))}
                     </select>
-                    {servico.senhaNumero && <span>Senha selecionada: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+                    {servico.senhaNumero && (
+                      <span>
+                        Senha selecionada: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}
+                      </span>
+                    )}
                   </>
                 )}
               </div>
             )}
             {servico && !isFila && (
-              <select
-                value={servico.modalidade}
-                onChange={e => {
-                  setDadosAluno((prev: any) => ({
-                    ...prev,
-                    servicosAtivos: prev.servicosAtivos.map((s: any) =>
-                      s.tipoId === t.id ? { ...s, modalidade: e.target.value as "presencial" | "online" } : s
-                    ),
-                  }));
-                }}
-                style={{ marginLeft: 12 }}
-              >
-                <option value="presencial">Presencial</option>
-                <option value="online">Online</option>
-              </select>
+              <div style={{ marginLeft: 24, marginTop: 4 }}>
+                <select
+                  value={servico.modalidade}
+                  onChange={e => {
+                    setDadosAluno((prev: any) => ({
+                      ...prev,
+                      servicosAtivos: prev.servicosAtivos.map((s: any) =>
+                        s.tipoId === t.id ? { ...s, modalidade: e.target.value as "presencial" | "online" } : s
+                      ),
+                    }));
+                  }}
+                  style={{ width: 150 }}
+                >
+                  <option value="presencial">Presencial</option>
+                  <option value="online">Online</option>
+                </select>
+              </div>
             )}
           </div>
         );

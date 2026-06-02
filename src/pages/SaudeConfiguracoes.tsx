@@ -26,7 +26,8 @@ export default function SaudeConfiguracoes() {
   const carregarTipos = async () => {
     try {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
-      setTipos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTipos(lista);
     } catch (error) {
       console.error("Erro ao carregar tipos:", error);
     }
@@ -39,7 +40,7 @@ export default function SaudeConfiguracoes() {
       await addDoc(collection(db, "tiposAtendimento"), { ...novoTipo, id });
       alert("Tipo criado");
       setNovoTipo({ nome: "", tipoAgendamento: "agendado" });
-      carregarTipos();
+      await carregarTipos();
     } catch (error) {
       console.error("Erro ao criar tipo:", error);
       alert("Erro ao criar tipo. Verifique as regras de segurança.");
@@ -49,13 +50,19 @@ export default function SaudeConfiguracoes() {
   const excluirTipo = async (id: string, nome: string) => {
     if (!window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) return;
     try {
+      // Remove todas as senhas associadas
       const senhasSnap = await getDocs(collection(db, "tiposAtendimento", id, "senhas"));
       for (const senhaDoc of senhasSnap.docs) {
         await deleteDoc(senhaDoc.ref);
       }
+      // Remove o tipo
       await deleteDoc(doc(db, "tiposAtendimento", id));
       alert("Tipo excluído com sucesso.");
+      // Atualiza estado local imediatamente
+      setTipos(prev => prev.filter(t => t.id !== id));
+      // Recarrega do Firestore para garantir consistência
       await carregarTipos();
+      // Se o tipo excluído estava sendo gerenciado, fecha painel
       if (gerenciandoTipoId === id) {
         setGerenciandoTipoId(null);
         setSenhas([]);
@@ -67,15 +74,20 @@ export default function SaudeConfiguracoes() {
   };
 
   const carregarSenhas = async (tipoId: string) => {
-    const snap = await getDocs(collection(db, "tiposAtendimento", tipoId, "senhas"));
-    let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
-    lista.sort((a, b) => {
-      const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
-      const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
-      return numA - numB;
-    });
-    setSenhas(lista);
-    setGerenciandoTipoId(tipoId);
+    try {
+      const snap = await getDocs(collection(db, "tiposAtendimento", tipoId, "senhas"));
+      let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
+      lista.sort((a, b) => {
+        const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+        const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+        return numA - numB;
+      });
+      setSenhas(lista);
+      setGerenciandoTipoId(tipoId);
+    } catch (error) {
+      console.error("Erro ao carregar senhas:", error);
+      alert("Erro ao carregar senhas.");
+    }
   };
 
   const extrairNumero = (str: string): number => {
@@ -87,59 +99,69 @@ export default function SaudeConfiguracoes() {
     if (loteNormal === 0 && lotePrioridade === 0) return alert("Informe ao menos uma quantidade");
     if (!gerenciandoTipoId) return;
 
-    if (apagarExistentes) {
-      const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
-      for (const docSenha of snap.docs) {
-        await deleteDoc(docSenha.ref);
+    try {
+      if (apagarExistentes) {
+        const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
+        for (const docSenha of snap.docs) {
+          await deleteDoc(docSenha.ref);
+        }
       }
-    }
 
-    let startNum = 0;
-    if (inicioLote && !isNaN(parseInt(inicioLote))) {
-      startNum = parseInt(inicioLote, 10);
-    } else if (!apagarExistentes) {
-      const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
-      let maxNum = 0;
-      for (const docSenha of snap.docs) {
-        const num = extrairNumero(docSenha.data().numero);
-        if (num > maxNum) maxNum = num;
+      let startNum = 0;
+      if (inicioLote && !isNaN(parseInt(inicioLote))) {
+        startNum = parseInt(inicioLote, 10);
+      } else if (!apagarExistentes) {
+        const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
+        let maxNum = 0;
+        for (const docSenha of snap.docs) {
+          const num = extrairNumero(docSenha.data().numero);
+          if (num > maxNum) maxNum = num;
+        }
+        startNum = maxNum + 1;
+      } else {
+        startNum = 1;
       }
-      startNum = maxNum + 1;
-    } else {
-      startNum = 1;
-    }
 
-    let currentNum = startNum;
-    for (let i = 0; i < lotePrioridade; i++) {
-      const senhaNumero = String(currentNum + i).padStart(3, "0");
-      await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
-        numero: senhaNumero,
-        tipo: "prioridade",
-        usado: false,
-      });
-    }
-    currentNum += lotePrioridade;
-    for (let i = 0; i < loteNormal; i++) {
-      const senhaNumero = String(currentNum + i).padStart(3, "0");
-      await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
-        numero: senhaNumero,
-        tipo: "normal",
-        usado: false,
-      });
-    }
+      let currentNum = startNum;
+      for (let i = 0; i < lotePrioridade; i++) {
+        const senhaNumero = String(currentNum + i).padStart(3, "0");
+        await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
+          numero: senhaNumero,
+          tipo: "prioridade",
+          usado: false,
+        });
+      }
+      currentNum += lotePrioridade;
+      for (let i = 0; i < loteNormal; i++) {
+        const senhaNumero = String(currentNum + i).padStart(3, "0");
+        await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
+          numero: senhaNumero,
+          tipo: "normal",
+          usado: false,
+        });
+      }
 
-    alert(`${lotePrioridade} senhas prioritárias e ${loteNormal} normais geradas a partir de ${startNum}.`);
-    setLoteNormal(0);
-    setLotePrioridade(0);
-    setInicioLote("");
-    setApagarExistentes(false);
-    carregarSenhas(gerenciandoTipoId);
+      alert(`${lotePrioridade} senhas prioritárias e ${loteNormal} normais geradas a partir de ${startNum}.`);
+      setLoteNormal(0);
+      setLotePrioridade(0);
+      setInicioLote("");
+      setApagarExistentes(false);
+      await carregarSenhas(gerenciandoTipoId);
+    } catch (error) {
+      console.error("Erro ao gerar senhas:", error);
+      alert("Erro ao gerar senhas. Verifique as regras de segurança.");
+    }
   };
 
   const excluirSenha = async (senhaId: string) => {
     if (window.confirm("Excluir esta senha permanentemente?")) {
-      await deleteDoc(doc(db, "tiposAtendimento", gerenciandoTipoId!, "senhas", senhaId));
-      carregarSenhas(gerenciandoTipoId!);
+      try {
+        await deleteDoc(doc(db, "tiposAtendimento", gerenciandoTipoId!, "senhas", senhaId));
+        await carregarSenhas(gerenciandoTipoId!);
+      } catch (error) {
+        console.error("Erro ao excluir senha:", error);
+        alert("Erro ao excluir senha.");
+      }
     }
   };
 
@@ -247,7 +269,7 @@ export default function SaudeConfiguracoes() {
               ))}
               {senhas.length === 0 && (
                 <tr>
-                  <td colSpan={4}>Nenhuma senha cadastrada. Use o lote acima.ERC20</td>
+                  <td colSpan={4}>Nenhuma senha cadastrada. Use o lote acima.</td>
                 </tr>
               )}
             </tbody>
