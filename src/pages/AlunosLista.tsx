@@ -8,7 +8,6 @@ type Aluno = {
   nomeCompleto?: string;
   matricula?: string;
   nascimento?: any;
-  fotoURL?: string;
 };
 
 export default function AlunosLista() {
@@ -28,7 +27,6 @@ export default function AlunosLista() {
           nomeCompleto: data.nomeCompleto || "",
           matricula: data.matricula || "",
           nascimento: data.nascimento || null,
-          fotoURL: data.fotoURL || "",
         };
       });
       lista.sort((a, b) => (a.nomeCompleto || "").localeCompare(b.nomeCompleto || ""));
@@ -49,7 +47,7 @@ export default function AlunosLista() {
       try {
         await deleteDoc(doc(db, "alunos", id));
         alert("Aluno excluído com sucesso");
-        carregarAlunos(); // recarregar lista
+        carregarAlunos();
       } catch (error) {
         console.error("Erro ao excluir:", error);
         alert("Erro ao excluir aluno");
@@ -108,7 +106,6 @@ export default function AlunosLista() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Foto</th>
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Nome</th>
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Matrícula</th>
               <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Idade</th>
@@ -118,40 +115,6 @@ export default function AlunosLista() {
           <tbody>
             {alunosFiltrados.map((aluno) => (
               <tr key={aluno.id}>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                  {aluno.fotoURL ? (
-                    <img
-                      src={aluno.fotoURL}
-                      alt={aluno.nomeCompleto}
-                      style={{
-                        width: 50,
-                        height: 50,
-                        borderRadius: "50%",
-                        objectFit: "cover",
-                        backgroundColor: "#f0f0f0",
-                      }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "https://via.placeholder.com/50?text=Erro";
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 50,
-                        height: 50,
-                        borderRadius: "50%",
-                        backgroundColor: "#ccc",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 20,
-                        color: "#fff",
-                      }}
-                    >
-                      📷
-                    </div>
-                  )}
-                </td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{aluno.nomeCompleto || "-"}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{aluno.matricula || "-"}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{calcularIdade(aluno.nascimento)}</td>

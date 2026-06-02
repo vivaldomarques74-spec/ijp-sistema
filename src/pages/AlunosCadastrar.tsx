@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, getDoc, doc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { salvarAluno } from "../services/salvarAluno";
 
@@ -20,11 +20,13 @@ export default function AlunosCadastrar() {
     responsavelCpf: "",
     cursoAtualId: "",
     turmaAtualId: "",
-    servicosAtivos: [] as { tipoId: string; modalidade: "presencial" | "online" }[],
+    servicosAtivos: [] as { tipoId: string; modalidade: string; senhaId?: string; senhaNumero?: string; prioridade?: boolean }[],
   });
+  const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
+  const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, any[]>>({});
   const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
@@ -53,20 +55,54 @@ export default function AlunosCadastrar() {
     carregarTurmas();
   }, [dadosAluno.cursoAtualId]);
 
+  // Carregar senhas disponíveis para serviços do tipo fila que foram selecionados
+  useEffect(() => {
+    const carregarSenhas = async () => {
+      const novasSenhas: Record<string, any[]> = {};
+      for (const serv of dadosAluno.servicosAtivos) {
+        const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
+        if (tipo?.tipoAgendamento === "fila" && !senhasDisponiveis[serv.tipoId]) {
+          const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
+          const snap = await getDocs(q);
+          novasSenhas[serv.tipoId] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+      }
+      setSenhasDisponiveis(prev => ({ ...prev, ...novasSenhas }));
+    };
+    carregarSenhas();
+  }, [dadosAluno.servicosAtivos, tiposAtendimento]);
+
   const handleChange = (e: any) => {
     const { name, value, type, checked } = e.target;
     setDadosAluno(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   };
 
-  const toggleServico = (tipoId: string, modalidade: "presencial" | "online") => {
+  const toggleServico = (tipoId: string, tipoAgendamento?: string) => {
     setDadosAluno(prev => {
       const existe = prev.servicosAtivos.find(s => s.tipoId === tipoId);
       if (existe) {
         return { ...prev, servicosAtivos: prev.servicosAtivos.filter(s => s.tipoId !== tipoId) };
       } else {
-        return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade }] };
+        if (tipoAgendamento === "fila") {
+          return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade: "presencial" }] };
+        } else {
+          return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade: "presencial" }] };
+        }
       }
     });
+  };
+
+  const selecionarSenha = async (tipoId: string, senhaId: string) => {
+    const senhaDoc = await getDoc(doc(db, "tiposAtendimento", tipoId, "senhas", senhaId));
+    if (senhaDoc.exists()) {
+      const senhaData = senhaDoc.data();
+      setDadosAluno(prev => ({
+        ...prev,
+        servicosAtivos: prev.servicosAtivos.map(s =>
+          s.tipoId === tipoId ? { ...s, senhaId, senhaNumero: senhaData.numero, prioridade: senhaData.tipo === "prioridade" } : s
+        ),
+      }));
+    }
   };
 
   const salvar = async () => {
@@ -75,6 +111,7 @@ export default function AlunosCadastrar() {
     try {
       await salvarAluno({
         dadosAluno,
+        foto,
         onSucesso: (matricula) => {
           alert(`Aluno cadastrado! Matrícula: ${matricula}`);
           navigate("/alunos");
@@ -90,7 +127,6 @@ export default function AlunosCadastrar() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Cadastrar Aluno</h1>
-
       <input name="nomeCompleto" placeholder="Nome completo" value={dadosAluno.nomeCompleto} onChange={handleChange} />
       <input name="cpf" placeholder="CPF" onChange={handleChange} />
       <input name="endereco" placeholder="Endereço" onChange={handleChange} />
@@ -121,24 +157,46 @@ export default function AlunosCadastrar() {
       </select>
 
       <hr />
-      <h3>Serviços de Saúde (marque quantos quiser)</h3>
-      {tiposAtendimento.length === 0 && <p>Nenhum tipo de atendimento cadastrado. Crie no Firestore.</p>}
+      <h3>Serviços de Saúde</h3>
       {tiposAtendimento.map(t => {
         const servico = dadosAluno.servicosAtivos.find(s => s.tipoId === t.id);
+        const isFila = t.tipoAgendamento === "fila";
         return (
           <div key={t.id} style={{ marginBottom: 8 }}>
             <label>
               <input
                 type="checkbox"
                 checked={!!servico}
-                onChange={() => toggleServico(t.id, servico?.modalidade || "presencial")}
+                onChange={() => toggleServico(t.id, t.tipoAgendamento)}
               />
               {t.nome}
             </label>
-            {servico && (
+            {servico && isFila && (
+              <div style={{ marginLeft: 12, marginTop: 4 }}>
+                <select
+                  value={servico.senhaId || ""}
+                  onChange={e => selecionarSenha(t.id, e.target.value)}
+                  style={{ width: 200, marginRight: 8 }}
+                >
+                  <option value="">Selecione uma senha</option>
+                  {senhasDisponiveis[t.id]?.map(s => (
+                    <option key={s.id} value={s.id}>{s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}</option>
+                  ))}
+                </select>
+                {servico.senhaNumero && <span>Senha: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+              </div>
+            )}
+            {servico && !isFila && (
               <select
                 value={servico.modalidade}
-                onChange={(e) => toggleServico(t.id, e.target.value as "presencial" | "online")}
+                onChange={e => {
+                  setDadosAluno(prev => ({
+                    ...prev,
+                    servicosAtivos: prev.servicosAtivos.map(s =>
+                      s.tipoId === t.id ? { ...s, modalidade: e.target.value as "presencial" | "online" } : s
+                    ),
+                  }));
+                }}
                 style={{ marginLeft: 12 }}
               >
                 <option value="presencial">Presencial</option>
@@ -149,7 +207,11 @@ export default function AlunosCadastrar() {
         );
       })}
 
-      <br />
+      <hr />
+      <h3>Foto</h3>
+      <input type="file" accept="image/*" onChange={e => setFoto(e.target.files?.[0] || null)} />
+      {foto && <img src={URL.createObjectURL(foto)} width="100" />}
+      <br /><br />
       <button onClick={salvar} disabled={carregando}>Salvar</button>
     </div>
   );

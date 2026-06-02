@@ -33,7 +33,6 @@ export default function SaudeFila() {
     carregarProfissionais();
   }, []);
 
-  // Carregar fila quando tipo for selecionado
   useEffect(() => {
     if (!tipoId) return;
     const carregarFila = async () => {
@@ -51,8 +50,13 @@ export default function SaudeFila() {
           });
         }
       }
+      // Ordenar por número de matrícula
+      lista.sort((a, b) => {
+        const numA = parseInt(a.matricula.replace("IJP-", ""));
+        const numB = parseInt(b.matricula.replace("IJP-", ""));
+        return numA - numB;
+      });
       setFila(lista);
-      // Inicializar seleções vazias para cada paciente
       const novasSelecoes: Record<string, any> = {};
       for (const p of lista) {
         novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
@@ -62,7 +66,6 @@ export default function SaudeFila() {
     carregarFila();
   }, [tipoId]);
 
-  // Carregar horários disponíveis para cada profissional quando a lista de profissionais mudar
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
@@ -85,11 +88,9 @@ export default function SaudeFila() {
           groupId: d.data().groupId,
         } as Agendamento));
 
-      // Agrupar por profissional
       const porProfissional: Record<string, Agendamento[]> = {};
       for (const prof of profissionais) {
         const horariosDoProf = todos.filter(h => h.profissionalId === prof.id);
-        // Separar fixos e avulsos, agrupar fixos por groupId (pegar o mais próximo)
         const fixos = horariosDoProf.filter(h => h.groupId);
         const avulsos = horariosDoProf.filter(h => !h.groupId);
         const gruposFixos = new Map<string, Agendamento>();
@@ -132,7 +133,6 @@ export default function SaudeFila() {
       alert("Paciente vinculado ao horário.");
     }
 
-    // Remover da fila
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
 
@@ -151,11 +151,15 @@ export default function SaudeFila() {
         });
       }
     }
+    lista.sort((a, b) => {
+      const numA = parseInt(a.matricula.replace("IJP-", ""));
+      const numB = parseInt(b.matricula.replace("IJP-", ""));
+      return numA - numB;
+    });
     setFila(lista);
-    // Limpar seleções
     const novasSelecoes: Record<string, any> = {};
     for (const p of lista) {
-      novasSelecoes[p.alunoId] = { profesionalId: "", horarioId: "" };
+      novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
     }
     setSelecoes(novasSelecoes);
   };
@@ -229,8 +233,14 @@ export default function SaudeFila() {
                     </td>
                   </tr>
                 ))}
-                {fila.length === 0 && <tr><td colSpan={5}>Nenhum paciente na fila.</td></tr>}
               </tbody>
+              {fila.length === 0 && (
+                <tbody>
+                  <tr>
+                    <td colSpan={5}>Nenhum paciente na fila.</td>
+                  </tr>
+                </tbody>
+              )}
             </table>
           </div>
         </div>

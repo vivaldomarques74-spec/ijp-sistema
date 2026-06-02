@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { doc, getDoc, updateDoc, collection, getDocs, arrayUnion, runTransaction, addDoc, query, where } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, getDocs, arrayUnion, runTransaction, query, where } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../services/firebase";
 
@@ -12,12 +12,13 @@ export default function AlunosEditar() {
     nomeCompleto: "", cpf: "", endereco: "", email: "", telefone: "", nascimento: "", menor: false,
     responsavelNome: "", responsavelEmail: "", responsavelTelefone: "", responsavelCpf: "",
     status: "ativo", observacoes: "", cursos: [], fotoURL: "",
-    servicosAtivos: [] as { tipoId: string; modalidade: string }[],
+    servicosAtivos: [] as { tipoId: string; modalidade: string; senhaId?: string; senhaNumero?: string; prioridade?: boolean }[],
   });
   const [foto, setFoto] = useState<File | null>(null);
   const [cursos, setCursos] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
+  const [senhasDisponiveis, setSenhasDisponiveis] = useState<Record<string, any[]>>({});
   const [novoCursoId, setNovoCursoId] = useState("");
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
@@ -52,6 +53,22 @@ export default function AlunosEditar() {
   }, [id]);
 
   useEffect(() => {
+    const carregarSenhas = async () => {
+      const novasSenhas: Record<string, any[]> = {};
+      for (const serv of dadosAluno.servicosAtivos) {
+        const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
+        if (tipo?.tipoAgendamento === "fila" && !senhasDisponiveis[serv.tipoId]) {
+          const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
+          const snap = await getDocs(q);
+          novasSenhas[serv.tipoId] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+      }
+      setSenhasDisponiveis(prev => ({ ...prev, ...novasSenhas }));
+    };
+    carregarSenhas();
+  }, [dadosAluno.servicosAtivos, tiposAtendimento]);
+
+  useEffect(() => {
     if (!novoCursoId) { setTurmas([]); setNovaTurmaId(""); return; }
     async function carregarTurmas() {
       const snap = await getDocs(collection(db, "cursos", novoCursoId, "turmas"));
@@ -65,15 +82,32 @@ export default function AlunosEditar() {
     setDadosAluno((prev: any) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   };
 
-  const toggleServico = (tipoId: string, modalidade: string) => {
+  const toggleServico = (tipoId: string, tipoAgendamento?: string) => {
     setDadosAluno((prev: any) => {
       const existe = prev.servicosAtivos.find((s: any) => s.tipoId === tipoId);
       if (existe) {
         return { ...prev, servicosAtivos: prev.servicosAtivos.filter((s: any) => s.tipoId !== tipoId) };
       } else {
-        return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade }] };
+        if (tipoAgendamento === "fila") {
+          return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade: "presencial" }] };
+        } else {
+          return { ...prev, servicosAtivos: [...prev.servicosAtivos, { tipoId, modalidade: "presencial" }] };
+        }
       }
     });
+  };
+
+  const selecionarSenha = async (tipoId: string, senhaId: string) => {
+    const senhaDoc = await getDoc(doc(db, "tiposAtendimento", tipoId, "senhas", senhaId));
+    if (senhaDoc.exists()) {
+      const senhaData = senhaDoc.data();
+      setDadosAluno((prev: any) => ({
+        ...prev,
+        servicosAtivos: prev.servicosAtivos.map((s: any) =>
+          s.tipoId === tipoId ? { ...s, senhaId, senhaNumero: senhaData.numero, prioridade: senhaData.tipo === "prioridade" } : s
+        ),
+      }));
+    }
   };
 
   const salvar = async () => {
@@ -108,29 +142,6 @@ export default function AlunosEditar() {
         servicosAtivos: dadosAluno.servicosAtivos,
         atualizadoEm: new Date(),
       });
-
-      // *** Adicionar à fila de espera para novos serviços (se ainda não estiver) ***
-      if (dadosAluno.servicosAtivos && dadosAluno.servicosAtivos.length > 0) {
-        for (const servico of dadosAluno.servicosAtivos) {
-          const filaQuery = query(
-            collection(db, "filaEspera"),
-            where("alunoId", "==", id),
-            where("tipoId", "==", servico.tipoId),
-            where("status", "==", "aguardando")
-          );
-          const filaSnap = await getDocs(filaQuery);
-          if (filaSnap.empty) {
-            await addDoc(collection(db, "filaEspera"), {
-              alunoId: id,
-              tipoId: servico.tipoId,
-              dataSolicitacao: new Date(),
-              status: "aguardando",
-              modalidade: servico.modalidade || "presencial",
-            });
-          }
-        }
-      }
-
       alert("Aluno atualizado com sucesso");
       navigate("/alunos");
     } catch (error: any) {
@@ -185,14 +196,41 @@ export default function AlunosEditar() {
       <h3>Serviços de Saúde ativos</h3>
       {tiposAtendimento.map(t => {
         const servico = dadosAluno.servicosAtivos.find((s: any) => s.tipoId === t.id);
+        const isFila = t.tipoAgendamento === "fila";
         return (
           <div key={t.id}>
             <label>
-              <input type="checkbox" checked={!!servico} onChange={() => toggleServico(t.id, servico?.modalidade || "presencial")} />
+              <input type="checkbox" checked={!!servico} onChange={() => toggleServico(t.id, t.tipoAgendamento)} />
               {t.nome}
             </label>
-            {servico && (
-              <select value={servico.modalidade} onChange={(e) => toggleServico(t.id, e.target.value)}>
+            {servico && isFila && (
+              <div style={{ marginLeft: 12, marginTop: 4 }}>
+                <select
+                  value={servico.senhaId || ""}
+                  onChange={e => selecionarSenha(t.id, e.target.value)}
+                  style={{ width: 200, marginRight: 8 }}
+                >
+                  <option value="">Selecione uma senha</option>
+                  {senhasDisponiveis[t.id]?.map(s => (
+                    <option key={s.id} value={s.id}>{s.numero} - {s.tipo === "prioridade" ? "Prioritário" : "Normal"}</option>
+                  ))}
+                </select>
+                {servico.senhaNumero && <span>Senha: {servico.senhaNumero} {servico.prioridade && "(Prioritário)"}</span>}
+              </div>
+            )}
+            {servico && !isFila && (
+              <select
+                value={servico.modalidade}
+                onChange={e => {
+                  setDadosAluno((prev: any) => ({
+                    ...prev,
+                    servicosAtivos: prev.servicosAtivos.map((s: any) =>
+                      s.tipoId === t.id ? { ...s, modalidade: e.target.value as "presencial" | "online" } : s
+                    ),
+                  }));
+                }}
+                style={{ marginLeft: 12 }}
+              >
                 <option value="presencial">Presencial</option>
                 <option value="online">Online</option>
               </select>

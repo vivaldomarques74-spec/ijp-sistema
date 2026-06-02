@@ -75,12 +75,19 @@ export async function salvarAluno({
       );
       const filaSnap = await getDocs(filaQuery);
       if (filaSnap.empty) {
+        // Se for serviço do tipo fila e tiver senha, marca a senha como usada
+        if (servico.senhaId && servico.tipoId) {
+          const senhaRef = doc(db, "tiposAtendimento", servico.tipoId, "senhas", servico.senhaId);
+          await updateDoc(senhaRef, { usado: true, alunoId: alunoRef.id, dataUso: new Date() });
+        }
         await addDoc(collection(db, "filaEspera"), {
           alunoId: alunoRef.id,
           tipoId: servico.tipoId,
           dataSolicitacao: new Date(),
           status: "aguardando",
           modalidade: servico.modalidade || "presencial",
+          prioridade: servico.prioridade || false,
+          senhaNumero: servico.senhaNumero || "",
         });
       }
     }

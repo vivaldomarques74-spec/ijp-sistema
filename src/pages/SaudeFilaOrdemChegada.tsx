@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy, updateDoc, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc, getDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function SaudeFilaOrdemChegada() {
@@ -24,20 +24,29 @@ export default function SaudeFilaOrdemChegada() {
     const q = query(
       collection(db, "filaEspera"),
       where("tipoId", "==", tipoId),
-      where("status", "==", "aguardando"),
-      orderBy("dataSolicitacao", "asc")
+      where("status", "==", "aguardando")
     );
     const snap = await getDocs(q);
-    const lista = [];
+    let lista = [];
     for (const docFil of snap.docs) {
-      const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+      const data = docFil.data();
+      const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
       lista.push({
         id: docFil.id,
-        alunoId: docFil.data().alunoId,
+        alunoId: data.alunoId,
         nome: alunoSnap.data()?.nomeCompleto,
-        dataSolicitacao: docFil.data().dataSolicitacao.toDate().toLocaleString(),
+        dataSolicitacao: data.dataSolicitacao.toDate(),
+        prioridade: data.prioridade || false,
+        senha: data.senhaNumero || "",
       });
     }
+    // Ordenar: prioridade primeiro, depois número da senha
+    lista.sort((a, b) => {
+      if (a.prioridade !== b.prioridade) return a.prioridade ? -1 : 1;
+      const numA = parseInt(a.senha.replace(/\D/g, "") || "999999");
+      const numB = parseInt(b.senha.replace(/\D/g, "") || "999999");
+      return numA - numB;
+    });
     setFila(lista);
 
     const atSnap = await getDocs(query(
@@ -123,23 +132,32 @@ export default function SaudeFilaOrdemChegada() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th>Posição</th><th>Nome</th><th>Entrada</th><th>Ações</th>
+                <th>Senha</th>
+                <th>Tipo</th>
+                <th>Nome</th>
+                <th>Entrada</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {fila.map((p, idx) => (
+              {fila.map((p) => (
                 <tr key={p.id}>
-                  <td>{idx + 1}º</td>
+                  <td>{p.senha || "-"}</td>
+                  <td>{p.prioridade ? "Prioritário" : "Normal"}</td>
                   <td>{p.nome}</td>
-                  <td>{p.dataSolicitacao}</td>
+                  <td>{p.dataSolicitacao.toLocaleString()}</td>
                   <td>
                     <button onClick={() => cancelarAtendimento(p.id, p.nome)}>Cancelar</button>
                   </td>
                 </tr>
               ))}
-              {fila.length === 0 && <tr><td colSpan={4}>Fila vazia</td></tr>}
+              {fila.length === 0 && (
+                <tr>
+                  <td colSpan={5}>Fila vazia</td>
+                </tr>
+              )}
             </tbody>
-          </table>
+        </table>
         </div>
       )}
     </div>
