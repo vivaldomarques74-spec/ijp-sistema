@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, doc, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function SaudeConfiguracoes() {
@@ -26,6 +26,15 @@ export default function SaudeConfiguracoes() {
     alert("Tipo criado");
     setNovoTipo({ nome: "", tipoAgendamento: "agendado" });
     carregarTipos();
+  };
+
+  const excluirTipo = async (id: string, nome: string) => {
+    if (window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) {
+      await deleteDoc(doc(db, "tiposAtendimento", id));
+      alert("Tipo excluído.");
+      carregarTipos();
+      if (gerenciandoTipoId === id) setGerenciandoTipoId(null);
+    }
   };
 
   const carregarSenhas = async (tipoId: string) => {
@@ -111,6 +120,9 @@ export default function SaudeConfiguracoes() {
                 Gerenciar senhas
               </button>
             )}
+            <button onClick={() => excluirTipo(t.id, t.nome)} style={{ marginLeft: 8, color: "red" }}>
+              Excluir
+            </button>
           </li>
         ))}
       </ul>
@@ -155,13 +167,13 @@ export default function SaudeConfiguracoes() {
             <tbody>
               {senhas.map(s => (
                 <tr key={s.id}>
-                  <td>{s.numero}</td>
-                  <td>{s.tipo === "prioridade" ? "Prioritário" : "Normal"}</td>
-                  <td>{s.usado ? "Usada" : "Disponível"}</td>
-                  <td>
+                  <td style={{ padding: 8 }}>{s.numero}</td>
+                  <td style={{ padding: 8 }}>{s.tipo === "prioridade" ? "Prioritário" : "Normal"}</td>
+                  <td style={{ padding: 8 }}>{s.usado ? "Usada" : "Disponível"}</td>
+                  <td style={{ padding: 8 }}>
                     {!s.usado && <button onClick={() => excluirSenha(s.id)}>Excluir</button>}
                   </td>
-                <tr>
+                </tr>
               ))}
               {senhas.length === 0 && (
                 <tr>
