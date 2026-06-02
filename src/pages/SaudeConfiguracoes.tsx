@@ -28,6 +28,7 @@ export default function SaudeConfiguracoes() {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTipos(lista);
+      console.log("Tipos carregados:", lista);
     } catch (error) {
       console.error("Erro ao carregar tipos:", error);
     }
@@ -50,26 +51,26 @@ export default function SaudeConfiguracoes() {
   const excluirTipo = async (id: string, nome: string) => {
     if (!window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) return;
     try {
-      // Remove todas as senhas associadas
+      // 1. Excluir todas as senhas da subcoleção
       const senhasSnap = await getDocs(collection(db, "tiposAtendimento", id, "senhas"));
       for (const senhaDoc of senhasSnap.docs) {
         await deleteDoc(senhaDoc.ref);
+        console.log(`Senha ${senhaDoc.id} excluída.`);
       }
-      // Remove o tipo
+      // 2. Excluir o tipo
       await deleteDoc(doc(db, "tiposAtendimento", id));
+      console.log(`Tipo ${id} excluído com sucesso.`);
       alert("Tipo excluído com sucesso.");
-      // Atualiza estado local imediatamente
-      setTipos(prev => prev.filter(t => t.id !== id));
-      // Recarrega do Firestore para garantir consistência
+      // 3. Recarregar a lista imediatamente
       await carregarTipos();
-      // Se o tipo excluído estava sendo gerenciado, fecha painel
+      // 4. Se o tipo excluído era o que estava sendo gerenciado, fechar painel
       if (gerenciandoTipoId === id) {
         setGerenciandoTipoId(null);
         setSenhas([]);
       }
     } catch (error) {
       console.error("Erro ao excluir tipo:", error);
-      alert("Erro ao excluir tipo. Verifique as regras de segurança.");
+      alert("Erro ao excluir tipo. Verifique as regras de segurança e se o documento existe.");
     }
   };
 
