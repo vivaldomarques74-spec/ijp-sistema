@@ -28,24 +28,7 @@ export default function AlunosEditar() {
   const [novoCursoId, setNovoCursoId] = useState("");
   const [novaTurmaId, setNovaTurmaId] = useState("");
 
-  // Carregar dados do aluno, cursos e tipos
   useEffect(() => {
-    async function carregarAluno() {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "alunos", id));
-      if (snap.exists()) {
-        const data = snap.data();
-        setDadosAluno({
-          nomeCompleto: data.nomeCompleto || "", cpf: data.cpf || "", endereco: data.endereco || "",
-          email: data.email || "", telefone: data.telefone || "", nascimento: data.nascimento || "", menor: data.menor || false,
-          responsavelNome: data.responsavelNome || "", responsavelEmail: data.responsavelEmail || "",
-          responsavelTelefone: data.responsavelTelefone || "", responsavelCpf: data.responsavelCpf || "",
-          status: data.status || "ativo", observacoes: data.observacoes || "",
-          cursos: Array.isArray(data.cursos) ? data.cursos : [],
-          servicosAtivos: data.servicosAtivos || [],
-        });
-      }
-    }
     async function carregarCursos() {
       const snap = await getDocs(collection(db, "cursos"));
       setCursos(snap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
@@ -54,42 +37,81 @@ export default function AlunosEditar() {
       const snap = await getDocs(collection(db, "tiposAtendimento"));
       setTiposAtendimento(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipoAgendamento: d.data().tipoAgendamento })));
     }
-    carregarAluno();
+    async function carregarAluno() {
+      if (!id) return;
+      const snap = await getDoc(doc(db, "alunos", id));
+      if (snap.exists()) {
+        const data = snap.data();
+        let servicosFiltrados = data.servicosAtivos || [];
+        if (tiposAtendimento.length > 0) {
+          servicosFiltrados = servicosFiltrados.filter((serv: any) =>
+            tiposAtendimento.some(t => t.id === serv.tipoId)
+          );
+        }
+        setDadosAluno({
+          nomeCompleto: data.nomeCompleto || "", cpf: data.cpf || "", endereco: data.endereco || "",
+          email: data.email || "", telefone: data.telefone || "", nascimento: data.nascimento || "", menor: data.menor || false,
+          responsavelNome: data.responsavelNome || "", responsavelEmail: data.responsavelEmail || "",
+          responsavelTelefone: data.responsavelTelefone || "", responsavelCpf: data.responsavelCpf || "",
+          status: data.status || "ativo", observacoes: data.observacoes || "",
+          cursos: Array.isArray(data.cursos) ? data.cursos : [],
+          servicosAtivos: servicosFiltrados,
+        });
+      }
+    }
     carregarCursos();
     carregarTipos();
+    carregarAluno();
   }, [id]);
 
-  // Carregar senhas disponíveis para serviços do tipo fila (sempre que a lista de serviços ativos mudar)
+  useEffect(() => {
+    async function revalidarServicos() {
+      if (!id) return;
+      const snap = await getDoc(doc(db, "alunos", id));
+      if (snap.exists()) {
+        const data = snap.data();
+        let servicosFiltrados = data.servicosAtivos || [];
+        if (tiposAtendimento.length > 0) {
+          servicosFiltrados = servicosFiltrados.filter((serv: any) =>
+            tiposAtendimento.some(t => t.id === serv.tipoId)
+          );
+        }
+        setDadosAluno((prev: any) => ({ ...prev, servicosAtivos: servicosFiltrados }));
+      }
+    }
+    if (tiposAtendimento.length > 0) revalidarServicos();
+  }, [tiposAtendimento, id]);
+
   useEffect(() => {
     const carregarSenhasParaServicos = async () => {
-      const novasSenhas: Record<string, Senha[]> = {};
-      const novosCarregando: Record<string, boolean> = {};
       for (const serv of dadosAluno.servicosAtivos) {
         const tipo = tiposAtendimento.find(t => t.id === serv.tipoId);
         if (tipo?.tipoAgendamento === "fila") {
           if (!senhasDisponiveis[serv.tipoId] && !carregandoSenhas[serv.tipoId]) {
-            novosCarregando[serv.tipoId] = true;
-            setCarregandoSenhas(prev => ({ ...prev, [serv.tipoId]: true }));
-            const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
-            const snap = await getDocs(q);
-            let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
-            lista.sort((a, b) => {
-              const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
-              const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
-              return numA - numB;
-            });
-            novasSenhas[serv.tipoId] = lista;
-            delete novosCarregando[serv.tipoId];
+            setCarregandoSenhas((prev: Record<string, boolean>) => ({ ...prev, [serv.tipoId]: true }));
+            try {
+              const q = query(collection(db, "tiposAtendimento", serv.tipoId, "senhas"), where("usado", "==", false));
+              const snap = await getDocs(q);
+              let lista: Senha[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as Senha));
+              lista.sort((a, b) => {
+                const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+                const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+                return numA - numB;
+              });
+              setSenhasDisponiveis((prev: Record<string, Senha[]>) => ({ ...prev, [serv.tipoId]: lista }));
+            } catch (error) {
+              console.error(`Erro ao carregar senhas para ${serv.tipoId}:`, error);
+            } finally {
+              setCarregandoSenhas((prev: Record<string, boolean>) => ({ ...prev, [serv.tipoId]: false }));
+            }
           }
         }
       }
-      setSenhasDisponiveis(prev => ({ ...prev, ...novasSenhas }));
-      setCarregandoSenhas(prev => ({ ...prev, ...novosCarregando }));
     };
     if (tiposAtendimento.length > 0) {
       carregarSenhasParaServicos();
     }
-  }, [dadosAluno.servicosAtivos, tiposAtendimento]);
+  }, [dadosAluno.servicosAtivos, tiposAtendimento, senhasDisponiveis, carregandoSenhas]);
 
   useEffect(() => {
     if (!novoCursoId) { setTurmas([]); setNovaTurmaId(""); return; }
@@ -161,6 +183,7 @@ export default function AlunosEditar() {
       alert("Aluno atualizado com sucesso");
       navigate("/alunos");
     } catch (error: any) {
+      console.error("Erro ao salvar:", error);
       alert(error.message);
     }
   };

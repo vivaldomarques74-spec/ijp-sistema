@@ -24,8 +24,12 @@ export default function SaudeConfiguracoes() {
   }, []);
 
   const carregarTipos = async () => {
-    const snap = await getDocs(collection(db, "tiposAtendimento"));
-    setTipos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    try {
+      const snap = await getDocs(collection(db, "tiposAtendimento"));
+      setTipos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Erro ao carregar tipos:", error);
+    }
   };
 
   const salvarTipo = async () => {
@@ -45,16 +49,17 @@ export default function SaudeConfiguracoes() {
   const excluirTipo = async (id: string, nome: string) => {
     if (!window.confirm(`Excluir o tipo "${nome}"? Isso removerá também todas as senhas associadas.`)) return;
     try {
-      // Excluir todas as senhas da subcoleção
       const senhasSnap = await getDocs(collection(db, "tiposAtendimento", id, "senhas"));
       for (const senhaDoc of senhasSnap.docs) {
         await deleteDoc(senhaDoc.ref);
       }
-      // Excluir o tipo
       await deleteDoc(doc(db, "tiposAtendimento", id));
       alert("Tipo excluído com sucesso.");
-      carregarTipos();
-      if (gerenciandoTipoId === id) setGerenciandoTipoId(null);
+      await carregarTipos();
+      if (gerenciandoTipoId === id) {
+        setGerenciandoTipoId(null);
+        setSenhas([]);
+      }
     } catch (error) {
       console.error("Erro ao excluir tipo:", error);
       alert("Erro ao excluir tipo. Verifique as regras de segurança.");
@@ -82,7 +87,6 @@ export default function SaudeConfiguracoes() {
     if (loteNormal === 0 && lotePrioridade === 0) return alert("Informe ao menos uma quantidade");
     if (!gerenciandoTipoId) return;
 
-    // Se apagarExistentes for true, deleta todas as senhas atuais
     if (apagarExistentes) {
       const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
       for (const docSenha of snap.docs) {
@@ -90,12 +94,10 @@ export default function SaudeConfiguracoes() {
       }
     }
 
-    // Determinar o número inicial
     let startNum = 0;
     if (inicioLote && !isNaN(parseInt(inicioLote))) {
       startNum = parseInt(inicioLote, 10);
     } else if (!apagarExistentes) {
-      // Se não apagou e não informou início, calcular o maior número existente + 1
       const snap = await getDocs(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"));
       let maxNum = 0;
       for (const docSenha of snap.docs) {
@@ -104,12 +106,10 @@ export default function SaudeConfiguracoes() {
       }
       startNum = maxNum + 1;
     } else {
-      // Se apagou e não informou início, começar de 1
       startNum = 1;
     }
 
     let currentNum = startNum;
-    // Gerar prioritárias
     for (let i = 0; i < lotePrioridade; i++) {
       const senhaNumero = String(currentNum + i).padStart(3, "0");
       await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
@@ -119,7 +119,6 @@ export default function SaudeConfiguracoes() {
       });
     }
     currentNum += lotePrioridade;
-    // Gerar normais
     for (let i = 0; i < loteNormal; i++) {
       const senhaNumero = String(currentNum + i).padStart(3, "0");
       await addDoc(collection(db, "tiposAtendimento", gerenciandoTipoId, "senhas"), {
