@@ -28,6 +28,8 @@ import ProfissionalProntuario from "./pages/ProfissionalProntuario";
 
 import MigracaoPsicologia from "./pages/MigracaoPsicologia";
 import Notificacoes from "./pages/Notificacoes";
+import RelatorioAlunosTurma from "./pages/RelatorioAlunosTurma";
+import MigracaoCorrigirHorarios from "./pages/MigracaoCorrigirHorarios";
 
 export default function App() {
   return (
@@ -66,6 +68,8 @@ export default function App() {
 
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
         <Route path="/notificacoes" element={<Notificacoes />} />
+        <Route path="/relatorio-alunos" element={<RelatorioAlunosTurma />} />
+        <Route path="/migracao-corrigir-horarios" element={<MigracaoCorrigirHorarios />} />
       </Route>
     </Routes>
   );

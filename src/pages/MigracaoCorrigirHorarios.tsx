@@ -13,6 +13,7 @@ export default function MigracaoCorrigirHorarios() {
       let corrigidos = 0;
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
+        // Apenas horários que são do tipo "livre" e que ainda possuem groupId (indevido)
         if (data.recorrenteTipo === "livre" && data.groupId) {
           await updateDoc(docSnap.ref, { groupId: null });
           corrigidos++;
@@ -29,6 +30,7 @@ export default function MigracaoCorrigirHorarios() {
       <h1>Corrigir horários "livres" que estavam com groupId</h1>
       <p>Status: {status}</p>
       <p>Horários corrigidos: {count}</p>
+      <p>Após rodar, você pode remover esta rota.</p>
     </div>
   );
 }
