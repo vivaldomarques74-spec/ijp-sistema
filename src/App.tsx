@@ -21,6 +21,7 @@ import SaudeConfiguracoes from "./pages/SaudeConfiguracoes";
 import SaudeFilaOrdemChegada from "./pages/SaudeFilaOrdemChegada";
 
 import LoginProfissional from "./pages/LoginProfissional";
+import CadastrarSenhaProfissional from "./pages/CadastrarSenhaProfissional";
 import ProfissionalLayout from "./layout/ProfissionalLayout";
 import ProfissionalAgenda from "./pages/ProfissionalAgenda";
 import ProfissionalProntuario from "./pages/ProfissionalProntuario";
@@ -33,6 +34,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/acesso-profissional" element={<LoginProfissional />} />
+      <Route path="/cadastrar-senha" element={<CadastrarSenhaProfissional />} />
 
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
         <Route path="agenda" element={<ProfissionalAgenda />} />

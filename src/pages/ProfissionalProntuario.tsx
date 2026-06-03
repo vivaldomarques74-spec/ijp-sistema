@@ -17,6 +17,14 @@ export default function ProfissionalProntuario() {
   const [novaEvolucao, setNovaEvolucao] = useState("");
   const [carregando, setCarregando] = useState(false);
 
+  // Verificar autenticação
+  useEffect(() => {
+    if (localStorage.getItem("profissionalAutenticado") !== "true") {
+      alert("Sessão expirada. Faça login novamente.");
+      window.location.href = "/acesso-profissional";
+    }
+  }, []);
+
   useEffect(() => {
     const carregar = async () => {
       if (!alunoId) return;
@@ -24,7 +32,7 @@ export default function ProfissionalProntuario() {
       const alunoSnap = await getDoc(doc(db, "alunos", alunoId));
       if (alunoSnap.exists()) setAluno(alunoSnap.data());
 
-      // Carregar evoluções existentes (ordenadas por data decrescente)
+      // Carregar evoluções existentes
       const q = query(collection(db, "prontuarios"), orderBy("data", "desc"));
       const snap = await getDocs(q);
       const lista = snap.docs
@@ -41,18 +49,22 @@ export default function ProfissionalProntuario() {
   }, [alunoId]);
 
   const salvarEvolucao = async () => {
+    // Verificar autenticação
+    if (localStorage.getItem("profissionalAutenticado") !== "true") {
+      alert("Sessão expirada. Faça login novamente.");
+      window.location.href = "/acesso-profissional";
+      return;
+    }
+
     if (!novaEvolucao.trim()) return alert("Digite a evolução");
     if (!alunoId) return alert("Aluno não identificado");
     setCarregando(true);
     try {
-      // Data atual para registro (quando foi escrito)
       const agora = new Date();
-      // Se o profissional quiser associar a uma data específica, pode adicionar um campo "dataAtendimento".
-      // Por enquanto, usamos a data atual como referência de criação.
       await addDoc(collection(db, "prontuarios"), {
         alunoId,
         texto: novaEvolucao,
-        data: agora, // timestamp da evolução
+        data: agora,
         createdAt: agora,
       });
       alert("Evolução salva com sucesso");

@@ -33,6 +33,14 @@ export default function ProfissionalAgenda() {
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(false);
 
+  // Verificar autenticação ao carregar a página
+  useEffect(() => {
+    if (localStorage.getItem("profissionalAutenticado") !== "true") {
+      alert("Sessão expirada. Faça login novamente.");
+      window.location.href = "/acesso-profissional";
+    }
+  }, []);
+
   useEffect(() => {
     const carregarProfissional = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
@@ -69,7 +77,6 @@ export default function ProfissionalAgenda() {
           } as Agendamento;
         });
 
-      // Buscar nomes dos alunos
       for (const h of horarios) {
         if (h.alunoId) {
           const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
@@ -91,10 +98,13 @@ export default function ProfissionalAgenda() {
   }, [profissionalId, dataSelecionada]);
 
   const registrarPresenca = async (ag: Agendamento, tipo: string) => {
-    // Verificar se a data é a mesma da agenda (ou pode permitir registrar em dias passados? Vamos permitir, mas avisar)
-    if (ag.data !== dataSelecionada) {
-      if (!confirm(`A data do atendimento é ${ag.data}. Deseja registrar mesmo assim?`)) return;
+    // Verificar autenticação
+    if (localStorage.getItem("profissionalAutenticado") !== "true") {
+      alert("Sessão expirada. Faça login novamente.");
+      window.location.href = "/acesso-profissional";
+      return;
     }
+
     if (!ag.alunoId) return alert("Este horário não tem paciente vinculado.");
 
     let novoStatus = "";
@@ -106,7 +116,6 @@ export default function ProfissionalAgenda() {
       await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
       alert(`Registrado como ${tipo === "presente" ? "Compareceu" : tipo === "faltaJustificada" ? "Falta justificada" : "Falta injustificada"}`);
       
-      // Se falta injustificada, verificar faltas do paciente
       if (tipo === "faltaInjustificada") {
         const faltasQuery = query(
           collection(db, "agendamentos"),
@@ -116,9 +125,8 @@ export default function ProfissionalAgenda() {
           where("status", "==", "faltaInjustificada")
         );
         const faltasSnap = await getDocs(faltasQuery);
-        const faltasCount = faltasSnap.size; // inclui a atual
+        const faltasCount = faltasSnap.size;
         if (faltasCount >= 2) {
-          // Remover paciente do horário (e do grupo fixo se houver)
           if (ag.groupId) {
             const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", ag.groupId));
             const groupSnap = await getDocs(groupQuery);
@@ -128,7 +136,6 @@ export default function ProfissionalAgenda() {
           } else {
             await updateDoc(doc(db, "agendamentos", ag.id), { alunoId: null, status: "livre" });
           }
-          // Adicionar à fila de espera
           const filaQuery = query(
             collection(db, "filaEspera"),
             where("alunoId", "==", ag.alunoId),
@@ -145,7 +152,6 @@ export default function ProfissionalAgenda() {
               modalidade: "presencial",
             });
           }
-          // Buscar nome do paciente para notificação
           let nomePaciente = "Paciente";
           if (ag.alunoId) {
             const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
@@ -161,8 +167,6 @@ export default function ProfissionalAgenda() {
           alert("Paciente removido do horário (2 faltas injustificadas) e voltou à fila. Notificação enviada.");
         }
       }
-      
-      // Recarregar agenda
       await carregarAgenda();
     } catch (error: any) {
       console.error("Erro ao registrar presença:", error);
@@ -225,7 +229,7 @@ export default function ProfissionalAgenda() {
               {agenda.length === 0 && (
                 <tr>
                   <td colSpan={3} style={{ padding: 8, textAlign: "center" }}>
-                    Nenhum horário para esta data. Clique em "Recarregar" se necessário.
+                    Nenhum horário para esta data.
                   </td>
                 </tr>
               )}

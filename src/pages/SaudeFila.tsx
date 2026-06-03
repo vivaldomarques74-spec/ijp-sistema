@@ -10,6 +10,7 @@ interface Agendamento {
   horario: string;
   status: string;
   groupId?: string;
+  recorrenteTipo?: string;
 }
 
 export default function SaudeFila() {
@@ -50,7 +51,6 @@ export default function SaudeFila() {
           });
         }
       }
-      // Ordenar por número de matrícula
       lista.sort((a, b) => {
         const numA = parseInt(a.matricula.replace("IJP-", ""));
         const numB = parseInt(b.matricula.replace("IJP-", ""));
@@ -86,6 +86,7 @@ export default function SaudeFila() {
           horario: d.data().horario,
           status: d.data().status,
           groupId: d.data().groupId,
+          recorrenteTipo: d.data().recorrenteTipo,
         } as Agendamento));
 
       const porProfissional: Record<string, Agendamento[]> = {};
@@ -119,9 +120,9 @@ export default function SaudeFila() {
 
     const horarioRef = doc(db, "agendamentos", selecao.horarioId);
     const horarioSnap = await getDoc(horarioRef);
-    const horarioData = horarioSnap.data();
+    const horarioData = horarioSnap.data() as Agendamento;
 
-    if (horarioData?.groupId) {
+    if (horarioData?.recorrenteTipo === "fixo" || horarioData?.groupId) {
       const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", horarioData.groupId));
       const groupSnap = await getDocs(groupQuery);
       for (const docHor of groupSnap.docs) {
@@ -136,7 +137,6 @@ export default function SaudeFila() {
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
 
-    // Recarregar fila
     const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
     const snap = await getDocs(q);
     const lista = [];

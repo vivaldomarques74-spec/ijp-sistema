@@ -32,6 +32,7 @@ export default function SaudeAgenda() {
         alunoId: data.alunoId,
         pacienteInfo: data.pacienteInfo,
         groupId: data.groupId,
+        recorrenteTipo: data.recorrenteTipo,
       };
     });
     setHorarios(horariosData);
@@ -53,7 +54,7 @@ export default function SaudeAgenda() {
     if (!form.profissionalId || !form.tipoId || !form.data || !form.horario) return alert("Preencha tudo");
     if (recorrente) {
       const datas = gerarDatasRecorrentes(form.data);
-      const groupId = `${form.profissionalId}_${form.tipoId}_${form.horario}_${Date.now()}`;
+      const groupId = tipoRecorrencia === "fixo" ? `${form.profissionalId}_${form.tipoId}_${form.horario}_${Date.now()}` : null;
       for (const data of datas) {
         await addDoc(collection(db, "agendamentos"), {
           profissionalId: form.profissionalId,
@@ -64,7 +65,7 @@ export default function SaudeAgenda() {
           tipoPaciente: "social",
           recorrente: true,
           recorrenteTipo: tipoRecorrencia,
-          groupId: tipoRecorrencia === "fixo" ? groupId : null,
+          groupId: groupId,
           createdAt: new Date(),
         });
       }
@@ -112,7 +113,6 @@ export default function SaudeAgenda() {
     carregarDados();
   };
 
-  // Filtros
   let horariosFiltrados = [...horarios];
   if (filtroProfissional) horariosFiltrados = horariosFiltrados.filter(h => h.profissionalId === filtroProfissional);
   if (filtroTipo) horariosFiltrados = horariosFiltrados.filter(h => h.tipoId === filtroTipo);
@@ -151,7 +151,7 @@ export default function SaudeAgenda() {
 
       <hr />
       <h2>Filtros</h2>
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
         <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)}>
           <option value="">Todos os profissionais</option>
           {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
@@ -169,13 +169,7 @@ export default function SaudeAgenda() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th>Data</th>
-              <th>Horário</th>
-              <th>Profissional</th>
-              <th>Tipo</th>
-              <th>Status</th>
-              <th>Paciente</th>
-              <th>Ações</th>
+              <th>Data</th><th>Horário</th><th>Profissional</th><th>Tipo</th><th>Status</th><th>Paciente</th><th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -185,13 +179,15 @@ export default function SaudeAgenda() {
               const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
               return (
                 <tr key={h.id}>
-                  <td>{h.data}</td>
-                  <td>{h.horario}</td>
-                  <td>{prof?.nome || h.profissionalId}</td>
-                  <td>{tipo?.nome || h.tipoId}</td>
-                  <td>{h.status}</td>
-                  <td>{h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}</td>
-                  <td>
+                  <td style={{ padding: 8 }}>{h.data}</td>
+                  <td style={{ padding: 8 }}>{h.horario}</td>
+                  <td style={{ padding: 8 }}>{prof?.nome || h.profissionalId}</td>
+                  <td style={{ padding: 8 }}>{tipo?.nome || h.tipoId}</td>
+                  <td style={{ padding: 8 }}>{h.status}</td>
+                  <td style={{ padding: 8 }}>
+                    {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
+                  </td>
+                  <td style={{ padding: 8 }}>
                     {isLivre && (
                       <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)}>Particular</button>
                     )}
