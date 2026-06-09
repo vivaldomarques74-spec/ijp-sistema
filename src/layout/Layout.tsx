@@ -36,6 +36,7 @@ export default function Layout() {
         <Link to="/cursos">Cursos</Link>
         <Link to="/presenca">Presença</Link>
         <Link to="/saude">Saúde</Link>
+        <Link to="/certificados">Certificados</Link>
         <Link to="/notificacoes" style={{ position: "relative", marginLeft: "auto" }}>
           🔔
           {notificacoesNaoLidas > 0 && (
