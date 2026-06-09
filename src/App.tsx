@@ -32,6 +32,7 @@ import RelatorioAlunosTurma from "./pages/RelatorioAlunosTurma";
 import MigracaoCorrigirHorarios from "./pages/MigracaoCorrigirHorarios";
 import Certificados from "./pages/Certificados";
 import TesteCertificado from "./pages/TesteCertificado";
+import PresencaProfessor from "./pages/PresencaProfessor";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/acesso-profissional" element={<LoginProfissional />} />
       <Route path="/cadastrar-senha" element={<CadastrarSenhaProfissional />} />
+      <Route path="/presenca-professor" element={<PresencaProfessor />} />
 
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
         <Route path="agenda" element={<ProfissionalAgenda />} />
@@ -47,17 +49,13 @@ export default function App() {
 
       <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route path="/" element={<Dashboard />} />
-
         <Route path="/alunos" element={<AlunosLista />} />
         <Route path="/alunos/cadastrar" element={<AlunosCadastrar />} />
         <Route path="/alunos/editar/:id" element={<AlunosEditar />} />
-
         <Route path="/cursos" element={<Cursos />} />
         <Route path="/cursos/novo" element={<CursoNovo />} />
         <Route path="/cursos/:id" element={<CursoDetalhe />} />
-
         <Route path="/presenca" element={<Presenca />} />
-
         <Route path="/saude" element={<Saude />}>
           <Route index element={<SaudeFila />} />
           <Route path="fila" element={<SaudeFila />} />
@@ -67,7 +65,6 @@ export default function App() {
           <Route path="pacientes" element={<SaudePacientes />} />
           <Route path="configuracoes" element={<SaudeConfiguracoes />} />
         </Route>
-
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
         <Route path="/notificacoes" element={<Notificacoes />} />
         <Route path="/relatorio-alunos" element={<RelatorioAlunosTurma />} />
