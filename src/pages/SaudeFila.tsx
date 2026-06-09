@@ -70,13 +70,15 @@ export default function SaudeFila() {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
       const snap = await getDocs(collection(db, "agendamentos"));
-      const todos = snap.docs
+      const todos: Agendamento[] = snap.docs
         .filter(d => {
           const data = d.data();
-          return (data.status === "livre" || data.status === "aguardandoVinculo") &&
-                 !data.alunoId &&
-                 !data.pacienteInfo &&
-                 data.data >= hoje;
+          return (
+            (data.status === "livre" || data.status === "aguardandoVinculo") &&
+            !data.alunoId &&
+            !data.pacienteInfo &&
+            data.data >= hoje
+          );
         })
         .map(d => ({
           id: d.id,
@@ -207,7 +209,7 @@ export default function SaudeFila() {
   const atualizarSelecao = (alunoId: string, field: string, value: string) => {
     setSelecoes(prev => ({
       ...prev,
-      [alunoId]: { ...prev[alunoId], [field]: value }
+      [alunoId]: { ...prev[alunoId], [field]: value },
     }));
   };
 
@@ -222,61 +224,68 @@ export default function SaudeFila() {
       {tipoId && (
         <div>
           <h3>Pacientes aguardando:</h3>
-          {fila.length === 0 && <p>Nenhum paciente na fila.</p>}
-          {fila.length > 0 && (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th>Paciente</th>
-                    <th>Matrícula</th>
-                    <th>Profissional</th>
-                    <th>Horário livre</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fila.map(paciente => (
-                    <tr key={paciente.alunoId}>
-                      <td style={{ padding: 8 }}>{paciente.nome}</td>
-                      <td style={{ padding: 8 }}>{paciente.matricula}</td>
-                      <td style={{ padding: 8 }}>
-                        <select
-                          value={selecoes[paciente.alunoId]?.profissionalId || ""}
-                          onChange={e => atualizarSelecao(paciente.alunoId, "profissionalId", e.target.value)}
-                        >
-                          <option value="">Selecione</option>
-                          {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: 8 }}>
-                        <select
-                          value={selecoes[paciente.alunoId]?.horarioId || ""}
-                          onChange={e => atualizarSelecao(paciente.alunoId, "horarioId", e.target.value)}
-                          disabled={!selecoes[paciente.alunoId]?.profissionalId}
-                        >
-                          <option value="">Horário livre</option>
-                          {selecoes[paciente.alunoId]?.profissionalId && horariosPorProfissional[selecoes[paciente.alunoId].profissionalId]?.map(h => (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th>Paciente</th>
+                  <th>Matrícula</th>
+                  <th>Profissional</th>
+                  <th>Horário livre</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fila.map(paciente => (
+                  <tr key={paciente.alunoId}>
+                    <td style={{ padding: 8 }}>{paciente.nome}</td>
+                    <td style={{ padding: 8 }}>{paciente.matricula}</td>
+                    <td style={{ padding: 8 }}>
+                      <select
+                        value={selecoes[paciente.alunoId]?.profissionalId || ""}
+                        onChange={e => atualizarSelecao(paciente.alunoId, "profissionalId", e.target.value)}
+                      >
+                        <option value="">Selecione</option>
+                        {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
+                      </select>
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <select
+                        value={selecoes[paciente.alunoId]?.horarioId || ""}
+                        onChange={e => atualizarSelecao(paciente.alunoId, "horarioId", e.target.value)}
+                        disabled={!selecoes[paciente.alunoId]?.profissionalId}
+                      >
+                        <option value="">Horário livre</option>
+                        {selecoes[paciente.alunoId]?.profissionalId &&
+                          horariosPorProfissional[selecoes[paciente.alunoId].profissionalId]?.map(h => (
                             <option key={h.id} value={h.id}>
                               {formatarData(h.data)} {h.horario} {h.groupId ? "(fixo)" : ""}
                             </option>
                           ))}
-                        </select>
-                      </td>
-                      <td style={{ padding: 8 }}>
-                        <button onClick={() => vincular(paciente.alunoId)} style={{ marginRight: 8 }}>
-                          Vincular
-                        </button>
-                        <button onClick={() => removerDaFila(paciente.alunoId, paciente.nome)} style={{ background: "#dc3545", color: "#fff" }}>
-                          Remover
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                      </select>
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <button onClick={() => vincular(paciente.alunoId)} style={{ marginRight: 8 }}>
+                        Vincular
+                      </button>
+                      <button onClick={() => removerDaFila(paciente.alunoId, paciente.nome)} style={{ background: "#dc3545", color: "#fff" }}>
+                        Remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {fila.length === 0 && (
+                <tbody>
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: 16 }}>
+                      Nenhum paciente na fila.
+                    </td>
+                  </tr>
                 </tbody>
-              </table>
-            </div>
-          )}
+              )}
+            </table>
+          </div>
         </div>
       )}
     </div>
