@@ -50,25 +50,29 @@ export default function Presencas() {
     }
     async function carregarAlunosDaTurma() {
       setCarregandoAlunos(true);
-      const turmaRef = doc(db, "cursos", cursoId, "turmas", turmaId);
-      const turmaSnap = await getDoc(turmaRef);
-      if (!turmaSnap.exists()) {
-        setAlunos([]);
+      try {
+        const turmaRef = doc(db, "cursos", cursoId, "turmas", turmaId);
+        const turmaSnap = await getDoc(turmaRef);
+        if (!turmaSnap.exists()) {
+          setAlunos([]);
+          return;
+        }
+        const alunosIds = turmaSnap.data().alunos || [];
+        if (alunosIds.length === 0) {
+          setAlunos([]);
+          return;
+        }
+        const alunosSnap = await getDocs(collection(db, "alunos"));
+        const lista = alunosSnap.docs
+          .filter((d) => alunosIds.includes(d.id))
+          .map((d) => ({ id: d.id, nomeCompleto: d.data().nomeCompleto }));
+        lista.sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto));
+        setAlunos(lista);
+      } catch (error) {
+        console.error("Erro ao carregar alunos:", error);
+      } finally {
         setCarregandoAlunos(false);
-        return;
       }
-      const alunosIds = turmaSnap.data().alunos || [];
-      if (alunosIds.length === 0) {
-        setAlunos([]);
-        setCarregandoAlunos(false);
-        return;
-      }
-      const alunosSnap = await getDocs(collection(db, "alunos"));
-      const lista = alunosSnap.docs
-        .filter((d) => alunosIds.includes(d.id))
-        .map((d) => ({ id: d.id, nomeCompleto: d.data().nomeCompleto }));
-      setAlunos(lista);
-      setCarregandoAlunos(false);
     }
     carregarAlunosDaTurma();
   }, [cursoId, turmaId]);
@@ -90,9 +94,19 @@ export default function Presencas() {
 
   const gerarHistorico = async () => {
     const snap = await getDocs(collection(db, "presencas"));
-    const lista = snap.docs
-      .map((d) => d.data())
-      .filter((p) => p.cursoId === cursoId && p.turmaId === turmaId && (!data || p.data.toDate().toISOString().slice(0, 10) === data));
+    const lista = [];
+    for (const docSnap of snap.docs) {
+      const p = docSnap.data();
+      if (p.cursoId === cursoId && p.turmaId === turmaId && (!data || p.data.toDate().toISOString().slice(0, 10) === data)) {
+        const alunoSnap = await getDoc(doc(db, "alunos", p.alunoId));
+        lista.push({
+          alunoId: p.alunoId,
+          nome: alunoSnap.exists() ? alunoSnap.data().nomeCompleto : "Desconhecido",
+          data: p.data.toDate().toLocaleDateString(),
+          presente: p.presente ? "Presente" : "Ausente",
+        });
+      }
+    }
     setHistorico(lista);
   };
 
@@ -113,7 +127,7 @@ export default function Presencas() {
     autoTable(pdf, {
       startY: 20,
       head: [["Aluno", "Data", "Status"]],
-      body: historico.map((h) => [h.alunoId, h.data.toDate().toLocaleDateString(), h.presente ? "Presente" : "Ausente"]),
+      body: historico.map((h) => [h.nome, h.data, h.presente]),
     });
     pdf.save("relatorio-presenca.pdf");
   };
@@ -157,6 +171,22 @@ export default function Presencas() {
         <>
           <button onClick={gerarHistorico}>Buscar Histórico</button>
           <button onClick={gerarPdfAluno}>Gerar PDF</button>
+          {historico.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16 }}>
+              <thead>
+                <tr><th>Aluno</th><th>Data</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {historico.map((h, idx) => (
+                  <tr key={idx}>
+                    <td>{h.nome}</td>
+                    <td>{h.data}</td>
+                    <td>{h.presente}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
     </div>
