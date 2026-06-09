@@ -123,80 +123,85 @@ export default function Certificados() {
     const turma = turmas.find(t => t.id === turmaId);
     const cursoNome = cursos.find(c => c.id === cursoId)?.nome || "Curso";
     const cargaHoraria = turma?.cargaHoraria || 720;
-    const dataInicio = turma?.dataInicio ? turma.dataInicio.toDate().toLocaleDateString() : "20 de Janeiro";
-    const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "30 de Abril de 2026";
+    const dataInicio = turma?.dataInicio ? turma.dataInicio.toDate().toLocaleDateString() : "08 de Junho";
+    const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "08 de Setembro de 2026";
+    const periodo = `no período de ${dataInicio} a ${dataFim}`;
 
-    const pdf = new jsPDF("landscape");
+    const pdf = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 20;
+    const marginX = 25;
+    const marginY = 20;
 
     // Logo
     try {
       const logoImg = new Image();
       logoImg.src = "/logo-ijp.png";
-      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 40, margin, 80, 35);
+      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 40, marginY, 80, 35);
     } catch (error) {
-      console.warn("Logo não encontrada");
+      console.warn("Logo não encontrada em /logo-ijp.png");
     }
-
-    // Título
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(20);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text("INSTITUTO JOVENS PERIFÉRICOS", pageWidth / 2, margin + 55, { align: "center" });
-
-    pdf.setFontSize(26);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text("CERTIFICADO", pageWidth / 2, margin + 85, { align: "center" });
-
-    // Corpo
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(14);
-    pdf.setTextColor(0, 0, 0);
-    pdf.text(`Orgulhosamente certificamos que`, pageWidth / 2, margin + 120, { align: "center" });
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(18);
-    pdf.text(`${aluno.nomeCompleto}`, pageWidth / 2, margin + 145, { align: "center" });
+    pdf.setTextColor(0, 0, 0);
+    pdf.text("INSTITUTO JOVENS PERIFÉRICOS", pageWidth / 2, marginY + 45, { align: "center" });
+
+    pdf.setFontSize(24);
+    pdf.setTextColor(80, 80, 80);
+    pdf.text("CERTIFICADO", pageWidth / 2, marginY + 70, { align: "center" });
 
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(14);
-    pdf.text(`concluiu o curso "${cursoNome}"`, pageWidth / 2, margin + 170, { align: "center" });
-    pdf.text(`com carga horária de ${cargaHoraria} horas, ministrado pelo Instituto Jovens Periféricos`, pageWidth / 2, margin + 190, { align: "center" });
-    pdf.text(`(CNPJ: 43.248.302/0001-96), em ${dataInicio} a ${dataFim}.`, pageWidth / 2, margin + 210, { align: "center" });
-    pdf.text(`Frequência: ${aluno.porcentagem}%`, pageWidth / 2, margin + 235, { align: "center" });
+    pdf.setFontSize(13);
+    pdf.setTextColor(0, 0, 0);
 
-    // Assinaturas
-    const assY = pageHeight - margin - 30;
-    const assW = 70;
-    const assH = 25;
-    const espaco = 40;
-    const esquerdaX = pageWidth / 2 - espaco - assW;
+    const linha1 = `Orgulhosamente certificamos que ${aluno.nomeCompleto} concluiu o curso "${cursoNome}",`;
+    const linha2 = `com carga horária de ${cargaHoraria} horas, ministrado pelo Instituto Jovens Periféricos`;
+    const linha3 = `(CNPJ: 43.248.302/0001-96), ${periodo}.`;
+    const linha4 = `Frequência: ${aluno.porcentagem}%`;
+
+    let y = marginY + 110;
+    pdf.text(linha1, pageWidth / 2, y, { align: "center" });
+    y += 8;
+    pdf.text(linha2, pageWidth / 2, y, { align: "center" });
+    y += 8;
+    pdf.text(linha3, pageWidth / 2, y, { align: "center" });
+    y += 10;
+    pdf.text(linha4, pageWidth / 2, y, { align: "center" });
+
+    const assinaturaY = y + 20;
+    const larguraAss = 60;
+    const alturaAss = 20;
+    const espaco = 30;
+    const esquerdaX = pageWidth / 2 - espaco - larguraAss;
     const direitaX = pageWidth / 2 + espaco;
 
     try {
       const ass1 = new Image();
-      ass1.src = "/assinatura1.png";
-      pdf.addImage(ass1, "PNG", esquerdaX, assY, assW, assH);
-    } catch (error) {
-      pdf.line(esquerdaX + 10, assY + assH, esquerdaX + assW - 10, assY + assH);
+      ass1.src = "/Assinatura1.png";
+      pdf.addImage(ass1, "PNG", esquerdaX, assinaturaY, larguraAss, alturaAss);
+    } catch (e) {
+      pdf.line(esquerdaX + 10, assinaturaY + alturaAss, esquerdaX + larguraAss - 10, assinaturaY + alturaAss);
     }
+    pdf.setFontSize(11);
+    pdf.text("Jadison dos Santos Palma", esquerdaX + larguraAss / 2, assinaturaY + alturaAss + 6, { align: "center" });
+
     try {
       const ass2 = new Image();
       ass2.src = "/assinatura2.png";
-      pdf.addImage(ass2, "PNG", direitaX, assY, assW, assH);
-    } catch (error) {
-      pdf.line(direitaX + 10, assY + assH, direitaX + assW - 10, assY + assH);
+      pdf.addImage(ass2, "PNG", direitaX, assinaturaY, larguraAss, alturaAss);
+    } catch (e) {
+      pdf.line(direitaX + 10, assinaturaY + alturaAss, direitaX + larguraAss - 10, assinaturaY + alturaAss);
     }
-
-    pdf.setFontSize(10);
-    pdf.text("Diretor(a) Geral", esquerdaX + assW / 2, assY + assH + 6, { align: "center" });
-    pdf.text("Coordenador(a) Pedagógico(a)", direitaX + assW / 2, assY + assH + 6, { align: "center" });
+    pdf.text("Helton Gabriel S. Santos", direitaX + larguraAss / 2, assinaturaY + alturaAss + 6, { align: "center" });
 
     pdf.setFontSize(10);
     pdf.setTextColor(100);
-    pdf.text(`Emitido em: ${new Date().toLocaleDateString()}`, pageWidth - margin, pageHeight - margin, { align: "right" });
+    pdf.text(`Emitido em: ${new Date().toLocaleDateString()}`, pageWidth - marginX, pageHeight - marginY, { align: "right" });
 
     pdf.save(`certificado_${aluno.nomeCompleto.replace(/\s/g, "_")}.pdf`);
   };
@@ -242,39 +247,37 @@ export default function Certificados() {
               Emitir certificados para todos aprovados
             </button>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th>Aluno</th>
-                <th>Presenças</th>
-                <th>Total de aulas</th>
-                <th>Porcentagem</th>
-                <th>Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alunos.map(aluno => (
-                <tr key={aluno.id}>
-                  <td style={{ padding: 8 }}>{aluno.nomeCompleto}</td>
-                  <td style={{ padding: 8 }}>{aluno.presencas}</td>
-                  <td style={{ padding: 8 }}>{turmas.find(t => t.id === turmaId)?.totalAulas || 0}</td>
-                  <td style={{ padding: 8 }}>{aluno.porcentagem}%</td>
-                  <td style={{ padding: 8, color: aluno.status === "aprovado" ? "green" : "red" }}>
-                    {aluno.status === "aprovado" ? "Aprovado" : "Reprovado"}
-                  </td>
-                  <td style={{ padding: 8 }}>
-                    <button onClick={() => emitirCertificado(aluno)}>Emitir certificado</button>
-                  </td>
-                </tr>
-              ))}
-              {alunos.length === 0 && (
+          {alunos.length === 0 && <p>Nenhum aluno encontrado para esta turma.</p>}
+          {alunos.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
                 <tr>
-                  <td colSpan={6}>Nenhum aluno encontrado para esta turma.</td>
+                  <th>Aluno</th>
+                  <th>Presenças</th>
+                  <th>Total de aulas</th>
+                  <th>Porcentagem</th>
+                  <th>Status</th>
+                  <th>Ações</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {alunos.map(aluno => (
+                  <tr key={aluno.id}>
+                    <td style={{ padding: 8 }}>{aluno.nomeCompleto}</td>
+                    <td style={{ padding: 8 }}>{aluno.presencas}</td>
+                    <td style={{ padding: 8 }}>{turmas.find(t => t.id === turmaId)?.totalAulas || 0}</td>
+                    <td style={{ padding: 8 }}>{aluno.porcentagem}%</td>
+                    <td style={{ padding: 8, color: aluno.status === "aprovado" ? "green" : "red" }}>
+                      {aluno.status === "aprovado" ? "Aprovado" : "Reprovado"}
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <button onClick={() => emitirCertificado(aluno)}>Emitir certificado</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
     </div>

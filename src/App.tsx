@@ -31,6 +31,7 @@ import Notificacoes from "./pages/Notificacoes";
 import RelatorioAlunosTurma from "./pages/RelatorioAlunosTurma";
 import MigracaoCorrigirHorarios from "./pages/MigracaoCorrigirHorarios";
 import Certificados from "./pages/Certificados";
+import TesteCertificado from "./pages/TesteCertificado";
 
 export default function App() {
   return (
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/relatorio-alunos" element={<RelatorioAlunosTurma />} />
         <Route path="/migracao-corrigir-horarios" element={<MigracaoCorrigirHorarios />} />
         <Route path="/certificados" element={<Certificados />} />
+        <Route path="/teste-certificado" element={<TesteCertificado />} />
       </Route>
     </Routes>
   );
