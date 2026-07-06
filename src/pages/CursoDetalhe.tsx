@@ -19,8 +19,9 @@ interface Curso {
 interface Turma {
   id: string;
   nome: string;
-  vagasTotales: number; // Atenção: no seu código pode ser vagasTotais
+  vagasTotales: number;
   vagasDisponiveis: number;
+  totalAulas: number;        // <-- adicionado
   dataInicio: Timestamp;
   dataFim: Timestamp;
   status: "ativa" | "inativa" | "encerrada";
@@ -35,6 +36,7 @@ export default function CursoDetalhe() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [nome, setNome] = useState("");
   const [vagasTotais, setVagasTotais] = useState(0);
+  const [totalAulas, setTotalAulas] = useState(0);    // <-- novo estado
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [status, setStatus] = useState<"ativa" | "inativa" | "encerrada">("ativa");
@@ -59,6 +61,7 @@ export default function CursoDetalhe() {
   const limparFormulario = () => {
     setNome("");
     setVagasTotais(0);
+    setTotalAulas(0);
     setDataInicio("");
     setDataFim("");
     setStatus("ativa");
@@ -83,6 +86,7 @@ export default function CursoDetalhe() {
         nome,
         vagasTotales: vagasTotais,
         vagasDisponiveis: vagasTotais - vagasOcupadas,
+        totalAulas,   // <-- enviando o campo
         dataInicio: Timestamp.fromDate(new Date(dataInicio)),
         dataFim: Timestamp.fromDate(new Date(dataFim)),
         status,
@@ -92,6 +96,7 @@ export default function CursoDetalhe() {
         nome,
         vagasTotales: vagasTotais,
         vagasDisponiveis: vagasTotais,
+        totalAulas,
         dataInicio: Timestamp.fromDate(new Date(dataInicio)),
         dataFim: Timestamp.fromDate(new Date(dataFim)),
         status,
@@ -112,6 +117,7 @@ export default function CursoDetalhe() {
     setEditandoId(t.id);
     setNome(t.nome);
     setVagasTotais(t.vagasTotales);
+    setTotalAulas(t.totalAulas || 0);
     setVagasOcupadas(t.vagasTotales - t.vagasDisponiveis);
     setDataInicio(t.dataInicio.toDate().toISOString().split("T")[0]);
     setDataFim(t.dataFim.toDate().toISOString().split("T")[0]);
@@ -141,6 +147,12 @@ export default function CursoDetalhe() {
         placeholder="Vagas totais"
         value={vagasTotais}
         onChange={(e) => setVagasTotais(Number(e.target.value))}
+      />
+      <input
+        type="number"
+        placeholder="Total de aulas"
+        value={totalAulas}
+        onChange={(e) => setTotalAulas(Number(e.target.value))}
       />
       {editandoId && (
         <p>
@@ -182,6 +194,7 @@ export default function CursoDetalhe() {
           <li key={t.id} style={{ marginBottom: 12 }}>
             <strong>{t.nome}</strong> <br />
             Vagas: {t.vagasDisponiveis} / {t.vagasTotales} <br />
+            Aulas: {t.totalAulas || 0} <br />
             Status: {t.status}
             <br />
             <button onClick={() => editarTurma(t)}>Editar</button>
