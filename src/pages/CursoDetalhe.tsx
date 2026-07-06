@@ -21,7 +21,8 @@ interface Turma {
   nome: string;
   vagasTotales: number;
   vagasDisponiveis: number;
-  totalAulas: number;        // <-- adicionado
+  totalAulas: number;
+  cargaHoraria: number;   // ← novo campo
   dataInicio: Timestamp;
   dataFim: Timestamp;
   status: "ativa" | "inativa" | "encerrada";
@@ -35,13 +36,14 @@ export default function CursoDetalhe() {
   const [curso, setCurso] = useState<Curso | null>(null);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [nome, setNome] = useState("");
-  const [vagasTotais, setVagasTotais] = useState(0);
-  const [totalAulas, setTotalAulas] = useState(0);    // <-- novo estado
+  const [vagasTotais, setVagasTotais] = useState<number>(0);
+  const [totalAulas, setTotalAulas] = useState<number>(0);
+  const [cargaHoraria, setCargaHoraria] = useState<number>(720); // ← padrão 720
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [status, setStatus] = useState<"ativa" | "inativa" | "encerrada">("ativa");
   const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [vagasOcupadas, setVagasOcupadas] = useState(0);
+  const [vagasOcupadas, setVagasOcupadas] = useState<number>(0);
 
   useEffect(() => {
     const carregar = async () => {
@@ -49,10 +51,20 @@ export default function CursoDetalhe() {
       if (cursoSnap.exists()) setCurso(cursoSnap.data() as Curso);
       const turmasSnap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
       setTurmas(
-        turmasSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Turma, "id">),
-        }))
+        turmasSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            nome: data.nome || "",
+            vagasTotales: Number(data.vagasTotales) || 0,
+            vagasDisponiveis: Number(data.vagasDisponiveis) || 0,
+            totalAulas: Number(data.totalAulas) || 0,
+            cargaHoraria: Number(data.cargaHoraria) || 720, // ← carrega do Firestore ou fallback
+            dataInicio: data.dataInicio,
+            dataFim: data.dataFim,
+            status: data.status || "ativa",
+          };
+        })
       );
     };
     carregar();
@@ -62,6 +74,7 @@ export default function CursoDetalhe() {
     setNome("");
     setVagasTotais(0);
     setTotalAulas(0);
+    setCargaHoraria(720);
     setDataInicio("");
     setDataFim("");
     setStatus("ativa");
@@ -70,47 +83,59 @@ export default function CursoDetalhe() {
   };
 
   const salvarTurma = async () => {
-    if (!nome || !vagasTotais || !dataInicio || !dataFim) {
-      alert("Preencha todos os campos");
-      return;
-    }
+    if (!nome.trim()) return alert("Informe o nome da turma");
+    if (!vagasTotais || vagasTotais <= 0) return alert("Informe um número de vagas válido (maior que 0)");
+    if (!dataInicio) return alert("Informe a data de início");
+    if (!dataFim) return alert("Informe a data de fim");
+    if (new Date(dataInicio) > new Date(dataFim)) return alert("Data de início não pode ser depois da data fim");
+
     const ref = collection(db, "cursos", cursoId, "turmas");
-    if (editandoId) {
-      if (vagasTotais < vagasOcupadas) {
-        alert(
-          `Essa turma já tem ${vagasOcupadas} alunos. Não é possível reduzir as vagas para ${vagasTotais}.`
-        );
-        return;
+    const dados = {
+      nome: nome.trim(),
+      vagasTotales: Number(vagasTotais),
+      vagasDisponiveis: Number(vagasTotais) - Number(vagasOcupadas),
+      totalAulas: Number(totalAulas) || 0,
+      cargaHoraria: Number(cargaHoraria) || 720, // ← salva carga horária
+      dataInicio: Timestamp.fromDate(new Date(dataInicio)),
+      dataFim: Timestamp.fromDate(new Date(dataFim)),
+      status,
+    };
+
+    try {
+      if (editandoId) {
+        if (vagasTotais < vagasOcupadas) {
+          alert(
+            `Essa turma já tem ${vagasOcupadas} alunos. Não é possível reduzir as vagas para ${vagasTotais}.`
+          );
+          return;
+        }
+        await updateDoc(doc(ref, editandoId), dados);
+      } else {
+        await addDoc(ref, { ...dados, createdAt: Timestamp.now() });
       }
-      await updateDoc(doc(ref, editandoId), {
-        nome,
-        vagasTotales: vagasTotais,
-        vagasDisponiveis: vagasTotais - vagasOcupadas,
-        totalAulas,   // <-- enviando o campo
-        dataInicio: Timestamp.fromDate(new Date(dataInicio)),
-        dataFim: Timestamp.fromDate(new Date(dataFim)),
-        status,
-      });
-    } else {
-      await addDoc(ref, {
-        nome,
-        vagasTotales: vagasTotais,
-        vagasDisponiveis: vagasTotais,
-        totalAulas,
-        dataInicio: Timestamp.fromDate(new Date(dataInicio)),
-        dataFim: Timestamp.fromDate(new Date(dataFim)),
-        status,
-        createdAt: Timestamp.now(),
-      });
+      limparFormulario();
+      const turmasSnap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
+      setTurmas(
+        turmasSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            nome: data.nome || "",
+            vagasTotales: Number(data.vagasTotales) || 0,
+            vagasDisponiveis: Number(data.vagasDisponiveis) || 0,
+            totalAulas: Number(data.totalAulas) || 0,
+            cargaHoraria: Number(data.cargaHoraria) || 720,
+            dataInicio: data.dataInicio,
+            dataFim: data.dataFim,
+            status: data.status || "ativa",
+          };
+        })
+      );
+      alert("Turma salva com sucesso!");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao salvar turma. Verifique o console.");
     }
-    limparFormulario();
-    const turmasSnap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
-    setTurmas(
-      turmasSnap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Turma, "id">),
-      }))
-    );
   };
 
   const editarTurma = (t: Turma) => {
@@ -118,6 +143,7 @@ export default function CursoDetalhe() {
     setNome(t.nome);
     setVagasTotais(t.vagasTotales);
     setTotalAulas(t.totalAulas || 0);
+    setCargaHoraria(t.cargaHoraria || 720);
     setVagasOcupadas(t.vagasTotales - t.vagasDisponiveis);
     setDataInicio(t.dataInicio.toDate().toISOString().split("T")[0]);
     setDataFim(t.dataFim.toDate().toISOString().split("T")[0]);
@@ -137,41 +163,58 @@ export default function CursoDetalhe() {
       <h1>{curso.nome}</h1>
       <hr />
       <h2>{editandoId ? "Editar Turma" : "Nova Turma"}</h2>
+
       <input
         placeholder="Nome da turma"
         value={nome}
         onChange={(e) => setNome(e.target.value)}
       />
+
       <input
         type="number"
-        placeholder="Vagas totais"
-        value={vagasTotais}
+        placeholder="Vagas totais (ex: 30)"
+        value={vagasTotais || ""}
         onChange={(e) => setVagasTotais(Number(e.target.value))}
+        min="1"
       />
+
       <input
         type="number"
-        placeholder="Total de aulas"
-        value={totalAulas}
+        placeholder="Total de aulas (ex: 25)"
+        value={totalAulas || ""}
         onChange={(e) => setTotalAulas(Number(e.target.value))}
+        min="0"
       />
+
+      <input
+        type="number"
+        placeholder="Carga horária (ex: 720)"
+        value={cargaHoraria || ""}
+        onChange={(e) => setCargaHoraria(Number(e.target.value))}
+        min="0"
+      />
+
       {editandoId && (
         <p>
           <strong>Vagas ocupadas:</strong> {vagasOcupadas} <br />
           <strong>Vagas disponíveis:</strong> {vagasTotais - vagasOcupadas}
         </p>
       )}
+
       <label>Data início</label>
       <input
         type="date"
         value={dataInicio}
         onChange={(e) => setDataInicio(e.target.value)}
       />
+
       <label>Data fim</label>
       <input
         type="date"
         value={dataFim}
         onChange={(e) => setDataFim(e.target.value)}
       />
+
       <select
         value={status}
         onChange={(e) =>
@@ -182,11 +225,13 @@ export default function CursoDetalhe() {
         <option value="inativa">Inativa</option>
         <option value="encerrada">Encerrada</option>
       </select>
+
       <br />
       <br />
       <button onClick={salvarTurma}>
         {editandoId ? "Salvar alterações" : "Cadastrar turma"}
       </button>
+
       <hr />
       <h2>Turmas</h2>
       <ul>
@@ -194,7 +239,8 @@ export default function CursoDetalhe() {
           <li key={t.id} style={{ marginBottom: 12 }}>
             <strong>{t.nome}</strong> <br />
             Vagas: {t.vagasDisponiveis} / {t.vagasTotales} <br />
-            Aulas: {t.totalAulas || 0} <br />
+            Aulas: {t.totalAulas} <br />
+            Carga horária: {t.cargaHoraria}h <br />
             Status: {t.status}
             <br />
             <button onClick={() => editarTurma(t)}>Editar</button>
