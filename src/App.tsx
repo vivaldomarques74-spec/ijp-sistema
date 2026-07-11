@@ -33,6 +33,8 @@ import MigracaoCorrigirHorarios from "./pages/MigracaoCorrigirHorarios";
 import Certificados from "./pages/Certificados";
 import TesteCertificado from "./pages/TesteCertificado";
 import PresencaProfessor from "./pages/PresencaProfessor";
+import Inscricao from "./pages/Inscricao";
+import PreInscricoes from "./pages/PreInscricoes";
 
 export default function App() {
   return (
@@ -41,6 +43,7 @@ export default function App() {
       <Route path="/acesso-profissional" element={<LoginProfissional />} />
       <Route path="/cadastrar-senha" element={<CadastrarSenhaProfissional />} />
       <Route path="/presenca-professor" element={<PresencaProfessor />} />
+      <Route path="/inscricao" element={<Inscricao />} />
 
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
         <Route path="agenda" element={<ProfissionalAgenda />} />
@@ -71,6 +74,7 @@ export default function App() {
         <Route path="/migracao-corrigir-horarios" element={<MigracaoCorrigirHorarios />} />
         <Route path="/certificados" element={<Certificados />} />
         <Route path="/teste-certificado" element={<TesteCertificado />} />
+        <Route path="/pre-inscricoes" element={<PreInscricoes />} />
       </Route>
     </Routes>
   );

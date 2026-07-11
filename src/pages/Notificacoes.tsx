@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, updateDoc, doc, Timestamp, getDoc } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, Timestamp } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 type Notificacao = {
@@ -8,7 +8,6 @@ type Notificacao = {
   lida: boolean;
   createdAt: Timestamp;
   tipo?: string;
-  alunoId?: string;
 };
 
 export default function Notificacoes() {
@@ -19,33 +18,10 @@ export default function Notificacoes() {
     const carregar = async () => {
       try {
         const snap = await getDocs(collection(db, "notificacoes"));
-        let lista = snap.docs.map(doc => ({
+        const lista = snap.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         })) as Notificacao[];
-
-        // Para cada notificação, tentar substituir o ID do paciente pelo nome
-        for (let i = 0; i < lista.length; i++) {
-          const n = lista[i];
-          if (n.alunoId) {
-            const alunoSnap = await getDoc(doc(db, "alunos", n.alunoId));
-            if (alunoSnap.exists()) {
-              const nome = alunoSnap.data().nomeCompleto;
-              // Substituir na mensagem qualquer ocorrência do ID pelo nome
-              lista[i].mensagem = lista[i].mensagem.replace(n.alunoId, nome);
-            }
-          }
-          // Fallback: se ainda houver um padrão de ID na mensagem (formato com 20 caracteres alfanuméricos), tentar extrair e buscar
-          const idMatch = lista[i].mensagem.match(/[A-Za-z0-9]{20}/);
-          if (idMatch && !lista[i].alunoId) {
-            const possivelId = idMatch[0];
-            const alunoSnap = await getDoc(doc(db, "alunos", possivelId));
-            if (alunoSnap.exists()) {
-              lista[i].mensagem = lista[i].mensagem.replace(possivelId, alunoSnap.data().nomeCompleto);
-            }
-          }
-        }
-
         lista.sort((a, b) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0));
         setNotificacoes(lista);
       } catch (error) {
@@ -65,7 +41,10 @@ export default function Notificacoes() {
   const naoLidas = notificacoes.filter(n => !n.lida).length;
 
   if (carregando) return <div style={{ padding: 20 }}>Carregando notificações...</div>;
-  if (notificacoes.length === 0) return <div style={{ padding: 20 }}>Nenhuma notificação encontrada.</div>;
+
+  if (notificacoes.length === 0) {
+    return <div style={{ padding: 20 }}>Nenhuma notificação encontrada.</div>;
+  }
 
   return (
     <div style={{ padding: 20 }}>

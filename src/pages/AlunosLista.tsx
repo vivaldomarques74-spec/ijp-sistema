@@ -32,7 +32,7 @@ export default function AlunosLista() {
       lista.sort((a, b) => (a.nomeCompleto || "").localeCompare(b.nomeCompleto || ""));
       setAlunos(lista);
     } catch (error) {
-      console.error("Erro ao carregar alunos:", error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -43,14 +43,13 @@ export default function AlunosLista() {
   }, [carregarAlunos]);
 
   const excluirAluno = async (id: string, nome: string) => {
-    if (window.confirm(`Excluir aluno ${nome}? Esta ação é irreversível.`)) {
+    if (window.confirm(`Excluir aluno ${nome}?`)) {
       try {
         await deleteDoc(doc(db, "alunos", id));
-        alert("Aluno excluído com sucesso");
+        alert("Aluno excluído");
         carregarAlunos();
       } catch (error) {
-        console.error("Erro ao excluir:", error);
-        alert("Erro ao excluir aluno");
+        alert("Erro ao excluir");
       }
     }
   };
@@ -73,76 +72,55 @@ export default function AlunosLista() {
   const alunosFiltrados = useMemo(() => {
     const termo = busca.toLowerCase().trim();
     if (!termo) return alunos;
-    return alunos.filter(
-      (aluno) =>
-        aluno.nomeCompleto?.toLowerCase().includes(termo) ||
-        aluno.matricula?.toLowerCase().includes(termo)
-    );
+    return alunos.filter((a) => a.nomeCompleto?.toLowerCase().includes(termo) || a.matricula?.toLowerCase().includes(termo));
   }, [alunos, busca]);
 
-  if (loading) {
-    return <div style={{ padding: 20 }}>Carregando alunos...</div>;
-  }
+  if (loading) return <div style={{ padding: 20 }}>Carregando...</div>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Lista de Alunos</h2>
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 18, color: "#1a2a4f" }}>Lista de Alunos</h2>
+        <button
+          onClick={() => navigate("/alunos/cadastrar")}
+          style={{ background: "#0070f3", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}
+        >
+          + Novo Aluno
+        </button>
+      </div>
       <input
         type="text"
         placeholder="Buscar por nome ou matrícula"
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
-        style={{
-          marginBottom: 20,
-          padding: 8,
-          width: "100%",
-          maxWidth: 400,
-          border: "1px solid #ccc",
-          borderRadius: 4,
-        }}
+        style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, width: "100%", maxWidth: 400, marginBottom: 16 }}
       />
-      {alunosFiltrados.length === 0 && <p>Nenhum aluno encontrado.</p>}
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Nome</th>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Matrícula</th>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Idade</th>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Ações</th>
+            <tr style={{ borderBottom: "1px solid #e0e4e8" }}>
+              <th style={{ textAlign: "left", padding: 12, fontSize: 13, color: "#6b7a8f" }}>Nome</th>
+              <th style={{ textAlign: "left", padding: 12, fontSize: 13, color: "#6b7a8f" }}>Matrícula</th>
+              <th style={{ textAlign: "left", padding: 12, fontSize: 13, color: "#6b7a8f" }}>Idade</th>
+              <th style={{ textAlign: "left", padding: 12, fontSize: 13, color: "#6b7a8f" }}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {alunosFiltrados.map((aluno) => (
-              <tr key={aluno.id}>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{aluno.nomeCompleto || "-"}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{aluno.matricula || "-"}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{calcularIdade(aluno.nascimento)}</td>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
+              <tr key={aluno.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                <td style={{ padding: 12 }}>{aluno.nomeCompleto || "-"}</td>
+                <td style={{ padding: 12 }}>{aluno.matricula || "-"}</td>
+                <td style={{ padding: 12 }}>{calcularIdade(aluno.nascimento)}</td>
+                <td style={{ padding: 12 }}>
                   <button
                     onClick={() => navigate(`/alunos/editar/${aluno.id}`)}
-                    style={{
-                      padding: "4px 12px",
-                      cursor: "pointer",
-                      background: "#0070f3",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 4,
-                      marginRight: 8,
-                    }}
+                    style={{ background: "#0070f3", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, marginRight: 8, cursor: "pointer" }}
                   >
                     Editar
                   </button>
                   <button
                     onClick={() => excluirAluno(aluno.id, aluno.nomeCompleto || "")}
-                    style={{
-                      padding: "4px 12px",
-                      cursor: "pointer",
-                      background: "#dc3545",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 4,
-                    }}
+                    style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}
                   >
                     Excluir
                   </button>
