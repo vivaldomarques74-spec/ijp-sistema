@@ -3,19 +3,15 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
 
-// Tipos para os dados do curso e turma
 interface TurmaData {
   id: string;
   nome: string;
   vagasDisponiveis: number;
-  vagasTotales?: number;
-  // outros campos que a turma possa ter
 }
 
 interface CursoData {
   id: string;
   nome: string;
-  // outros campos que o curso possa ter
 }
 
 export default function Inscricao() {
@@ -29,6 +25,7 @@ export default function Inscricao() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState(false);
+  const [menor, setMenor] = useState(false);
 
   const [form, setForm] = useState({
     nomeCompleto: "",
@@ -37,6 +34,11 @@ export default function Inscricao() {
     telefone: "",
     endereco: "",
     nascimento: "",
+    // Campos do responsável (se menor)
+    responsavelNome: "",
+    responsavelCpf: "",
+    responsavelTelefone: "",
+    responsavelEmail: "",
   });
 
   useEffect(() => {
@@ -47,12 +49,10 @@ export default function Inscricao() {
     }
     const carregarDados = async () => {
       try {
-        // Buscar todos os cursos
         const cursosSnap = await getDocs(collection(db, "cursos"));
         let cursoEncontrado: CursoData | null = null;
         let turmaEncontrada: TurmaData | null = null;
 
-        // Para cada curso, procurar a turma com o ID informado
         for (const cursoDoc of cursosSnap.docs) {
           const turmasSnap = await getDocs(collection(db, "cursos", cursoDoc.id, "turmas"));
           const turmaDoc = turmasSnap.docs.find(doc => doc.id === turmaId);
@@ -83,13 +83,21 @@ export default function Inscricao() {
   }, [turmaId]);
 
   const handleChange = (e: any) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    if (type === "checkbox") {
+      setMenor(checked);
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!turmaId) return alert("Turma inválida");
     if (vagasDisponiveis <= 0) return alert("Vagas esgotadas!");
+
+    // Validar CPF
+    if (!form.cpf || form.cpf.length < 11) return alert("CPF inválido (mínimo 11 dígitos)");
 
     // Verificar se já existe inscrição com este CPF para esta turma
     const q = query(
@@ -103,12 +111,19 @@ export default function Inscricao() {
       return;
     }
 
+    // Validar campos do responsável se menor
+    if (menor) {
+      if (!form.responsavelNome) return alert("Informe o nome do responsável");
+      if (!form.responsavelCpf || form.responsavelCpf.length < 11) return alert("CPF do responsável inválido");
+    }
+
     try {
       await addDoc(collection(db, "inscricoes"), {
         ...form,
         turmaId,
         cursoId: curso?.id,
         status: "pendente",
+        menor,
         createdAt: new Date(),
       });
       setSucesso(true);
@@ -139,64 +154,140 @@ export default function Inscricao() {
   }
 
   return (
-    <div style={{ maxWidth: 600, margin: "40px auto", padding: 20 }}>
-      <h1>Inscrição - {curso?.nome}</h1>
-      <p>Turma: <strong>{turma?.nome}</strong></p>
-      <p>Vagas disponíveis: <strong>{vagasDisponiveis}</strong></p>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          name="nomeCompleto"
-          placeholder="Nome completo *"
-          required
-          value={form.nomeCompleto}
-          onChange={handleChange}
-          style={{ width: "100%", padding: 8, marginBottom: 12 }}
-        />
-        <input
-          type="text"
-          name="cpf"
-          placeholder="CPF *"
-          required
-          value={form.cpf}
-          onChange={handleChange}
-          style={{ width: "100%", padding: 8, marginBottom: 12 }}
-        />
-        <input
-          type="email"
-          name="email"
-          placeholder="Email *"
-          required
-          value={form.email}
-          onChange={handleChange}
-          style={{ width: "100%", padding: 8, marginBottom: 12 }}
-        />
-        <input
-          type="tel"
-          name="telefone"
-          placeholder="Telefone *"
-          required
-          value={form.telefone}
-          onChange={handleChange}
-          style={{ width: "100%", padding: 8, marginBottom: 12 }}
-        />
-        <input
-          type="text"
-          name="endereco"
-          placeholder="Endereço"
-          value={form.endereco}
-          onChange={handleChange}
-          style={{ width: "100%", padding: 8, marginBottom: 12 }}
-        />
-        <input
-          type="date"
-          name="nascimento"
-          placeholder="Data de nascimento"
-          value={form.nascimento}
-          onChange={handleChange}
-          style={{ width: "100%", padding: 8, marginBottom: 12 }}
-        />
-        <button type="submit" style={{ padding: "10px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 4 }}>
+    <div style={{ maxWidth: 600, margin: "40px auto", padding: 20, background: "#fff", borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+      <h1 style={{ fontSize: 24, margin: "0 0 4px", color: "#1a2a4f" }}>Inscrição</h1>
+      <p style={{ fontSize: 14, color: "#6b7a8f", margin: "0 0 20px" }}>
+        Curso: <strong>{curso?.nome}</strong> &nbsp;|&nbsp; Turma: <strong>{turma?.nome}</strong> &nbsp;|&nbsp; Vagas: <strong>{vagasDisponiveis}</strong>
+      </p>
+
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Nome completo *</label>
+          <input
+            type="text"
+            name="nomeCompleto"
+            required
+            value={form.nomeCompleto}
+            onChange={handleChange}
+            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>CPF *</label>
+          <input
+            type="text"
+            name="cpf"
+            required
+            value={form.cpf}
+            onChange={handleChange}
+            placeholder="000.000.000-00"
+            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Email *</label>
+          <input
+            type="email"
+            name="email"
+            required
+            value={form.email}
+            onChange={handleChange}
+            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Telefone *</label>
+          <input
+            type="tel"
+            name="telefone"
+            required
+            value={form.telefone}
+            onChange={handleChange}
+            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Endereço</label>
+          <input
+            type="text"
+            name="endereco"
+            value={form.endereco}
+            onChange={handleChange}
+            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Data de nascimento *</label>
+          <input
+            type="date"
+            name="nascimento"
+            required
+            value={form.nascimento}
+            onChange={handleChange}
+            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+          />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" name="menor" checked={menor} onChange={handleChange} />
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Menor de idade</label>
+        </div>
+
+        {menor && (
+          <div style={{ padding: 16, background: "#f8f9fa", borderRadius: 8, display: "flex", flexDirection: "column", gap: 12 }}>
+            <h4 style={{ margin: 0, fontSize: 14, color: "#1a2a4f" }}>Dados do responsável</h4>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Nome do responsável *</label>
+              <input
+                type="text"
+                name="responsavelNome"
+                required={menor}
+                value={form.responsavelNome}
+                onChange={handleChange}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>CPF do responsável *</label>
+              <input
+                type="text"
+                name="responsavelCpf"
+                required={menor}
+                value={form.responsavelCpf}
+                onChange={handleChange}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Telefone do responsável *</label>
+              <input
+                type="tel"
+                name="responsavelTelefone"
+                required={menor}
+                value={form.responsavelTelefone}
+                onChange={handleChange}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Email do responsável</label>
+              <input
+                type="email"
+                name="responsavelEmail"
+                value={form.responsavelEmail}
+                onChange={handleChange}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            </div>
+          </div>
+        )}
+
+        <button type="submit" style={{ padding: "10px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 15, marginTop: 8 }}>
           Inscrever-se
         </button>
       </form>
