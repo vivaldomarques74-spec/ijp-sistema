@@ -52,9 +52,9 @@ export default function PreInscricoes() {
   const aprovar = async (inscricao: any, turmaId: string) => {
     if (!turmaId) return alert("Selecione uma turma");
 
-    const curso = cursos.find(c => c.id === inscricao.cursoId);
-    const turma = turmas[inscricao.cursoId]?.find(t => t.id === turmaId);
+    const turma = turmas[inscricao.cursoId]?.find((t: any) => t.id === turmaId);
     if (!turma) return alert("Turma não encontrada");
+
     if (turma.vagasDisponiveis <= 0) {
       alert("Esta turma não tem vagas disponíveis.");
       return;
@@ -62,29 +62,27 @@ export default function PreInscricoes() {
 
     try {
       await runTransaction(db, async (transaction) => {
-        // === 1. FAZER TODAS AS LEITURAS PRIMEIRO ===
+        // 1. LER a turma (read)
+        const turmaRef = doc(db, "cursos", inscricao.cursoId, "turmas", turmaId);
+        const turmaSnap = await transaction.get(turmaRef);
+        if (!turmaSnap.exists()) throw new Error("Turma não existe");
+        const turmaData = turmaSnap.data();
+        if (turmaData.vagasDisponiveis <= 0) throw new Error("Sem vagas");
+
+        // 2. LER o contador (read)
         const contadorRef = doc(db, "contadores", "matricula");
         const contadorSnap = await transaction.get(contadorRef);
-        if (!contadorSnap.exists()) {
-          throw new Error("Contador de matrícula não encontrado.");
-        }
-        const numeroAtual = contadorSnap.data().valor || 0;
-        const novoNumero = numeroAtual + 1;
+        if (!contadorSnap.exists()) throw new Error("Contador não encontrado");
+        const novoNumero = (contadorSnap.data()?.valor || 0) + 1;
 
-        // === 2. AGORA SIM, FAZER TODAS AS ESCRITAS ===
-        // 2a. Atualizar contador
+        // 3. AGORA escrever (write) – após todas as leituras
+        // Atualizar contador
         transaction.update(contadorRef, { valor: novoNumero });
 
-        // 2b. Atualizar inscrição
-        const refInscricao = doc(db, "inscricoes", inscricao.id);
-        transaction.update(refInscricao, {
-          status: "aprovado",
-          aprovadoEm: Timestamp.now(),
-          turmaId: turmaId,
-        });
-
-        // 2c. Criar aluno (usando o mesmo ID da inscrição)
+        // Gerar matrícula
         const matricula = `IJP-${String(novoNumero).padStart(5, "0")}`;
+
+        // Criar aluno
         const alunoRef = doc(db, "alunos", inscricao.id);
         transaction.set(alunoRef, {
           nomeCompleto: inscricao.nomeCompleto,
@@ -93,28 +91,27 @@ export default function PreInscricoes() {
           telefone: inscricao.telefone,
           endereco: inscricao.endereco || "",
           nascimento: inscricao.nascimento || "",
-          menor: inscricao.menor || false,
-          responsavelNome: inscricao.responsavelNome || "",
-          responsavelCpf: inscricao.responsavelCpf || "",
-          responsavelTelefone: inscricao.responsavelTelefone || "",
-          responsavelEmail: inscricao.responsavelEmail || "",
-          matricula: matricula,
+          matricula,
           matriculaNumero: novoNumero,
           cursoAtualId: inscricao.cursoId,
           turmaAtualId: turmaId,
           criadoEm: Timestamp.now(),
         });
 
-        // 2d. Atualizar turma (diminuir vagas e adicionar aluno)
-        const turmaRef = doc(db, "cursos", inscricao.cursoId, "turmas", turmaId);
-        const turmaSnap = await transaction.get(turmaRef); // essa leitura é permitida porque estamos antes de qualquer escrita? Na verdade, estamos no meio das escritas, mas é a única leitura que falta. Vamos mover para antes.
-        // CORREÇÃO: mover a leitura da turma para antes das escritas também.
-        // Mas como a turma já foi lida fora da transação (turma.vagasDisponiveis), podemos confiar no valor e apenas atualizar.
-        // Melhor: usar o valor já lido.
-        const vagasAtuais = turma.vagasDisponiveis;
+        // Atualizar turma: vagas e alunos
+        const alunosAtuais = turmaData.alunos || [];
         transaction.update(turmaRef, {
-          vagasDisponiveis: vagasAtuais - 1,
-          alunos: [...(turma.alunos || []), alunoRef.id],
+          vagasDisponiveis: turmaData.vagasDisponiveis - 1,
+          alunos: [...alunosAtuais, alunoRef.id],
+        });
+
+        // Atualizar inscrição
+        const inscricaoRef = doc(db, "inscricoes", inscricao.id);
+        transaction.update(inscricaoRef, {
+          status: "aprovado",
+          aprovadoEm: Timestamp.now(),
+          turmaId,
+          matricula,
         });
       });
 
@@ -127,14 +124,13 @@ export default function PreInscricoes() {
   };
 
   const rejeitar = async (id: string) => {
-    if (window.confirm("Rejeitar esta inscrição?")) {
-      try {
-        await updateDoc(doc(db, "inscricoes", id), { status: "rejeitado" });
-        carregarDados();
-      } catch (error: any) {
-        console.error("Erro ao rejeitar:", error);
-        alert(`Erro ao rejeitar: ${error.message}`);
-      }
+    if (!window.confirm("Rejeitar esta inscrição?")) return;
+    try {
+      await updateDoc(doc(db, "inscricoes", id), { status: "rejeitado" });
+      carregarDados();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao rejeitar inscrição.");
     }
   };
 
@@ -142,52 +138,78 @@ export default function PreInscricoes() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1 style={{ fontSize: 22, margin: "0 0 16px", color: "#1a2a4f" }}>Pré-inscrições</h1>
+      <h1 style={{ fontSize: 22, margin: "0 0 20px", color: "#1a2a4f" }}>Pré-inscrições</h1>
       {inscricoes.length === 0 && <p>Nenhuma inscrição pendente.</p>}
-      {inscricoes.map(ins => (
-        <div key={ins.id} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <p style={{ margin: 0 }}><strong>Nome:</strong> {ins.nomeCompleto}</p>
-            <p style={{ margin: 0 }}><strong>CPF:</strong> {ins.cpf}</p>
-            <p style={{ margin: 0 }}><strong>Email:</strong> {ins.email}</p>
-            <p style={{ margin: 0 }}><strong>Telefone:</strong> {ins.telefone}</p>
-            <p style={{ margin: 0 }}><strong>Curso:</strong> {cursos.find(c => c.id === ins.cursoId)?.nome || "N/A"}</p>
-            {ins.menor && (
-              <p style={{ margin: 0, gridColumn: "span 2", fontSize: 13, color: "#6b7a8f" }}>
-                ⚠️ Menor de idade - Responsável: {ins.responsavelNome}
-              </p>
-            )}
-          </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-            <select
-              onChange={(e) => {
-                const btn = document.getElementById(`btn-aprovar-${ins.id}`);
-                if (btn) btn.dataset.turmaId = e.target.value;
-              }}
-              style={{ padding: 4, border: "1px solid #ccc", borderRadius: 4 }}
-            >
-              <option value="">Selecione a turma</option>
-              {turmas[ins.cursoId]?.map(t => (
-                <option key={t.id} value={t.id}>{t.nome} (vagas: {t.vagasDisponiveis})</option>
-              ))}
-            </select>
-            <button
-              id={`btn-aprovar-${ins.id}`}
-              onClick={(e) => {
-                const turmaId = (e.target as HTMLButtonElement).dataset.turmaId;
-                if (!turmaId) return alert("Selecione uma turma");
-                aprovar(ins, turmaId);
-              }}
-              style={{ background: "#28a745", color: "#fff", border: "none", padding: "6px 16px", borderRadius: 4, cursor: "pointer" }}
-            >
-              Aprovar
-            </button>
-            <button
-              onClick={() => rejeitar(ins.id)}
-              style={{ background: "#dc3545", color: "#fff", border: "none", padding: "6px 16px", borderRadius: 4, cursor: "pointer" }}
-            >
-              Rejeitar
-            </button>
+      {inscricoes.map((ins) => (
+        <div
+          key={ins.id}
+          style={{
+            background: "#fff",
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+            border: "1px solid #e0e4e8",
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <p><strong>Nome:</strong> {ins.nomeCompleto}</p>
+              <p><strong>CPF:</strong> {ins.cpf}</p>
+              <p><strong>Email:</strong> {ins.email}</p>
+              <p><strong>Telefone:</strong> {ins.telefone}</p>
+              <p><strong>Curso:</strong> {cursos.find((c) => c.id === ins.cursoId)?.nome || "N/A"}</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
+              <select
+                onChange={(e) => {
+                  // Guardar seleção no dataset do botão
+                  const btn = document.getElementById(`btn-aprovar-${ins.id}`);
+                  if (btn) btn.dataset.turmaId = e.target.value;
+                }}
+                style={{ padding: 6, borderRadius: 4, border: "1px solid #ccc" }}
+              >
+                <option value="">Selecione a turma</option>
+                {turmas[ins.cursoId]?.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome} (vagas: {t.vagasDisponiveis})
+                  </option>
+                ))}
+              </select>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  id={`btn-aprovar-${ins.id}`}
+                  onClick={(e) => {
+                    const turmaId = (e.target as HTMLButtonElement).dataset.turmaId;
+                    if (!turmaId) return alert("Selecione uma turma");
+                    aprovar(ins, turmaId);
+                  }}
+                  style={{
+                    background: "#28a745",
+                    color: "#fff",
+                    border: "none",
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  Aprovar
+                </button>
+                <button
+                  onClick={() => rejeitar(ins.id)}
+                  style={{
+                    background: "#dc3545",
+                    color: "#fff",
+                    border: "none",
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  Rejeitar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ))}
