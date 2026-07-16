@@ -47,18 +47,31 @@ export default function PreInscricoes() {
 
     try {
       await runTransaction(db, async (transaction) => {
-        // 1. Atualizar inscrição
-        const refInsc = doc(db, "inscricoes", inscricao.id);
-        transaction.update(refInsc, { status: "aprovado", aprovadoEm: Timestamp.now(), turmaId });
-
-        // 2. Contador de matrícula
+        // 1. LER todos os documentos necessários primeiro
+        const inscRef = doc(db, "inscricoes", inscricao.id);
         const contadorRef = doc(db, "contadores", "matricula");
-        const contadorSnap = await transaction.get(contadorRef);
-        const novoNumero = (contadorSnap.data()?.valor || 0) + 1;
-        transaction.update(contadorRef, { valor: novoNumero });
-        const matricula = `IJP-${String(novoNumero).padStart(5, "0")}`;
+        const turmaRef = doc(db, "cursos", inscricao.cursoId, "turmas", turmaId);
 
-        // 3. Criar aluno
+        const [inscSnap, contadorSnap, turmaSnap] = await Promise.all([
+          transaction.get(inscRef),
+          transaction.get(contadorRef),
+          transaction.get(turmaRef),
+        ]);
+
+        if (!inscSnap.exists()) throw new Error("Inscrição não existe");
+        if (!contadorSnap.exists()) throw new Error("Contador não existe");
+        if (!turmaSnap.exists()) throw new Error("Turma não existe");
+
+        const novoNumero = (contadorSnap.data()?.valor || 0) + 1;
+        const matricula = `IJP-${String(novoNumero).padStart(5, "0")}`;
+        const vagasDisponiveis = turmaSnap.data().vagasDisponiveis || 0;
+        if (vagasDisponiveis <= 0) throw new Error("Vagas esgotadas");
+
+        // 2. AGORA escrever (atualizações)
+        transaction.update(inscRef, { status: "aprovado", aprovadoEm: Timestamp.now(), turmaId });
+        transaction.update(contadorRef, { valor: novoNumero });
+
+        // Criar aluno
         const alunoRef = doc(db, "alunos", inscricao.id);
         transaction.set(alunoRef, {
           nomeCompleto: inscricao.nomeCompleto,
@@ -76,11 +89,11 @@ export default function PreInscricoes() {
           cursos: [{ cursoId: inscricao.cursoId, turmaId: turmaId, data: Timestamp.now() }],
         });
 
-        // 4. Atualizar turma (diminuir vagas)
-        const turmaRef = doc(db, "cursos", inscricao.cursoId, "turmas", turmaId);
+        // Atualizar turma (diminuir vagas)
+        const alunosAtuais = turmaSnap.data().alunos || [];
         transaction.update(turmaRef, {
-          vagasDisponiveis: turma.vagasDisponiveis - 1,
-          alunos: [...(turma.alunos || []), alunoRef.id],
+          vagasDisponiveis: vagasDisponiveis - 1,
+          alunos: [...alunosAtuais, alunoRef.id],
         });
       });
       alert("Aluno aprovado e matrícula gerada!");
@@ -99,6 +112,8 @@ export default function PreInscricoes() {
 
   if (carregando) return <div>Carregando...</div>;
 
+  const buttonStyle = { padding: "4px 12px", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 4 };
+
   return (
     <div>
       <h2 style={{ fontSize: 18, margin: "0 0 16px", color: "#1a2a4f" }}>Pré-inscrições</h2>
@@ -114,13 +129,13 @@ export default function PreInscricoes() {
             <p><strong>Menor:</strong> {ins.menor ? "Sim" : "Não"}</p>
             {ins.menor && <p><strong>Responsável:</strong> {ins.responsavelNome}</p>}
           </div>
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <select
               onChange={(e) => {
                 const btn = document.getElementById(`btn-aprovar-${ins.id}`);
                 if (btn) (btn as HTMLButtonElement).dataset.turmaId = e.target.value;
               }}
-              style={{ padding: 4, marginRight: 8 }}
+              style={{ padding: 6, border: "1px solid #ccc", borderRadius: 4 }}
             >
               <option value="">Selecione a turma</option>
               {turmasMap[ins.cursoId]?.map(t => (
@@ -135,11 +150,11 @@ export default function PreInscricoes() {
                 if (!turmaId) return alert("Selecione uma turma");
                 aprovar(ins, turmaId);
               }}
-              style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, marginRight: 8, cursor: "pointer" }}
+              style={{ ...buttonStyle, background: "#28a745", color: "#fff" }}
             >
               Aprovar
             </button>
-            <button onClick={() => rejeitar(ins.id)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>
+            <button onClick={() => rejeitar(ins.id)} style={{ ...buttonStyle, background: "#dc3545", color: "#fff" }}>
               Rejeitar
             </button>
           </div>
