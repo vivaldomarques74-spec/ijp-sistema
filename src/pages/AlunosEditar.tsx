@@ -167,14 +167,15 @@ export default function AlunosEditar() {
     navigate("/alunos");
   };
 
+  // Funções para obter nomes com fallback
   const getCursoNome = (cursoId: string) => {
     const curso = cursos.find(c => c.id === cursoId);
-    return curso?.nome || cursoId;
+    return curso?.nome || "Curso não encontrado";
   };
 
   const getServicoNome = (tipoId: string) => {
     const servico = tiposAtendimento.find(t => t.id === tipoId);
-    return servico?.nome || tipoId;
+    return servico?.nome || "Serviço não encontrado";
   };
 
   const inputStyle = { width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, marginBottom: 8 };
