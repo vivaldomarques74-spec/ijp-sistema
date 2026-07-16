@@ -80,7 +80,9 @@ export default function AlunosCadastrar() {
   return (
     <div style={{ maxWidth: 700, margin: "0 auto" }}>
       <h2 style={{ fontSize: 20, color: "#1a2a4f" }}>Novo Aluno</h2>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+
+      {/* Card principal com campos básicos */}
+      <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <input placeholder="Nome completo" name="nomeCompleto" value={dadosAluno.nomeCompleto} onChange={handleChange} style={inputStyle} />
           <input placeholder="CPF" name="cpf" onChange={handleChange} style={inputStyle} />
@@ -101,8 +103,15 @@ export default function AlunosCadastrar() {
             <input placeholder="Email do responsável" name="responsavelEmail" onChange={handleChange} style={inputStyle} />
           </div>
         )}
-        <h4 style={{ margin: "16px 0 8px" }}>Curso (opcional)</h4>
-        <div style={{ display: "flex", gap: 12 }}>
+        <button onClick={salvar} disabled={carregando} style={{ padding: "8px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          {carregando ? "Salvando..." : "Salvar Aluno"}
+        </button>
+      </div>
+
+      {/* Cards lado a lado: Curso e Serviços */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <h4 style={{ margin: "0 0 12px" }}>Curso (opcional)</h4>
           <select name="cursoAtualId" value={dadosAluno.cursoAtualId} onChange={handleChange} style={inputStyle}>
             <option value="">Curso</option>
             {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -112,16 +121,20 @@ export default function AlunosCadastrar() {
             {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </select>
         </div>
-        <h4 style={{ margin: "16px 0 8px" }}>Serviços de Saúde</h4>
-        {tiposAtendimento.map(t => (
-          <label key={t.id} style={{ display: "block", marginBottom: 4 }}>
-            <input type="checkbox" checked={!!dadosAluno.servicosAtivos.find(s => s.tipoId === t.id)} onChange={() => toggleServico(t.id)} />
-            {t.nome}
-          </label>
-        ))}
-        <button onClick={salvar} disabled={carregando} style={{ marginTop: 16, padding: "8px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Salvando..." : "Salvar"}
-        </button>
+
+        <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <h4 style={{ margin: "0 0 12px" }}>Serviços de Saúde</h4>
+          {tiposAtendimento.map(t => (
+            <label key={t.id} style={{ display: "block", marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={!!dadosAluno.servicosAtivos.find(s => s.tipoId === t.id)}
+                onChange={() => toggleServico(t.id)}
+              />
+              {t.nome}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
