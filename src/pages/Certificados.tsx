@@ -127,23 +127,18 @@ export default function Certificados() {
     const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "08 de Setembro de 2026";
     const periodo = `no período de ${dataInicio} a ${dataFim}`;
 
-    const pdf = new jsPDF({
-      orientation: "landscape",
-      unit: "mm",
-      format: "a4",
-    });
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const marginX = 25;
     const marginY = 20;
 
-    // Logo
     try {
       const logoImg = new Image();
       logoImg.src = "/logo-ijp.png";
       pdf.addImage(logoImg, "PNG", pageWidth / 2 - 40, marginY, 80, 35);
     } catch (error) {
-      console.warn("Logo não encontrada em /logo-ijp.png");
+      console.warn("Logo não encontrada");
     }
 
     pdf.setFont("helvetica", "bold");
@@ -219,64 +214,65 @@ export default function Certificados() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Certificados</h1>
+    <div>
       <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
         <div>
-          <label>Curso: </label>
-          <select value={cursoId} onChange={e => setCursoId(e.target.value)}>
+          <label style={{ marginRight: 8 }}>Curso:</label>
+          <select value={cursoId} onChange={e => setCursoId(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
             <option value="">Selecione</option>
             {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </div>
         <div>
-          <label>Turma: </label>
-          <select value={turmaId} onChange={e => setTurmaId(e.target.value)} disabled={!cursoId}>
+          <label style={{ marginRight: 8 }}>Turma:</label>
+          <select value={turmaId} onChange={e => setTurmaId(e.target.value)} disabled={!cursoId} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
             <option value="">Selecione</option>
             {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </select>
         </div>
       </div>
 
-      {carregando && <p>Carregando dados...</p>}
+      {carregando && <p>Carregando...</p>}
 
       {!carregando && turmaId && (
         <>
           <div style={{ marginBottom: 16 }}>
-            <button onClick={emitirTodosCertificados} disabled={alunos.filter(a => a.status === "aprovado").length === 0}>
+            <button onClick={emitirTodosCertificados} disabled={alunos.filter(a => a.status === "aprovado").length === 0} style={{ background: "#28a745", color: "#fff", border: "none", padding: "6px 16px", borderRadius: 4, cursor: "pointer" }}>
               Emitir certificados para todos aprovados
             </button>
           </div>
           {alunos.length === 0 && <p>Nenhum aluno encontrado para esta turma.</p>}
           {alunos.length > 0 && (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th>Aluno</th>
-                  <th>Presenças</th>
-                  <th>Total de aulas</th>
-                  <th>Porcentagem</th>
-                  <th>Status</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {alunos.map(aluno => (
-                  <tr key={aluno.id}>
-                    <td style={{ padding: 8 }}>{aluno.nomeCompleto}</td>
-                    <td style={{ padding: 8 }}>{aluno.presencas}</td>
-                    <td style={{ padding: 8 }}>{turmas.find(t => t.id === turmaId)?.totalAulas || 0}</td>
-                    <td style={{ padding: 8 }}>{aluno.porcentagem}%</td>
-                    <td style={{ padding: 8, color: aluno.status === "aprovado" ? "green" : "red" }}>
-                      {aluno.status === "aprovado" ? "Aprovado" : "Reprovado"}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <button onClick={() => emitirCertificado(aluno)}>Emitir certificado</button>
-                    </td>
+            <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #e0e4e8" }}>
+                    <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Aluno</th>
+                    <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Presenças</th>
+                    <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Total de aulas</th>
+                    <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Porcentagem</th>
+                    <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Status</th>
+                    <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {alunos.map(aluno => (
+                    <tr key={aluno.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                      <td style={{ padding: 12 }}>{aluno.nomeCompleto}</td>
+                      <td style={{ padding: 12 }}>{aluno.presencas}</td>
+                      <td style={{ padding: 12 }}>{turmas.find(t => t.id === turmaId)?.totalAulas || 0}</td>
+                      <td style={{ padding: 12 }}>{aluno.porcentagem}%</td>
+                      <td style={{ padding: 12, color: aluno.status === "aprovado" ? "green" : "red" }}>
+                        {aluno.status === "aprovado" ? "Aprovado" : "Reprovado"}
+                      </td>
+                      <td style={{ padding: 12 }}>
+                        <button onClick={() => emitirCertificado(aluno)} style={{ background: "#0070f3", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Emitir</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

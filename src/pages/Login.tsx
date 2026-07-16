@@ -1,101 +1,67 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../services/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../services/firebase";
+import logo from "../assets/logo-ijp.png";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-
+  const [codigo, setCodigo] = useState("");
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!email || !password) {
-      alert("Preencha email e senha");
-      return;
-    }
-
+    setErro("");
+    if (!codigo.trim()) return setErro("Digite o código de acesso");
+    setCarregando(true);
     try {
-      setLoading(true);
-
-      await signInWithEmailAndPassword(auth, email, password);
-
-      // 🔥 login ok → entra no sistema
-      navigate("/cursos", { replace: true });
+      const docRef = doc(db, "config", "acesso");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const codigoCorreto = docSnap.data().codigo;
+        if (codigo === codigoCorreto) {
+          localStorage.setItem("authCodigo", codigo);
+          navigate("/");
+          return;
+        }
+      }
+      setErro("Código inválido");
     } catch (error) {
-      alert("Email ou senha inválidos");
-      console.error("Erro login:", error);
+      console.error(error);
+      setErro("Erro ao verificar código");
     } finally {
-      setLoading(false);
+      setCarregando(false);
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#000",
-      }}
-    >
-      <form
-        onSubmit={handleLogin}
-        style={{
-          width: "100%",
-          maxWidth: 360,
-          padding: 24,
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <h1 style={{ color: "#fff", textAlign: "center" }}>Login</h1>
-
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{
-            padding: 12,
-            borderRadius: 6,
-            border: "none",
-          }}
-        />
-
-        <input
-          type="password"
-          placeholder="Senha"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{
-            padding: 12,
-            borderRadius: 6,
-            border: "none",
-          }}
-        />
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: 12,
-            borderRadius: 6,
-            border: "none",
-            background: loading ? "#555" : "#fff",
-            color: "#000",
-            fontWeight: "bold",
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f4f6f9" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 40, width: "100%", maxWidth: 400, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <img src={logo} alt="IJP" style={{ height: 80 }} />
+          <h1 style={{ fontSize: 24, margin: "16px 0 4px", color: "#1a2a4f" }}>Instituto Jovens Periféricos</h1>
+          <p style={{ fontSize: 14, color: "#6b7a8f" }}>Digite o código de acesso da equipe</p>
+        </div>
+        <form onSubmit={handleLogin}>
+          <input
+            type="password"
+            placeholder="Código de acesso"
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            style={{ width: "100%", padding: 12, borderRadius: 8, border: "1px solid #ccc", fontSize: 16, marginBottom: 16 }}
+            autoFocus
+          />
+          {erro && <p style={{ color: "#dc3545", fontSize: 14, margin: "-8px 0 12px" }}>{erro}</p>}
+          <button
+            type="submit"
+            disabled={carregando}
+            style={{ width: "100%", padding: 12, background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, fontSize: 16, cursor: "pointer" }}
+          >
+            {carregando ? "Verificando..." : "Acessar"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

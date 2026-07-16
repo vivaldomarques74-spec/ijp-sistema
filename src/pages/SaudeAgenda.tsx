@@ -65,7 +65,7 @@ export default function SaudeAgenda() {
           tipoPaciente: "social",
           recorrente: true,
           recorrenteTipo: tipoRecorrencia,
-          groupId: groupId,
+          groupId,
           createdAt: new Date(),
         });
       }
@@ -124,52 +124,58 @@ export default function SaudeAgenda() {
 
   return (
     <div>
-      <h2>Criar horário</h2>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
-        <select value={form.profissionalId} onChange={e => setForm({ ...form, profissionalId: e.target.value })}>
+      <h3 style={{ fontSize: 16, margin: "0 0 16px" }}>Criar horário</h3>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={form.profissionalId} onChange={e => setForm({ ...form, profissionalId: e.target.value })} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
           <option value="">Profissional</option>
           {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
         </select>
-        <select value={form.tipoId} onChange={e => setForm({ ...form, tipoId: e.target.value })}>
-          <option value="">Tipo de atendimento</option>
+        <select value={form.tipoId} onChange={e => setForm({ ...form, tipoId: e.target.value })} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
+          <option value="">Tipo</option>
           {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
         </select>
-        <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })} />
-        <input type="time" value={form.horario} onChange={e => setForm({ ...form, horario: e.target.value })} />
-        <label>
+        <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
+        <input type="time" value={form.horario} onChange={e => setForm({ ...form, horario: e.target.value })} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
+        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <input type="checkbox" checked={recorrente} onChange={e => setRecorrente(e.target.checked)} />
-          Repetir semanalmente (10 semanas)
+          Repetir (10 semanas)
         </label>
         {recorrente && (
-          <select value={tipoRecorrencia} onChange={e => setTipoRecorrencia(e.target.value as any)}>
-            <option value="livre">Slot livre (pacientes diferentes)</option>
-            <option value="fixo">Vínculo fixo (mesmo paciente todas as semanas)</option>
+          <select value={tipoRecorrencia} onChange={e => setTipoRecorrencia(e.target.value as any)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
+            <option value="livre">Slot livre</option>
+            <option value="fixo">Vínculo fixo</option>
           </select>
         )}
-        <button onClick={adicionarHorario}>Adicionar horários</button>
+        <button onClick={adicionarHorario} style={{ background: "#0070f3", color: "#fff", border: "none", padding: "6px 16px", borderRadius: 8, cursor: "pointer" }}>Criar</button>
       </div>
 
-      <hr />
-      <h2>Filtros</h2>
-      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
-        <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)}>
+      <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Filtros</h3>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
           <option value="">Todos os profissionais</option>
           {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
         </select>
-        <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
+        <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
           <option value="">Todos os tipos</option>
           {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
         </select>
-        <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)} />
-        <button onClick={() => { setFiltroProfissional(""); setFiltroTipo(""); setFiltroData(""); }}>Limpar filtros</button>
+        <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
+        <button onClick={() => { setFiltroProfissional(""); setFiltroTipo(""); setFiltroData(""); }} style={{ background: "#6c757d", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Limpar</button>
       </div>
 
-      <h2>Horários cadastrados</h2>
-      <div style={{ overflowX: "auto" }}>
+      <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Horários cadastrados</h3>
+      {horariosFiltrados.length === 0 && <p>Nenhum horário encontrado.</p>}
+      <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr>
-              <th>Data</th><th>Horário</th><th>Profissional</th><th>Tipo</th><th>Status</th><th>Paciente</th><th>Ações</th>
+            <tr style={{ borderBottom: "1px solid #e0e4e8" }}>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Data</th>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Horário</th>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Profissional</th>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Tipo</th>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Status</th>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Paciente</th>
+              <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -178,29 +184,24 @@ export default function SaudeAgenda() {
               const tipo = tipos.find(t => t.id === h.tipoId);
               const isLivre = (h.status === "livre" || h.status === "aguardandoVinculo") && !h.alunoId && !h.pacienteInfo;
               return (
-                <tr key={h.id}>
-                  <td style={{ padding: 8 }}>{h.data}</td>
-                  <td style={{ padding: 8 }}>{h.horario}</td>
-                  <td style={{ padding: 8 }}>{prof?.nome || h.profissionalId}</td>
-                  <td style={{ padding: 8 }}>{tipo?.nome || h.tipoId}</td>
-                  <td style={{ padding: 8 }}>{h.status}</td>
-                  <td style={{ padding: 8 }}>
-                    {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente social" : "Livre")}
+                <tr key={h.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                  <td style={{ padding: 12 }}>{h.data}</td>
+                  <td style={{ padding: 12 }}>{h.horario}</td>
+                  <td style={{ padding: 12 }}>{prof?.nome || h.profissionalId}</td>
+                  <td style={{ padding: 12 }}>{tipo?.nome || h.tipoId}</td>
+                  <td style={{ padding: 12 }}>{h.status}</td>
+                  <td style={{ padding: 12 }}>
+                    {h.tipoPaciente === "particular" ? h.pacienteInfo?.nome : (h.alunoId ? "Paciente" : "Livre")}
                   </td>
-                  <td style={{ padding: 8 }}>
+                  <td style={{ padding: 12 }}>
                     {isLivre && (
-                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)}>Particular</button>
+                      <button onClick={() => agendarParticular(h.id, h.profissionalId, h.data, h.horario, h.tipoId)} style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, marginRight: 4, cursor: "pointer" }}>Particular</button>
                     )}
-                    <button onClick={() => excluirHorario(h.id)}>Excluir</button>
+                    <button onClick={() => excluirHorario(h.id)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, cursor: "pointer" }}>Excluir</button>
                   </td>
                 </tr>
               );
             })}
-            {horariosFiltrados.length === 0 && (
-              <tr>
-                <td colSpan={7}>Nenhum horário cadastrado.</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>

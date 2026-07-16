@@ -27,11 +27,11 @@ export default function Layout() {
     { path: "/saude", label: "Saúde", icon: "🏥" },
     { path: "/certificados", label: "Certificados", icon: "📜" },
     { path: "/pre-inscricoes", label: "Pré-inscrições", icon: "📝" },
+    { path: "/matriculas-turma", label: "Matrículas", icon: "📋" },
   ];
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#f4f6f9" }}>
-      {/* Menu lateral */}
       <aside
         style={{
           width: 240,
@@ -71,16 +71,6 @@ export default function Layout() {
                 fontWeight: location.pathname === item.path ? 600 : 400,
                 marginBottom: 4,
                 transition: "all 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                if (location.pathname !== item.path) {
-                  e.currentTarget.style.background = "#f0f2f5";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (location.pathname !== item.path) {
-                  e.currentTarget.style.background = "transparent";
-                }
               }}
             >
               <span style={{ fontSize: 18 }}>{item.icon}</span>
@@ -131,9 +121,7 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Conteúdo principal */}
       <main style={{ marginLeft: 240, flex: 1, padding: 24 }}>
-        {/* Topbar com data/hora */}
         <div
           style={{
             display: "flex",

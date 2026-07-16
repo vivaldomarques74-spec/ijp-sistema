@@ -34,7 +34,6 @@ export default function Inscricao() {
     telefone: "",
     endereco: "",
     nascimento: "",
-    // Campos do responsável (se menor)
     responsavelNome: "",
     responsavelCpf: "",
     responsavelTelefone: "",
@@ -95,11 +94,8 @@ export default function Inscricao() {
     e.preventDefault();
     if (!turmaId) return alert("Turma inválida");
     if (vagasDisponiveis <= 0) return alert("Vagas esgotadas!");
+    if (form.cpf.length < 11) return alert("CPF inválido (mínimo 11 dígitos)");
 
-    // Validar CPF
-    if (!form.cpf || form.cpf.length < 11) return alert("CPF inválido (mínimo 11 dígitos)");
-
-    // Verificar se já existe inscrição com este CPF para esta turma
     const q = query(
       collection(db, "inscricoes"),
       where("turmaId", "==", turmaId),
@@ -111,7 +107,6 @@ export default function Inscricao() {
       return;
     }
 
-    // Validar campos do responsável se menor
     if (menor) {
       if (!form.responsavelNome) return alert("Informe o nome do responsável");
       if (!form.responsavelCpf || form.responsavelCpf.length < 11) return alert("CPF do responsável inválido");
@@ -163,76 +158,28 @@ export default function Inscricao() {
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div>
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Nome completo *</label>
-          <input
-            type="text"
-            name="nomeCompleto"
-            required
-            value={form.nomeCompleto}
-            onChange={handleChange}
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+          <input type="text" name="nomeCompleto" required value={form.nomeCompleto} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
         </div>
-
         <div>
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>CPF *</label>
-          <input
-            type="text"
-            name="cpf"
-            required
-            value={form.cpf}
-            onChange={handleChange}
-            placeholder="000.000.000-00"
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+          <input type="text" name="cpf" required value={form.cpf} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
         </div>
-
         <div>
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Email *</label>
-          <input
-            type="email"
-            name="email"
-            required
-            value={form.email}
-            onChange={handleChange}
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+          <input type="email" name="email" required value={form.email} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
         </div>
-
         <div>
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Telefone *</label>
-          <input
-            type="tel"
-            name="telefone"
-            required
-            value={form.telefone}
-            onChange={handleChange}
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+          <input type="tel" name="telefone" required value={form.telefone} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
         </div>
-
         <div>
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Endereço</label>
-          <input
-            type="text"
-            name="endereco"
-            value={form.endereco}
-            onChange={handleChange}
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+          <input type="text" name="endereco" value={form.endereco} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
         </div>
-
         <div>
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Data de nascimento *</label>
-          <input
-            type="date"
-            name="nascimento"
-            required
-            value={form.nascimento}
-            onChange={handleChange}
-            style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-          />
+          <input type="date" name="nascimento" required value={form.nascimento} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
         </div>
-
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input type="checkbox" name="menor" checked={menor} onChange={handleChange} />
           <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Menor de idade</label>
@@ -243,46 +190,19 @@ export default function Inscricao() {
             <h4 style={{ margin: 0, fontSize: 14, color: "#1a2a4f" }}>Dados do responsável</h4>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Nome do responsável *</label>
-              <input
-                type="text"
-                name="responsavelNome"
-                required={menor}
-                value={form.responsavelNome}
-                onChange={handleChange}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-              />
+              <input type="text" name="responsavelNome" required={menor} value={form.responsavelNome} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>CPF do responsável *</label>
-              <input
-                type="text"
-                name="responsavelCpf"
-                required={menor}
-                value={form.responsavelCpf}
-                onChange={handleChange}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-              />
+              <input type="text" name="responsavelCpf" required={menor} value={form.responsavelCpf} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Telefone do responsável *</label>
-              <input
-                type="tel"
-                name="responsavelTelefone"
-                required={menor}
-                value={form.responsavelTelefone}
-                onChange={handleChange}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-              />
+              <input type="tel" name="responsavelTelefone" required={menor} value={form.responsavelTelefone} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: "#1a2a4f" }}>Email do responsável</label>
-              <input
-                type="email"
-                name="responsavelEmail"
-                value={form.responsavelEmail}
-                onChange={handleChange}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-              />
+              <input type="email" name="responsavelEmail" value={form.responsavelEmail} onChange={handleChange} style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }} />
             </div>
           </div>
         )}

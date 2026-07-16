@@ -35,6 +35,7 @@ import TesteCertificado from "./pages/TesteCertificado";
 import PresencaProfessor from "./pages/PresencaProfessor";
 import Inscricao from "./pages/Inscricao";
 import PreInscricoes from "./pages/PreInscricoes";
+import MatriculasTurma from "./pages/MatriculasTurma";
 
 export default function App() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/certificados" element={<Certificados />} />
         <Route path="/teste-certificado" element={<TesteCertificado />} />
         <Route path="/pre-inscricoes" element={<PreInscricoes />} />
+        <Route path="/matriculas-turma" element={<MatriculasTurma />} />
       </Route>
     </Routes>
   );
