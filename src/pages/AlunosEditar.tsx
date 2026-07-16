@@ -167,6 +167,17 @@ export default function AlunosEditar() {
     navigate("/alunos");
   };
 
+  // Funções para obter nomes (sem exibir IDs)
+  const getCursoNome = (cursoId: string) => {
+    const curso = cursos.find(c => c.id === cursoId);
+    return curso?.nome || cursoId;
+  };
+
+  const getServicoNome = (tipoId: string) => {
+    const servico = tiposAtendimento.find(t => t.id === tipoId);
+    return servico?.nome || tipoId;
+  };
+
   const inputStyle = { width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, marginBottom: 8 };
   const buttonStyle = (type: "primary" | "secondary") => ({
     padding: "8px 16px",
@@ -211,6 +222,7 @@ export default function AlunosEditar() {
       </div>
 
       <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        {/* Adicionar Curso */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Adicionar Curso</h3>
           <select value={novoCursoId} onChange={e => setNovoCursoId(e.target.value)} style={inputStyle}>
@@ -222,14 +234,15 @@ export default function AlunosEditar() {
             {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </select>
           <button onClick={adicionarCurso} style={buttonStyle("secondary")}>Adicionar Curso</button>
+          {/* Lista de cursos já vinculados (apenas nomes) */}
           <div style={{ marginTop: 8, fontSize: 13, color: "#6b7a8f" }}>
-            {dadosAluno.cursos.map((c: any) => {
-              const cursoNome = cursos.find(cur => cur.id === c.cursoId)?.nome || c.cursoId;
-              return <div key={c.cursoId}>• {cursoNome}</div>;
-            })}
+            {dadosAluno.cursos.map((c: any) => (
+              <div key={c.cursoId}>• {getCursoNome(c.cursoId)}</div>
+            ))}
           </div>
         </div>
 
+        {/* Adicionar Serviço de Saúde */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Adicionar Serviço de Saúde</h3>
           <select value={novoServicoId} onChange={e => setNovoServicoId(e.target.value)} style={inputStyle}>
@@ -243,11 +256,11 @@ export default function AlunosEditar() {
             </select>
           )}
           <button onClick={adicionarServico} style={buttonStyle("secondary")}>Adicionar Serviço</button>
+          {/* Lista de serviços já vinculados (apenas nomes) */}
           <div style={{ marginTop: 8, fontSize: 13, color: "#6b7a8f" }}>
-            {dadosAluno.servicosAtivos.map((s: any) => {
-              const nome = tiposAtendimento.find(t => t.id === s.tipoId)?.nome || s.tipoId;
-              return <div key={s.tipoId}>• {nome}</div>;
-            })}
+            {dadosAluno.servicosAtivos.map((s: any) => (
+              <div key={s.tipoId}>• {getServicoNome(s.tipoId)}</div>
+            ))}
           </div>
         </div>
       </div>
