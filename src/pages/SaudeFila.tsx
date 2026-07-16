@@ -58,9 +58,7 @@ export default function SaudeFila() {
       });
       setFila(lista);
       const novasSelecoes: Record<string, any> = {};
-      for (const p of lista) {
-        novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
-      }
+      for (const p of lista) novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
       setSelecoes(novasSelecoes);
     };
     carregarFila();
@@ -70,15 +68,10 @@ export default function SaudeFila() {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
       const snap = await getDocs(collection(db, "agendamentos"));
-      const todos: Agendamento[] = snap.docs
+      const todos = snap.docs
         .filter(d => {
           const data = d.data();
-          return (
-            (data.status === "livre" || data.status === "aguardandoVinculo") &&
-            !data.alunoId &&
-            !data.pacienteInfo &&
-            data.data >= hoje
-          );
+          return (data.status === "livre" || data.status === "aguardandoVinculo") && !data.alunoId && !data.pacienteInfo && data.data >= hoje;
         })
         .map(d => ({
           id: d.id,
@@ -119,11 +112,9 @@ export default function SaudeFila() {
     const selecao = selecoes[alunoId];
     if (!selecao.profissionalId) return alert("Selecione um profissional");
     if (!selecao.horarioId) return alert("Selecione um horário");
-
     const horarioRef = doc(db, "agendamentos", selecao.horarioId);
     const horarioSnap = await getDoc(horarioRef);
     const horarioData = horarioSnap.data() as Agendamento;
-
     if (horarioData?.recorrenteTipo === "fixo" || horarioData?.groupId) {
       const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", horarioData.groupId));
       const groupSnap = await getDocs(groupQuery);
@@ -135,10 +126,9 @@ export default function SaudeFila() {
       await updateDoc(horarioRef, { alunoId, status: "ocupado" });
       alert("Paciente vinculado ao horário.");
     }
-
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-
+    // recarregar fila
     const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
     const snap = await getDocs(q);
     const lista = [];
@@ -160,9 +150,7 @@ export default function SaudeFila() {
     });
     setFila(lista);
     const novasSelecoes: Record<string, any> = {};
-    for (const p of lista) {
-      novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
-    }
+    for (const p of lista) novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
     setSelecoes(novasSelecoes);
   };
 
@@ -172,6 +160,7 @@ export default function SaudeFila() {
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
+        // recarregar
         const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
         const snap = await getDocs(q);
         const lista = [];
@@ -193,9 +182,7 @@ export default function SaudeFila() {
         });
         setFila(lista);
         const novasSelecoes: Record<string, any> = {};
-        for (const p of lista) {
-          novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
-        }
+        for (const p of lista) novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
         setSelecoes(novasSelecoes);
       }
     }
@@ -207,85 +194,48 @@ export default function SaudeFila() {
   };
 
   const atualizarSelecao = (alunoId: string, field: string, value: string) => {
-    setSelecoes(prev => ({
-      ...prev,
-      [alunoId]: { ...prev[alunoId], [field]: value },
-    }));
+    setSelecoes(prev => ({ ...prev, [alunoId]: { ...prev[alunoId], [field]: value } }));
   };
+
+  const selectStyle = { padding: 6, border: "1px solid #ccc", borderRadius: 6, background: "#fff", width: "100%" };
 
   return (
     <div>
-      <h2>Fila de Espera (Agendados)</h2>
-      <select onChange={e => setTipoId(e.target.value)} value={tipoId}>
+      <h3 style={{ fontSize: 16, margin: "0 0 12px", color: "#1a2a4f" }}>Fila de Espera (Agendados)</h3>
+      <select onChange={e => setTipoId(e.target.value)} value={tipoId} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, marginBottom: 16 }}>
         <option value="">Selecione o tipo</option>
         {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
       </select>
-
       {tipoId && (
         <div>
-          <h3>Pacientes aguardando:</h3>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th>Paciente</th>
-                  <th>Matrícula</th>
-                  <th>Profissional</th>
-                  <th>Horário livre</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fila.map(paciente => (
-                  <tr key={paciente.alunoId}>
-                    <td style={{ padding: 8 }}>{paciente.nome}</td>
-                    <td style={{ padding: 8 }}>{paciente.matricula}</td>
-                    <td style={{ padding: 8 }}>
-                      <select
-                        value={selecoes[paciente.alunoId]?.profissionalId || ""}
-                        onChange={e => atualizarSelecao(paciente.alunoId, "profissionalId", e.target.value)}
-                      >
-                        <option value="">Selecione</option>
-                        {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
-                      </select>
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <select
-                        value={selecoes[paciente.alunoId]?.horarioId || ""}
-                        onChange={e => atualizarSelecao(paciente.alunoId, "horarioId", e.target.value)}
-                        disabled={!selecoes[paciente.alunoId]?.profissionalId}
-                      >
-                        <option value="">Horário livre</option>
-                        {selecoes[paciente.alunoId]?.profissionalId &&
-                          horariosPorProfissional[selecoes[paciente.alunoId].profissionalId]?.map(h => (
-                            <option key={h.id} value={h.id}>
-                              {formatarData(h.data)} {h.horario} {h.groupId ? "(fixo)" : ""}
-                            </option>
-                          ))}
-                      </select>
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <button onClick={() => vincular(paciente.alunoId)} style={{ marginRight: 8 }}>
-                        Vincular
-                      </button>
-                      <button onClick={() => removerDaFila(paciente.alunoId, paciente.nome)} style={{ background: "#dc3545", color: "#fff" }}>
-                        Remover
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              {fila.length === 0 && (
-                <tbody>
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: "center", padding: 16 }}>
-                      Nenhum paciente na fila.
-                    </td>
-                  </tr>
-                </tbody>
-              )}
-            </table>
-          </div>
+          {fila.length === 0 && <p>Nenhum paciente aguardando.</p>}
+          {fila.map(paciente => (
+            <div key={paciente.alunoId} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: "1 1 180px" }}>
+                  <strong>{paciente.nome}</strong> <span style={{ fontSize: 13, color: "#6b7a8f" }}>({paciente.matricula})</span>
+                </div>
+                <div style={{ flex: "1 1 140px" }}>
+                  <select value={selecoes[paciente.alunoId]?.profissionalId || ""} onChange={e => atualizarSelecao(paciente.alunoId, "profissionalId", e.target.value)} style={selectStyle}>
+                    <option value="">Profissional</option>
+                    {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 160px" }}>
+                  <select value={selecoes[paciente.alunoId]?.horarioId || ""} onChange={e => atualizarSelecao(paciente.alunoId, "horarioId", e.target.value)} disabled={!selecoes[paciente.alunoId]?.profissionalId} style={selectStyle}>
+                    <option value="">Horário</option>
+                    {selecoes[paciente.alunoId]?.profissionalId && horariosPorProfissional[selecoes[paciente.alunoId].profissionalId]?.map(h => (
+                      <option key={h.id} value={h.id}>{formatarData(h.data)} {h.horario} {h.groupId ? "(fixo)" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => vincular(paciente.alunoId)} style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Vincular</button>
+                  <button onClick={() => removerDaFila(paciente.alunoId, paciente.nome)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Remover</button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

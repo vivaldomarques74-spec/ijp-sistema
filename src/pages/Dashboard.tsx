@@ -54,25 +54,30 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 24, marginBottom: 24 }}>
-        <img src={logo} alt="IJP" style={{ height: 80 }} />
+      {/* Cabeçalho principal: logo grande + versículo */}
+      <div style={{ display: "flex", alignItems: "center", gap: 40, marginBottom: 40, padding: "16px 0" }}>
+        <img src={logo} alt="IJP" style={{ height: 140, flexShrink: 0 }} />
         <div>
-          <h1 style={{ fontSize: 28, margin: 0, color: "#1a2a4f" }}>Bem-vindo, equipe!</h1>
-          <p style={{ fontSize: 16, color: "#6b7a8f", margin: "4px 0 0", fontStyle: "italic" }}>{versiculo}</p>
+          <h1 style={{ fontSize: 36, margin: 0, color: "#1a2a4f" }}>Bem-vindo, equipe!</h1>
+          <p style={{ fontSize: 22, color: "#6b7a8f", margin: "8px 0 0", fontStyle: "italic", maxWidth: 600 }}>
+            {versiculo}
+          </p>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          <p style={{ margin: 0, fontSize: 14, color: "#6b7a8f" }}>Alunos</p>
-          <h2 style={{ margin: "8px 0 0", fontSize: 28, color: "#1a2a4f" }}>{totalAlunos}</h2>
+
+      {/* Cards de estatísticas */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20 }}>
+        <div style={{ background: "linear-gradient(135deg, #1a2a4f 0%, #2a4a7f 100%)", borderRadius: 16, padding: 24, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", color: "#fff" }}>
+          <p style={{ margin: 0, fontSize: 16, opacity: 0.8 }}>Alunos</p>
+          <h2 style={{ margin: "8px 0 0", fontSize: 36, fontWeight: 700 }}>{totalAlunos}</h2>
         </div>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          <p style={{ margin: 0, fontSize: 14, color: "#6b7a8f" }}>Cursos (total)</p>
-          <h2 style={{ margin: "8px 0 0", fontSize: 28, color: "#1a2a4f" }}>{totalCursos}</h2>
+        <div style={{ background: "linear-gradient(135deg, #28a745 0%, #34ce57 100%)", borderRadius: 16, padding: 24, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", color: "#fff" }}>
+          <p style={{ margin: 0, fontSize: 16, opacity: 0.8 }}>Cursos (total)</p>
+          <h2 style={{ margin: "8px 0 0", fontSize: 36, fontWeight: 700 }}>{totalCursos}</h2>
         </div>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          <p style={{ margin: 0, fontSize: 14, color: "#6b7a8f" }}>Cursos ativos</p>
-          <h2 style={{ margin: "8px 0 0", fontSize: 28, color: "#1a2a4f" }}>{cursosAtivos}</h2>
+        <div style={{ background: "linear-gradient(135deg, #17a2b8 0%, #20c997 100%)", borderRadius: 16, padding: 24, boxShadow: "0 4px 12px rgba(0,0,0,0.08)", color: "#fff" }}>
+          <p style={{ margin: 0, fontSize: 16, opacity: 0.8 }}>Cursos ativos</p>
+          <h2 style={{ margin: "8px 0 0", fontSize: 36, fontWeight: 700 }}>{cursosAtivos}</h2>
         </div>
       </div>
     </div>
