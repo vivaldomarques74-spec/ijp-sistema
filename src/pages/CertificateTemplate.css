@@ -22,7 +22,7 @@
 .certificate-wrapper {
   width: 297mm;
   height: 210mm;
-  padding: 12mm 18mm;
+  padding: 10mm 18mm; /* reduzido de 12mm para 10mm */
   box-sizing: border-box;
   background: #fcfbf8;
   font-family: 'Montserrat', sans-serif;
@@ -142,7 +142,7 @@
 }
 .certificate-title {
   font-family: 'Cormorant', serif;
-  font-size: 36pt;
+  font-size: 34pt; /* reduzido de 36pt */
   font-weight: 300;
   font-style: italic;
   color: #1a2a4f;
@@ -216,7 +216,7 @@
 }
 
 .certificate-signatures {
-  margin-top: 4mm;
+  margin-top: 2mm;    /* reduzido de 4mm */
   padding-top: 2mm;
   border-top: 1px solid #d4c5a0;
   display: flex;
@@ -234,7 +234,7 @@
   min-width: 70mm;
 }
 .signature-image {
-  height: 22mm;
+  height: 18mm;       /* reduzido de 22mm */
   width: auto;
   margin-bottom: 0.5mm;
   opacity: 0.9;
@@ -282,7 +282,7 @@
 }
 .signature-president-bottom {
   flex: 0 0 100%;
-  margin-top: 2mm;
+  margin-top: 1mm;   /* reduzido de 2mm */
   display: flex;
   justify-content: center;
 }
@@ -290,13 +290,13 @@
 .certificate-footer {
   text-align: center;
   font-family: 'Montserrat', sans-serif;
-  font-size: 6.5pt;
+  font-size: 6pt;     /* reduzido de 6.5pt */
   color: #999;
   opacity: 0.75;
   border-top: 1px solid #d4c5a0;
-  padding-top: 1mm;
-  margin-top: 1mm;
-  line-height: 1.6;
+  padding-top: 0.5mm; /* reduzido de 1mm */
+  margin-top: 0.5mm;  /* reduzido de 1mm */
+  line-height: 1.5;
   letter-spacing: 0.5px;
 }
 .certificate-footer span {
