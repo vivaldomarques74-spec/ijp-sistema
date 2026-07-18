@@ -120,13 +120,12 @@ export default function Certificados() {
     carregarAlunos();
   }, [cursoId, turmaId, turmas]);
 
-  const abrirModal = (aluno: Aluno, modo: "individual" | "todos") => {
+  const abrirModal = (aluno: Aluno | null, modo: "individual" | "todos") => {
     setAlunoSelecionado(aluno);
     setModoEmissao(modo);
     setMostrarModal(true);
-    // Inicializar professores com valores padrão
     setQuantidadeProfessores(2);
-    setNomesProfessores(["Jadison dos Santos Palma", ""]);
+    setNomesProfessores(["", ""]);
   };
 
   const fecharModal = () => {
@@ -150,7 +149,6 @@ export default function Certificados() {
   };
 
   const gerarPDF = (aluno: Aluno) => {
-    // Validar nomes dos professores
     for (let i = 0; i < nomesProfessores.length; i++) {
       if (!nomesProfessores[i].trim()) {
         alert(`Preencha o nome do Professor ${i + 1}`);
@@ -163,130 +161,136 @@ export default function Certificados() {
     const cargaHoraria = turma?.cargaHoraria || 720;
     const dataInicio = turma?.dataInicio ? turma.dataInicio.toDate().toLocaleDateString() : "08 de Junho";
     const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "08 de Setembro de 2026";
-    const periodo = `no período de ${dataInicio} a ${dataFim}`;
 
     const pdf = new jsPDF({
       orientation: "landscape",
       unit: "mm",
       format: "a4",
+      compress: true,
     });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
+    const margin = 25;
 
-    // Fundo
-    pdf.setFillColor(248, 245, 240);
-    pdf.rect(0, 0, pageWidth, pageHeight, "F");
+    // Marca d'água
+    try {
+      const logoImg = new Image();
+      logoImg.src = "/logo-ijp.png";
+      const gState = new (pdf as any).GState({ opacity: 0.05 });
+      pdf.setGState(gState);
+      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 40, pageHeight / 2 - 30, 80, 60);
+      pdf.setGState(new (pdf as any).GState({ opacity: 1 }));
+    } catch (e) {
+      console.warn("Marca d'água não carregada");
+    }
 
-    // Bordas
-    pdf.setDrawColor(180, 150, 100);
-    pdf.setLineWidth(3);
-    pdf.rect(margin, margin, pageWidth - margin * 2, pageHeight - margin * 2);
-    pdf.setDrawColor(200, 180, 140);
-    pdf.setLineWidth(1);
-    pdf.rect(margin + 6, margin + 6, pageWidth - margin * 2 - 12, pageHeight - margin * 2 - 12);
-    pdf.setDrawColor(180, 150, 100);
+    // Linha dourada superior
+    pdf.setDrawColor(201, 169, 110);
     pdf.setLineWidth(0.5);
-    pdf.rect(margin + 10, margin + 10, pageWidth - margin * 2 - 20, pageHeight - margin * 2 - 20);
-
-    // Selo
-    pdf.setDrawColor(180, 150, 100);
-    pdf.setLineWidth(2);
-    pdf.circle(pageWidth - 35, 35, 18);
-    pdf.setFontSize(14);
-    pdf.setTextColor(180, 150, 100);
-    pdf.text("★", pageWidth - 35, 32, { align: "center" });
-    pdf.setFontSize(8);
-    pdf.text("INSTITUTO", pageWidth - 35, 43, { align: "center" });
-    pdf.text("JOVENS", pageWidth - 35, 48, { align: "center" });
+    pdf.line(margin, margin + 10, pageWidth - margin, margin + 10);
 
     // Logo
     try {
       const logoImg = new Image();
       logoImg.src = "/logo-ijp.png";
-      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 35, margin + 15, 70, 30);
-    } catch (error) {}
+      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 25, margin + 15, 50, 35);
+    } catch (e) {}
 
-    // Títulos
+    // Título da instituição
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(20);
-    pdf.setTextColor(40, 50, 80);
-    pdf.text("INSTITUTO JOVENS PERIFÉRICOS", pageWidth / 2, margin + 65, { align: "center" });
+    pdf.setFontSize(16);
+    pdf.setTextColor(26, 42, 79);
+    pdf.text("INSTITUTO JOVENS PERIFÉRICOS", pageWidth / 2, margin + 60, { align: "center" });
 
-    pdf.setFontSize(28);
-    pdf.setTextColor(180, 150, 100);
-    pdf.text("CERTIFICADO", pageWidth / 2, margin + 95, { align: "center" });
+    // Linha fina abaixo do título
+    pdf.setDrawColor(201, 169, 110);
+    pdf.setLineWidth(0.3);
+    pdf.line(pageWidth / 2 - 40, margin + 64, pageWidth / 2 + 40, margin + 64);
 
-    pdf.setDrawColor(180, 150, 100);
-    pdf.setLineWidth(0.8);
-    pdf.line(pageWidth / 2 - 70, margin + 102, pageWidth / 2 + 70, margin + 102);
+    // Título CERTIFICADO
+    pdf.setFont("times", "italic");
+    pdf.setFontSize(26);
+    pdf.setTextColor(26, 42, 79);
+    pdf.text("CERTIFICADO", pageWidth / 2, margin + 90, { align: "center" });
 
-    // Texto
-    pdf.setFont("helvetica", "normal");
+    // Corpo
+    pdf.setFont("times", "normal");
     pdf.setFontSize(12);
     pdf.setTextColor(0, 0, 0);
 
-    const linhas = [
-      `Orgulhosamente certificamos que ${aluno.nomeCompleto} concluiu o curso "${cursoNome}",`,
-      `com carga horária de ${cargaHoraria} horas, ministrado pelo Instituto Jovens Periféricos`,
-      `(CNPJ: 43.248.302/0001-96), ${periodo}.`,
-      `Frequência: ${aluno.porcentagem}%`,
-    ];
-    let y = margin + 125;
-    for (const linha of linhas) {
-      pdf.text(linha, pageWidth / 2, y, { align: "center" });
-      y += 9;
-    }
+    const nomeAluno = aluno.nomeCompleto;
+    const texto1 = `Certificamos que ${nomeAluno} concluiu com êxito o curso "${cursoNome}",`;
+    const texto2 = `com carga horária de ${cargaHoraria} horas, promovido pelo Instituto Jovens Periféricos.`;
+    const texto3 = `Período: ${dataInicio} a ${dataFim}`;
+    const texto4 = `Frequência: ${aluno.porcentagem}%`;
 
-    // Assinaturas
+    let y = margin + 115;
+    pdf.text(texto1, pageWidth / 2, y, { align: "center" });
+    y += 10;
+    pdf.text(texto2, pageWidth / 2, y, { align: "center" });
+    y += 14;
+    pdf.text(texto3, pageWidth / 2, y, { align: "center" });
+    y += 8;
+    pdf.text(texto4, pageWidth / 2, y, { align: "center" });
+
+    // Assinatura do Presidente
     const assinaturaY = y + 20;
-    const larguraAss = 70;
-    const alturaAss = 25;
-    const totalAssinaturas = nomesProfessores.length;
-    const espacoTotal = pageWidth - margin * 2 - larguraAss * totalAssinaturas;
-    const espaco = totalAssinaturas > 1 ? espacoTotal / (totalAssinaturas + 1) : 0;
+    const assW = 70;
+    const assH = 25;
+    const presX = pageWidth / 2 - 35;
 
-    let assinaturaImg: HTMLImageElement | null = null;
     try {
-      const img = new Image();
-      img.src = "/Assinatura1.png";
-      assinaturaImg = img;
-    } catch (e) {}
-
-    for (let i = 0; i < totalAssinaturas; i++) {
-      const x = totalAssinaturas === 1
-        ? (pageWidth - larguraAss) / 2
-        : margin + espaco + i * (larguraAss + espaco);
-
-      if (assinaturaImg) {
-        try {
-          pdf.addImage(assinaturaImg, "PNG", x, assinaturaY, larguraAss, alturaAss);
-        } catch (e) {
-          pdf.line(x + 10, assinaturaY + alturaAss, x + larguraAss - 10, assinaturaY + alturaAss);
-        }
+      const assImg = new Image();
+      assImg.src = "/assinatura.png";
+      if (assImg.complete && assImg.naturalWidth > 0) {
+        pdf.addImage(assImg, "PNG", presX, assinaturaY, assW, assH);
       } else {
-        pdf.line(x + 10, assinaturaY + alturaAss, x + larguraAss - 10, assinaturaY + alturaAss);
+        pdf.line(presX + 10, assinaturaY + assH, presX + assW - 10, assinaturaY + assH);
       }
+    } catch (e) {
+      pdf.line(presX + 10, assinaturaY + assH, presX + assW - 10, assinaturaY + assH);
+    }
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(10);
+    pdf.text("Jadison dos Santos Palma", presX + assW / 2, assinaturaY + assH + 6, { align: "center" });
+    pdf.setFont("times", "normal");
+    pdf.setFontSize(9);
+    pdf.text("Presidente", presX + assW / 2, assinaturaY + assH + 12, { align: "center" });
+    pdf.text("Instituto Jovens Periféricos", presX + assW / 2, assinaturaY + assH + 17, { align: "center" });
 
+    // Professores
+    const profYStart = assinaturaY + 30;
+    const totalProf = nomesProfessores.length;
+    const profSpacing = 40;
+    const startXProf = (pageWidth - (totalProf - 1) * profSpacing - 60) / 2;
+
+    for (let i = 0; i < totalProf; i++) {
+      const x = startXProf + i * profSpacing;
+      const yProf = profYStart + 10;
+
+      pdf.setDrawColor(0, 0, 0);
+      pdf.setLineWidth(0.3);
+      pdf.line(x, yProf + 15, x + 60, yProf + 15);
+
+      pdf.setFont("times", "normal");
       pdf.setFontSize(10);
-      pdf.text(nomesProfessores[i], x + larguraAss / 2, assinaturaY + alturaAss + 6, { align: "center" });
-
-      if (i === 0 && totalAssinaturas > 1) {
-        pdf.setFontSize(8);
-        pdf.text("Diretor(a) Geral", x + larguraAss / 2, assinaturaY + alturaAss + 12, { align: "center" });
-      } else if (i === 1 && totalAssinaturas > 1) {
-        pdf.setFontSize(8);
-        pdf.text("Coordenador(a) Pedagógico(a)", x + larguraAss / 2, assinaturaY + alturaAss + 12, { align: "center" });
-      } else if (i === 2 && totalAssinaturas > 1) {
-        pdf.setFontSize(8);
-        pdf.text("Professor(a)", x + larguraAss / 2, assinaturaY + alturaAss + 12, { align: "center" });
-      }
+      pdf.text(nomesProfessores[i], x + 30, yProf + 22, { align: "center" });
+      pdf.setFontSize(9);
+      pdf.text("Professor(a)", x + 30, yProf + 28, { align: "center" });
     }
 
-    // Data
-    pdf.setFontSize(9);
-    pdf.setTextColor(100);
-    pdf.text(`Emitido em: ${new Date().toLocaleDateString()}`, pageWidth - margin, pageHeight - margin, { align: "right" });
+    // Rodapé
+    const rodapeY = pageHeight - margin + 5;
+    pdf.setDrawColor(201, 169, 110);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, rodapeY - 3, pageWidth - margin, rodapeY - 3);
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text("Instituto Jovens Periféricos", pageWidth / 2, rodapeY + 3, { align: "center" });
+    pdf.text("CNPJ: 43.248.302/0001-96", pageWidth / 2, rodapeY + 8, { align: "center" });
+    pdf.text("Salvador - BA | 2026", pageWidth / 2, rodapeY + 13, { align: "center" });
 
     pdf.save(`certificado_${aluno.nomeCompleto.replace(/\s/g, "_")}.pdf`);
   };
@@ -315,7 +319,7 @@ export default function Certificados() {
       alert("Nenhum aluno aprovado.");
       return;
     }
-    abrirModal(aprovados[0], "todos");
+    abrirModal(null, "todos");
   };
 
   return (
@@ -381,7 +385,6 @@ export default function Certificados() {
         </>
       )}
 
-      {/* Modal para definir professores */}
       {mostrarModal && (
         <div style={{
           position: "fixed",
@@ -404,7 +407,7 @@ export default function Certificados() {
           }}>
             <h3 style={{ marginTop: 0 }}>Informe os professores</h3>
             <div style={{ marginBottom: 16 }}>
-              <label>Quantidade: </label>
+              <label>Quantidade de professores: </label>
               <select
                 value={quantidadeProfessores}
                 onChange={e => atualizarQuantidade(Number(e.target.value))}
