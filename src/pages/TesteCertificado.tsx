@@ -64,12 +64,10 @@ export default function TesteCertificado() {
         />
       );
 
-      // Aguarda renderização com requestAnimationFrame
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Aguarda carregamento de imagens
       const images = root.querySelectorAll("img");
       await Promise.all(
         Array.from(images).map((img) => {
@@ -84,7 +82,6 @@ export default function TesteCertificado() {
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Captura com html2canvas usando dimensões reais
       const canvas = await html2canvas(root, {
         scale: 5,
         useCORS: true,

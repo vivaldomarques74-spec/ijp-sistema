@@ -152,9 +152,6 @@ export default function Certificados() {
     setNomesProfessores(novos);
   };
 
-  // ============================================================
-  // FUNÇÃO GERARPDF CORRIGIDA – COM TODOS OS AJUSTES FINAIS
-  // ============================================================
   const gerarPDF = async (aluno: Aluno) => {
     // Validação dos professores
     for (let i = 0; i < nomesProfessores.length; i++) {
@@ -172,12 +169,10 @@ export default function Certificados() {
 
     setGerando(true);
 
-    // Variáveis para limpeza no finally
     let container: HTMLDivElement | null = null;
     let reactRoot: any = null;
 
     try {
-      // 1. Cria o container off‑screen com as dimensões exatas do A4 paisagem
       container = document.createElement("div");
       container.style.position = "fixed";
       container.style.top = "-9999px";
@@ -192,7 +187,6 @@ export default function Certificados() {
       root.style.height = "210mm";
       container.appendChild(root);
 
-      // 2. Renderiza o componente React dentro do container
       const ReactDOM = await import("react-dom/client");
       reactRoot = ReactDOM.createRoot(root);
       reactRoot.render(
@@ -209,12 +203,10 @@ export default function Certificados() {
         />
       );
 
-      // 3. Aguarda a renderização e o layout final (usando requestAnimationFrame)
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => setTimeout(resolve, 50)); // pequeno buffer
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // 4. Aguarda o carregamento de todas as imagens (com verificação robusta)
       const images = root.querySelectorAll("img");
       await Promise.all(
         Array.from(images).map((img) => {
@@ -227,10 +219,8 @@ export default function Certificados() {
         })
       );
 
-      // 5. Pequeno delay extra para garantir que o layout esteja estável
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // 6. Captura com html2canvas – usando as dimensões reais do elemento
       const canvas = await html2canvas(root, {
         scale: 5,
         useCORS: true,
@@ -240,7 +230,6 @@ export default function Certificados() {
         windowHeight: root.scrollHeight,
       });
 
-      // 7. Cria o PDF A4 paisagem (297 x 210 mm)
       const pdf = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -248,11 +237,9 @@ export default function Certificados() {
         compress: true,
       });
 
-      // 8. Converte o canvas para imagem e insere ocupando toda a página
       const imgData = canvas.toDataURL("image/png");
       pdf.addImage(imgData, "PNG", 0, 0, 297, 210);
 
-      // 9. Salva o PDF com nome sanitizado
       const nomeSanitizado = aluno.nomeCompleto.replace(/[^\w-]/g, "_");
       pdf.save(`certificado_${nomeSanitizado}.pdf`);
 
@@ -260,7 +247,6 @@ export default function Certificados() {
       console.error("Erro ao gerar PDF:", error);
       alert("Erro ao gerar certificado. Tente novamente.");
     } finally {
-      // Limpeza garantida
       if (reactRoot) {
         try { reactRoot.unmount(); } catch (_) {}
       }
