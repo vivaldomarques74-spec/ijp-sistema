@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
+import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import CertificateTemplate from "./CertificateTemplate"; // corrigido: mesma pasta
 
+// Interfaces
 interface Curso {
   id: string;
   nome: string;
@@ -38,6 +41,7 @@ export default function Certificados() {
   const [nomesProfessores, setNomesProfessores] = useState<string[]>(["", ""]);
   const [alunoSelecionado, setAlunoSelecionado] = useState<Aluno | null>(null);
   const [modoEmissao, setModoEmissao] = useState<"individual" | "todos">("individual");
+  const [gerando, setGerando] = useState(false);
 
   useEffect(() => {
     const carregarCursos = async () => {
@@ -148,7 +152,7 @@ export default function Certificados() {
     setNomesProfessores(novos);
   };
 
-  const gerarPDF = (aluno: Aluno) => {
+  const gerarPDF = async (aluno: Aluno) => {
     for (let i = 0; i < nomesProfessores.length; i++) {
       if (!nomesProfessores[i].trim()) {
         alert(`Preencha o nome do Professor ${i + 1}`);
@@ -162,142 +166,86 @@ export default function Certificados() {
     const dataInicio = turma?.dataInicio ? turma.dataInicio.toDate().toLocaleDateString() : "08 de Junho";
     const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "08 de Setembro de 2026";
 
-    const pdf = new jsPDF({
-      orientation: "landscape",
-      unit: "mm",
-      format: "a4",
-      compress: true,
-    });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 25;
-
-    // Marca d'água
+    setGerando(true);
     try {
-      const logoImg = new Image();
-      logoImg.src = "/logo-ijp.png";
-      const gState = new (pdf as any).GState({ opacity: 0.05 });
-      pdf.setGState(gState);
-      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 40, pageHeight / 2 - 30, 80, 60);
-      pdf.setGState(new (pdf as any).GState({ opacity: 1 }));
-    } catch (e) {
-      console.warn("Marca d'água não carregada");
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "-9999px";
+      container.style.left = "-9999px";
+      container.style.width = "297mm";
+      container.style.height = "210mm";
+      container.style.background = "#fcfbf8";
+      document.body.appendChild(container);
+
+      const root = document.createElement("div");
+      root.style.width = "297mm";
+      root.style.height = "210mm";
+      container.appendChild(root);
+
+      const ReactDOM = await import("react-dom/client");
+      const reactRoot = ReactDOM.createRoot(root);
+      reactRoot.render(
+        <CertificateTemplate
+          alunoNome={aluno.nomeCompleto}
+          cursoNome={cursoNome}
+          cargaHoraria={cargaHoraria}
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          frequencia={aluno.porcentagem}
+          professores={nomesProfessores}
+          logoUrl="/logo-ijp.png"
+          assinaturaUrl="/assinatura.png"
+        />
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const images = root.querySelectorAll("img");
+      await Promise.all(
+        Array.from(images).map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          });
+        })
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(root, {
+        scale: 5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#fcfbf8",
+        width: 297 * 5,
+        height: 210 * 5,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      pdf.addImage(imgData, "PNG", 0, 0, 297, 210);
+      pdf.save(`certificado_${aluno.nomeCompleto.replace(/\s/g, "_")}.pdf`);
+
+      reactRoot.unmount();
+      document.body.removeChild(container);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      alert("Erro ao gerar certificado. Tente novamente.");
+    } finally {
+      setGerando(false);
     }
-
-    // Linha dourada superior
-    pdf.setDrawColor(201, 169, 110);
-    pdf.setLineWidth(0.5);
-    pdf.line(margin, margin + 10, pageWidth - margin, margin + 10);
-
-    // Logo
-    try {
-      const logoImg = new Image();
-      logoImg.src = "/logo-ijp.png";
-      pdf.addImage(logoImg, "PNG", pageWidth / 2 - 25, margin + 15, 50, 35);
-    } catch (e) {}
-
-    // Título da instituição
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(16);
-    pdf.setTextColor(26, 42, 79);
-    pdf.text("INSTITUTO JOVENS PERIFÉRICOS", pageWidth / 2, margin + 60, { align: "center" });
-
-    // Linha fina abaixo do título
-    pdf.setDrawColor(201, 169, 110);
-    pdf.setLineWidth(0.3);
-    pdf.line(pageWidth / 2 - 40, margin + 64, pageWidth / 2 + 40, margin + 64);
-
-    // Título CERTIFICADO
-    pdf.setFont("times", "italic");
-    pdf.setFontSize(26);
-    pdf.setTextColor(26, 42, 79);
-    pdf.text("CERTIFICADO", pageWidth / 2, margin + 90, { align: "center" });
-
-    // Corpo
-    pdf.setFont("times", "normal");
-    pdf.setFontSize(12);
-    pdf.setTextColor(0, 0, 0);
-
-    const nomeAluno = aluno.nomeCompleto;
-    const texto1 = `Certificamos que ${nomeAluno} concluiu com êxito o curso "${cursoNome}",`;
-    const texto2 = `com carga horária de ${cargaHoraria} horas, promovido pelo Instituto Jovens Periféricos.`;
-    const texto3 = `Período: ${dataInicio} a ${dataFim}`;
-    const texto4 = `Frequência: ${aluno.porcentagem}%`;
-
-    let y = margin + 115;
-    pdf.text(texto1, pageWidth / 2, y, { align: "center" });
-    y += 10;
-    pdf.text(texto2, pageWidth / 2, y, { align: "center" });
-    y += 14;
-    pdf.text(texto3, pageWidth / 2, y, { align: "center" });
-    y += 8;
-    pdf.text(texto4, pageWidth / 2, y, { align: "center" });
-
-    // Assinatura do Presidente
-    const assinaturaY = y + 20;
-    const assW = 70;
-    const assH = 25;
-    const presX = pageWidth / 2 - 35;
-
-    try {
-      const assImg = new Image();
-      assImg.src = "/assinatura.png";
-      if (assImg.complete && assImg.naturalWidth > 0) {
-        pdf.addImage(assImg, "PNG", presX, assinaturaY, assW, assH);
-      } else {
-        pdf.line(presX + 10, assinaturaY + assH, presX + assW - 10, assinaturaY + assH);
-      }
-    } catch (e) {
-      pdf.line(presX + 10, assinaturaY + assH, presX + assW - 10, assinaturaY + assH);
-    }
-    pdf.setFont("times", "bold");
-    pdf.setFontSize(10);
-    pdf.text("Jadison dos Santos Palma", presX + assW / 2, assinaturaY + assH + 6, { align: "center" });
-    pdf.setFont("times", "normal");
-    pdf.setFontSize(9);
-    pdf.text("Presidente", presX + assW / 2, assinaturaY + assH + 12, { align: "center" });
-    pdf.text("Instituto Jovens Periféricos", presX + assW / 2, assinaturaY + assH + 17, { align: "center" });
-
-    // Professores
-    const profYStart = assinaturaY + 30;
-    const totalProf = nomesProfessores.length;
-    const profSpacing = 40;
-    const startXProf = (pageWidth - (totalProf - 1) * profSpacing - 60) / 2;
-
-    for (let i = 0; i < totalProf; i++) {
-      const x = startXProf + i * profSpacing;
-      const yProf = profYStart + 10;
-
-      pdf.setDrawColor(0, 0, 0);
-      pdf.setLineWidth(0.3);
-      pdf.line(x, yProf + 15, x + 60, yProf + 15);
-
-      pdf.setFont("times", "normal");
-      pdf.setFontSize(10);
-      pdf.text(nomesProfessores[i], x + 30, yProf + 22, { align: "center" });
-      pdf.setFontSize(9);
-      pdf.text("Professor(a)", x + 30, yProf + 28, { align: "center" });
-    }
-
-    // Rodapé
-    const rodapeY = pageHeight - margin + 5;
-    pdf.setDrawColor(201, 169, 110);
-    pdf.setLineWidth(0.3);
-    pdf.line(margin, rodapeY - 3, pageWidth - margin, rodapeY - 3);
-
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(8);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text("Instituto Jovens Periféricos", pageWidth / 2, rodapeY + 3, { align: "center" });
-    pdf.text("CNPJ: 43.248.302/0001-96", pageWidth / 2, rodapeY + 8, { align: "center" });
-    pdf.text("Salvador - BA | 2026", pageWidth / 2, rodapeY + 13, { align: "center" });
-
-    pdf.save(`certificado_${aluno.nomeCompleto.replace(/\s/g, "_")}.pdf`);
   };
 
-  const confirmarEmissao = () => {
+  const confirmarEmissao = async () => {
     if (modoEmissao === "individual" && alunoSelecionado) {
-      gerarPDF(alunoSelecionado);
+      await gerarPDF(alunoSelecionado);
     } else if (modoEmissao === "todos") {
       const aprovados = alunos.filter(a => a.status === "aprovado");
       if (aprovados.length === 0) {
@@ -306,7 +254,7 @@ export default function Certificados() {
         return;
       }
       for (const aluno of aprovados) {
-        gerarPDF(aluno);
+        await gerarPDF(aluno);
       }
       alert(`${aprovados.length} certificados gerados.`);
     }
@@ -347,8 +295,8 @@ export default function Certificados() {
       {!carregando && turmaId && (
         <>
           <div style={{ marginBottom: 16 }}>
-            <button onClick={emitirTodosCertificados} disabled={alunos.filter(a => a.status === "aprovado").length === 0}>
-              Emitir certificados para todos aprovados
+            <button onClick={emitirTodosCertificados} disabled={alunos.filter(a => a.status === "aprovado").length === 0 || gerando}>
+              {gerando ? "Gerando..." : "Emitir certificados para todos aprovados"}
             </button>
           </div>
           {alunos.length === 0 && <p>Nenhum aluno encontrado para esta turma.</p>}
@@ -375,7 +323,9 @@ export default function Certificados() {
                       {aluno.status === "aprovado" ? "Aprovado" : "Reprovado"}
                     </td>
                     <td style={{ padding: 8 }}>
-                      <button onClick={() => abrirModal(aluno, "individual")}>Emitir certificado</button>
+                      <button onClick={() => abrirModal(aluno, "individual")} disabled={gerando}>
+                        Emitir certificado
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -431,8 +381,8 @@ export default function Certificados() {
               </div>
             ))}
             <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-              <button onClick={confirmarEmissao} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
-                Confirmar
+              <button onClick={confirmarEmissao} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }} disabled={gerando}>
+                {gerando ? "Gerando..." : "Confirmar"}
               </button>
               <button onClick={fecharModal} style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
                 Cancelar

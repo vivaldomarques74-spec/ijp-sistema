@@ -1,0 +1,318 @@
+/* CertificateTemplate.css */
+
+@font-face {
+  font-family: 'Cormorant';
+  src: url('/fonts/CormorantGaramond-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'CormorantBold';
+  src: url('/fonts/CormorantGaramond-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+.certificate-wrapper {
+  width: 297mm;
+  height: 210mm;
+  padding: 14mm 18mm;
+  box-sizing: border-box;
+  background: #fcfbf8;
+  font-family: 'Montserrat', sans-serif;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid #d4c5a0;
+}
+
+.certificate-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.certificate-frame-top,
+.certificate-frame-bottom {
+  position: absolute;
+  left: 10mm;
+  right: 10mm;
+  height: 1.3px;
+  background: #c9a96e;
+}
+.certificate-frame-top { top: 8mm; }
+.certificate-frame-bottom { bottom: 8mm; }
+.certificate-frame-left,
+.certificate-frame-right {
+  position: absolute;
+  top: 10mm;
+  bottom: 10mm;
+  width: 1.3px;
+  background: #c9a96e;
+}
+.certificate-frame-left { left: 8mm; }
+.certificate-frame-right { right: 8mm; }
+
+.certificate-corner {
+  position: absolute;
+  width: 8mm;
+  height: 8mm;
+  border: 1px solid #c9a96e;
+  pointer-events: none;
+}
+.certificate-corner-tl { top: 8mm; left: 8mm; border-right: none; border-bottom: none; }
+.certificate-corner-tr { top: 8mm; right: 8mm; border-left: none; border-bottom: none; }
+.certificate-corner-bl { bottom: 8mm; left: 8mm; border-right: none; border-top: none; }
+.certificate-corner-br { bottom: 8mm; right: 8mm; border-left: none; border-top: none; }
+
+.certificate-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: 0;
+  width: 160mm;
+  height: auto;
+}
+
+.certificate-seal {
+  position: absolute;
+  bottom: 16mm;
+  left: 14mm;
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 0;
+  width: 40mm;
+  height: auto;
+}
+
+.certificate-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100%;
+}
+
+.certificate-header {
+  text-align: center;
+  margin-bottom: 2mm;
+}
+
+.certificate-logo {
+  width: 70mm;
+  height: auto;
+  margin-bottom: 2mm;
+}
+
+.certificate-institution {
+  font-family: 'CormorantBold', serif;
+  font-size: 22pt;
+  font-weight: 600;
+  color: #1a2a4f;
+  margin: 0;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.certificate-divider {
+  width: 70mm;
+  height: 1.5px;
+  background: #c9a96e;
+  margin: 2mm auto;
+}
+
+.certificate-title {
+  font-family: 'Cormorant', serif;
+  font-size: 40pt;
+  font-weight: 300;
+  font-style: italic;
+  color: #1a2a4f;
+  margin: 0;
+  letter-spacing: 6px;
+  position: relative;
+}
+
+.certificate-title::after {
+  content: '❦';
+  display: block;
+  font-size: 14pt;
+  color: #c9a96e;
+  letter-spacing: 6px;
+  margin-top: 0.5mm;
+  font-style: normal;
+}
+
+.certificate-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 4mm;
+  text-align: center;
+}
+
+.certificate-body-text {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 14pt;
+  color: #2a2a2a;
+  line-height: 1.7;
+  margin: 0 0 1mm 0;
+}
+
+.certificate-student-name {
+  font-family: 'CormorantBold', serif;
+  font-weight: 700;
+  color: #0a1a3a;
+  letter-spacing: 2px;
+  margin: 1mm 0 2mm 0;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+  max-width: 100%;
+  text-wrap: balance;
+}
+
+.certificate-course-name {
+  font-family: 'CormorantBold', serif;
+  font-weight: 600;
+  color: #1a2a4f;
+  letter-spacing: 2px;
+  margin: 0 auto 2mm;
+  max-width: 210mm;
+}
+
+.certificate-details {
+  display: flex;
+  justify-content: center;
+  gap: 12mm;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12pt;
+  color: #3a3a3a;
+  margin-top: 2mm;
+}
+
+.certificate-details strong {
+  font-weight: 600;
+}
+
+.certificate-issue-date {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 11pt;
+  color: #555;
+  margin-top: 2mm;
+}
+
+.certificate-footer {
+  text-align: center;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 7pt;
+  color: #999;
+  opacity: 0.75;
+  border-top: 1px solid #d4c5a0;
+  padding-top: 2mm;
+  margin-top: 2mm;
+  line-height: 1.6;
+  letter-spacing: 0.5px;
+}
+.certificate-footer span {
+  display: block;
+}
+
+.certificate-signatures {
+  margin-top: 6mm;
+  padding-top: 4mm;
+  border-top: 1px solid #d4c5a0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 6mm;
+}
+
+.signature-block {
+  text-align: center;
+  min-width: 55mm;
+  flex: 1 1 auto;
+}
+
+.signature-block-president {
+  min-width: 70mm;
+}
+
+.signature-image {
+  height: 26mm;
+  width: auto;
+  margin-bottom: 1mm;
+  opacity: 0.9;
+  object-fit: contain;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.signature-line {
+  width: min(80mm, 100%);
+  border-bottom: 1px solid #666;
+  margin: 0 auto 1mm auto;
+}
+
+.signature-name {
+  font-family: 'CormorantBold', serif;
+  font-size: 13pt;
+  font-weight: 600;
+  color: #0a1a3a;
+}
+
+.signature-role {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 9pt;
+  color: #555;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.signature-org {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 9pt;
+  color: #777;
+}
+
+.signatures-1 {
+  justify-content: space-between;
+}
+.signatures-2 {
+  justify-content: space-around;
+}
+.signatures-3 {
+  justify-content: space-around;
+  flex-wrap: wrap;
+}
+.signatures-3 .signature-block {
+  flex: 0 0 30%;
+  min-width: 50mm;
+}
+
+.signature-president-bottom {
+  flex: 0 0 100%;
+  margin-top: 4mm;
+  display: flex;
+  justify-content: center;
+}
