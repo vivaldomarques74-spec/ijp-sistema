@@ -3,7 +3,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import CertificateTemplate from "./CertificateTemplate"; // corrigido: mesma pasta
+import CertificateTemplate from "./CertificateTemplate";
 
 // Interfaces
 interface Curso {
@@ -152,7 +152,11 @@ export default function Certificados() {
     setNomesProfessores(novos);
   };
 
+  // ============================================================
+  // FUNÇÃO GERARPDF CORRIGIDA – COM TODOS OS AJUSTES FINAIS
+  // ============================================================
   const gerarPDF = async (aluno: Aluno) => {
+    // Validação dos professores
     for (let i = 0; i < nomesProfessores.length; i++) {
       if (!nomesProfessores[i].trim()) {
         alert(`Preencha o nome do Professor ${i + 1}`);
@@ -167,8 +171,14 @@ export default function Certificados() {
     const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "08 de Setembro de 2026";
 
     setGerando(true);
+
+    // Variáveis para limpeza no finally
+    let container: HTMLDivElement | null = null;
+    let reactRoot: any = null;
+
     try {
-      const container = document.createElement("div");
+      // 1. Cria o container off‑screen com as dimensões exatas do A4 paisagem
+      container = document.createElement("div");
       container.style.position = "fixed";
       container.style.top = "-9999px";
       container.style.left = "-9999px";
@@ -182,8 +192,9 @@ export default function Certificados() {
       root.style.height = "210mm";
       container.appendChild(root);
 
+      // 2. Renderiza o componente React dentro do container
       const ReactDOM = await import("react-dom/client");
-      const reactRoot = ReactDOM.createRoot(root);
+      reactRoot = ReactDOM.createRoot(root);
       reactRoot.render(
         <CertificateTemplate
           alunoNome={aluno.nomeCompleto}
@@ -198,30 +209,38 @@ export default function Certificados() {
         />
       );
 
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // 3. Aguarda a renderização e o layout final (usando requestAnimationFrame)
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => setTimeout(resolve, 50)); // pequeno buffer
 
+      // 4. Aguarda o carregamento de todas as imagens (com verificação robusta)
       const images = root.querySelectorAll("img");
       await Promise.all(
         Array.from(images).map((img) => {
-          if (img.complete) return Promise.resolve();
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
           return new Promise<void>((resolve) => {
             img.onload = () => resolve();
             img.onerror = () => resolve();
+            if (img.complete && img.naturalWidth > 0) resolve();
           });
         })
       );
 
+      // 5. Pequeno delay extra para garantir que o layout esteja estável
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // 6. Captura com html2canvas – usando as dimensões reais do elemento
       const canvas = await html2canvas(root, {
         scale: 5,
         useCORS: true,
         logging: false,
         backgroundColor: "#fcfbf8",
-        width: 297 * 5,
-        height: 210 * 5,
+        windowWidth: root.scrollWidth,
+        windowHeight: root.scrollHeight,
       });
 
+      // 7. Cria o PDF A4 paisagem (297 x 210 mm)
       const pdf = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -229,16 +248,25 @@ export default function Certificados() {
         compress: true,
       });
 
+      // 8. Converte o canvas para imagem e insere ocupando toda a página
       const imgData = canvas.toDataURL("image/png");
       pdf.addImage(imgData, "PNG", 0, 0, 297, 210);
-      pdf.save(`certificado_${aluno.nomeCompleto.replace(/\s/g, "_")}.pdf`);
 
-      reactRoot.unmount();
-      document.body.removeChild(container);
+      // 9. Salva o PDF com nome sanitizado
+      const nomeSanitizado = aluno.nomeCompleto.replace(/[^\w-]/g, "_");
+      pdf.save(`certificado_${nomeSanitizado}.pdf`);
+
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
       alert("Erro ao gerar certificado. Tente novamente.");
     } finally {
+      // Limpeza garantida
+      if (reactRoot) {
+        try { reactRoot.unmount(); } catch (_) {}
+      }
+      if (container && container.parentNode) {
+        try { document.body.removeChild(container); } catch (_) {}
+      }
       setGerando(false);
     }
   };

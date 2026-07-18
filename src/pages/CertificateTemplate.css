@@ -1,5 +1,3 @@
-/* CertificateTemplate.css */
-
 @font-face {
   font-family: 'Cormorant';
   src: url('/fonts/CormorantGaramond-Regular.ttf') format('truetype');
@@ -107,7 +105,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 100%;
+  height: 100%; /* alterado de min-height para height */
 }
 
 .certificate-header {
@@ -129,6 +127,15 @@
   margin: 0;
   letter-spacing: 3px;
   text-transform: uppercase;
+}
+
+.certificate-cnpj {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 8pt;
+  color: #555;
+  letter-spacing: 1px;
+  margin: 0 0 1mm 0;
+  text-align: center;
 }
 
 .certificate-divider {

@@ -133,6 +133,7 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
         <div className="certificate-header">
           <img src={logoUrl} alt="" className="certificate-logo" loading="eager" />
           <h1 className="certificate-institution">INSTITUTO JOVENS PERIFÉRICOS</h1>
+          <p className="certificate-cnpj">CNPJ 43.248.302/0001-96</p>
           <div className="certificate-divider" />
           <h2 className="certificate-title">CERTIFICADO</h2>
         </div>
@@ -160,7 +161,6 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
 
         <div className="certificate-footer">
           <span>Instituto Jovens Periféricos</span>
-          <span>CNPJ 43.248.302/0001-96</span>
           <span>Salvador • Bahia</span>
           <span>2026</span>
         </div>
