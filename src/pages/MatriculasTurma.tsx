@@ -74,7 +74,74 @@ export default function MatriculasTurma() {
     }
   };
 
+  const imprimirLista = () => {
+    if (alunos.length === 0) return alert("Nenhum aluno para imprimir.");
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return alert("Permita pop-ups para imprimir.");
+    const cursoNome = cursos.find(c => c.id === cursoId)?.nome || "Curso";
+    const turmaNome = turmas.find(t => t.id === turmaId)?.nome || "Turma";
+    const hoje = new Date().toLocaleDateString("pt-BR");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Lista de Alunos - ${cursoNome} - ${turmaNome}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            h1 { text-align: center; font-size: 18px; margin-bottom: 4px; }
+            h2 { text-align: center; font-size: 14px; font-weight: normal; margin-top: 0; color: #555; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background: #f0f0f0; font-weight: bold; text-align: left; padding: 8px; border-bottom: 2px solid #333; }
+            td { padding: 8px; border-bottom: 1px solid #ddd; }
+            .assinatura { width: 200px; text-align: center; }
+            .assinatura-linha { border-bottom: 1px solid #000; margin-top: 4px; }
+            .footer { text-align: center; font-size: 12px; color: #888; margin-top: 30px; }
+            @media print {
+              .no-print { display: none; }
+              body { margin: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>${cursoNome}</h1>
+          <h2>Turma: ${turmaNome} - Emitido em: ${hoje}</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px;">Nº</th>
+                <th>Nome do Aluno</th>
+                <th class="assinatura">Assinatura</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${alunos.map((a, i) => `
+                <tr>
+                  <td style="text-align: center;">${i + 1}</td>
+                  <td>${a.nome}</td>
+                  <td class="assinatura"><div class="assinatura-linha"></div></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+          <p style="margin-top: 30px; font-size: 12px; color: #888;">
+            Total de alunos: ${alunos.length}
+          </p>
+          <div class="footer">
+            _________________________________<br>
+            Responsável pela turma
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const selectStyle = { padding: 8, border: "1px solid #ccc", borderRadius: 8, background: "#fff", marginRight: 8 };
+  const buttonStyle = { padding: "4px 12px", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 4 };
+  const buttonDanger = { ...buttonStyle, background: "#dc3545", color: "#fff" };
+  const buttonPrint = { ...buttonStyle, background: "#17a2b8", color: "#fff" };
 
   return (
     <div>
@@ -92,7 +159,12 @@ export default function MatriculasTurma() {
 
       {turmaId && (
         <>
-          <p style={{ marginBottom: 12 }}>Total: <strong>{alunos.length}</strong> alunos</p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <p style={{ margin: 0 }}>Total: <strong>{alunos.length}</strong> alunos</p>
+            <div>
+              <button onClick={imprimirLista} style={{ ...buttonPrint, marginRight: 8 }}>🖨️ Imprimir lista</button>
+            </div>
+          </div>
           {carregando && <p>Carregando...</p>}
           {!carregando && alunos.length === 0 && <p>Nenhum aluno matriculado.</p>}
           <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
@@ -110,7 +182,7 @@ export default function MatriculasTurma() {
                     <td style={{ padding: 12 }}>{a.nome}</td>
                     <td style={{ padding: 12 }}>{a.matricula}</td>
                     <td style={{ padding: 12 }}>
-                      <button onClick={() => removerAluno(a.id, a.nome)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Remover</button>
+                      <button onClick={() => removerAluno(a.id, a.nome)} style={buttonDanger}>Remover</button>
                     </td>
                   </tr>
                 ))}
