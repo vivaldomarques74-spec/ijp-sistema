@@ -179,7 +179,7 @@ export default function Certificados() {
       container.style.left = "-9999px";
       container.style.width = "297mm";
       container.style.height = "210mm";
-      container.style.background = "#fcfbf8";
+      container.style.background = "#ffffff"; // branco
       document.body.appendChild(container);
 
       const root = document.createElement("div");
@@ -225,7 +225,7 @@ export default function Certificados() {
         scale: 5,
         useCORS: true,
         logging: false,
-        backgroundColor: "#fcfbf8",
+        backgroundColor: "#ffffff", // branco
         windowWidth: root.scrollWidth,
         windowHeight: root.scrollHeight,
       });
