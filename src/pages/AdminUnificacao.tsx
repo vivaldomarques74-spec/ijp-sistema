@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { db } from "../services/firebase";
-import { collection, getDocs, query, where, updateDoc, deleteDoc, doc, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, deleteDoc, doc, orderBy, setDoc } from "firebase/firestore";
 
-// Tipos para os documentos
 interface AlunoDoc {
   id: string;
   nomeCompleto?: string;
   cpf?: string;
-  [key: string]: any; // outros campos
+  [key: string]: any;
 }
 
 export default function AdminUnificacao() {
@@ -16,6 +15,79 @@ export default function AdminUnificacao() {
 
   const adicionarLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
+  // Função para restaurar alunos removidos
+  const handleRestaurar = async () => {
+    if (!confirm("Isso vai recriar documentos de alunos que estão em turmas mas não existem mais. Continuar?")) return;
+    
+    setCarregando(true);
+    setLogs([]);
+    
+    try {
+      adicionarLog("🔍 Buscando IDs de alunos presentes nas turmas...");
+
+      const cursosSnap = await getDocs(collection(db, "cursos"));
+      const idsTurmas = new Set<string>();
+
+      for (const cursoDoc of cursosSnap.docs) {
+        const cursoId = cursoDoc.id;
+        const turmasSnap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
+        turmasSnap.forEach(turmaDoc => {
+          const data = turmaDoc.data();
+          const alunos = data.alunos || [];
+          alunos.forEach((id: string) => idsTurmas.add(id));
+        });
+      }
+
+      adicionarLog(`📌 IDs de alunos encontrados nas turmas: ${idsTurmas.size}`);
+
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      const idsAlunosExistentes = new Set<string>();
+      alunosSnap.forEach(doc => idsAlunosExistentes.add(doc.id));
+
+      adicionarLog(`📌 IDs de alunos existentes: ${idsAlunosExistentes.size}`);
+
+      const idsParaRestaurar = [...idsTurmas].filter(id => !idsAlunosExistentes.has(id));
+
+      if (idsParaRestaurar.length === 0) {
+        adicionarLog("✅ Nenhum aluno removido encontrado.");
+        setCarregando(false);
+        return;
+      }
+
+      adicionarLog(`⚠️ Encontrados ${idsParaRestaurar.length} alunos removidos. Recriando...`);
+
+      let recuperados = 0;
+      for (const id of idsParaRestaurar) {
+        try {
+          await setDoc(doc(db, "alunos", id), {
+            nomeCompleto: `Aluno recuperado (${id.slice(0, 8)})`,
+            cpf: "",
+            endereco: "",
+            email: "",
+            telefone: "",
+            nascimento: "",
+            menor: false,
+            status: "ativo",
+            criadoEm: new Date(),
+          });
+          adicionarLog(`✅ Aluno recuperado: ${id}`);
+          recuperados++;
+        } catch (error: any) {
+          adicionarLog(`❌ Erro ao recriar ${id}: ${error.message}`);
+        }
+      }
+
+      adicionarLog(`🎉 Processo concluído! ${recuperados} alunos recriados.`);
+      adicionarLog("Atualize a página para ver os alunos nas turmas.");
+
+    } catch (error: any) {
+      adicionarLog(`❌ Erro geral: ${error.message}`);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  // Função de unificação (já existente)
   const handleUnificar = async () => {
     if (!confirm("Tem certeza? Isso vai unificar duplicatas e pode afetar muitos dados.")) return;
     setCarregando(true);
@@ -29,18 +101,13 @@ export default function AdminUnificacao() {
         const cpf = data.cpf;
         if (!cpf) return;
         if (!cpfMap.has(cpf)) cpfMap.set(cpf, []);
-        // CORREÇÃO: usar id do documento e manter os dados, sem duplicação
-        const alunoData: AlunoDoc = {
-          ...data,
-          id: doc.id, // garante que o id seja o do documento, sobrescrevendo qualquer id vindo do data
-        };
+        const alunoData: AlunoDoc = { ...data, id: doc.id };
         cpfMap.get(cpf)!.push(alunoData);
       });
 
       for (const [cpf, docs] of cpfMap.entries()) {
         if (docs.length <= 1) continue;
         adicionarLog(`Processando CPF ${cpf} (${docs.length} registros)`);
-        // Escolher o principal: o mais completo
         const principal = docs.reduce((a: AlunoDoc, b: AlunoDoc) => {
           const countA = Object.keys(a).filter(k => a[k] && a[k] !== "").length;
           const countB = Object.keys(b).filter(k => b[k] && b[k] !== "").length;
@@ -50,14 +117,13 @@ export default function AdminUnificacao() {
 
         for (const sec of secundarios) {
           adicionarLog(`  Unificando ${sec.id} (${sec.nomeCompleto})`);
-          // Presenças
           const presencasQuery = query(collection(db, "presencas"), where("alunoId", "==", sec.id));
           const presencasSnap = await getDocs(presencasQuery);
           for (const pDoc of presencasSnap.docs) {
             await updateDoc(pDoc.ref, { alunoId: principal.id });
           }
           adicionarLog(`    Presenças: ${presencasSnap.size} atualizadas`);
-          // Turmas
+          
           const turmasQuery = query(collection(db, "turmas"), where("alunos", "array-contains", sec.id));
           const turmasSnap = await getDocs(turmasQuery);
           for (const tDoc of turmasSnap.docs) {
@@ -67,14 +133,14 @@ export default function AdminUnificacao() {
             await updateDoc(tDoc.ref, { alunos: newAlunos });
           }
           adicionarLog(`    Turmas: ${turmasSnap.size} atualizadas`);
-          // Fila
+          
           const filaQuery = query(collection(db, "filaEspera"), where("alunoId", "==", sec.id));
           const filaSnap = await getDocs(filaQuery);
           for (const fDoc of filaSnap.docs) {
             await updateDoc(fDoc.ref, { alunoId: principal.id });
           }
           adicionarLog(`    Fila: ${filaSnap.size} atualizadas`);
-          // Excluir secundário
+          
           await deleteDoc(doc(db, "alunos", sec.id));
           adicionarLog(`    Documento ${sec.id} excluído`);
         }
@@ -87,6 +153,7 @@ export default function AdminUnificacao() {
     }
   };
 
+  // Função de reordenação (já existente)
   const handleReordenar = async () => {
     if (!confirm("Reordenar matrículas?")) return;
     setCarregando(true);
@@ -111,15 +178,34 @@ export default function AdminUnificacao() {
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ color: "#1a2a4f" }}>Administração – Unificação de CPFs</h1>
-      <p style={{ color: "#6b7a8f" }}>Esta ferramenta unifica cadastros duplicados e reorganiza matrículas.</p>
-      <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+      <p style={{ color: "#6b7a8f" }}>Ferramenta para unificar duplicatas, reordenar matrículas e restaurar alunos removidos.</p>
+      
+      <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+        <button 
+          onClick={handleUnificar} 
+          disabled={carregando} 
+          style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+        >
           {carregando ? "Processando..." : "Unificar CPFs Duplicados"}
         </button>
-        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+        
+        <button 
+          onClick={handleReordenar} 
+          disabled={carregando} 
+          style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+        >
           {carregando ? "Processando..." : "Reordenar Matrículas"}
         </button>
+
+        <button 
+          onClick={handleRestaurar} 
+          disabled={carregando} 
+          style={{ padding: "10px 20px", background: "#ff6b35", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+        >
+          {carregando ? "Processando..." : "Restaurar Alunos Removidos"}
+        </button>
       </div>
+      
       <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 400, overflow: "auto", border: "1px solid #dee2e6" }}>
         {logs.length === 0 && <span style={{ color: "#6b7a8f" }}>Nenhum log ainda.</span>}
         {logs.map((log, idx) => <div key={idx} style={{ fontFamily: "monospace", fontSize: 14, padding: "2px 0" }}>{log}</div>)}

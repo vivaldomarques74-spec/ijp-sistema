@@ -13,6 +13,9 @@ export async function salvarAluno({
 }) {
   if (!auth.currentUser) throw new Error("Usuário não autenticado");
 
+  // Sanitiza CPF
+  const cpfLimpo = dadosAluno.cpf ? dadosAluno.cpf.replace(/\D/g, "") : "";
+
   // Gera matrícula
   const contadorRef = doc(db, "contadores", "matricula");
   const numeroMatricula = await runTransaction(db, async (transaction) => {
@@ -27,6 +30,7 @@ export async function salvarAluno({
   // Cria aluno
   const alunoRef = await addDoc(collection(db, "alunos"), {
     ...dadosAluno,
+    cpf: cpfLimpo,
     matricula,
     matriculaNumero: numeroMatricula,
     cursoAtualId: dadosAluno.cursoAtualId || null,
@@ -63,10 +67,9 @@ export async function salvarAluno({
     });
   }
 
-  // *** Adicionar aluno à fila de espera para cada serviço marcado ***
+  // Adicionar aluno à fila de espera para cada serviço marcado
   if (dadosAluno.servicosAtivos && dadosAluno.servicosAtivos.length > 0) {
     for (const servico of dadosAluno.servicosAtivos) {
-      // Verifica se já existe na fila
       const filaQuery = query(
         collection(db, "filaEspera"),
         where("alunoId", "==", alunoRef.id),
@@ -75,7 +78,6 @@ export async function salvarAluno({
       );
       const filaSnap = await getDocs(filaQuery);
       if (filaSnap.empty) {
-        // Se for serviço do tipo fila e tiver senha, marca a senha como usada
         if (servico.senhaId && servico.tipoId) {
           const senhaRef = doc(db, "tiposAtendimento", servico.tipoId, "senhas", servico.senhaId);
           await updateDoc(senhaRef, { usado: true, alunoId: alunoRef.id, dataUso: new Date() });

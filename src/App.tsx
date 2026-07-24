@@ -37,8 +37,9 @@ import Inscricao from "./pages/Inscricao";
 import PreInscricoes from "./pages/PreInscricoes";
 import MatriculasTurma from "./pages/MatriculasTurma";
 
-// Import da nova página
+// Import das páginas de administração e restauração
 import AdminUnificacao from "./pages/AdminUnificacao";
+import ListarRestaurados from "./pages/ListarRestaurados";
 
 export default function App() {
   return (
@@ -80,8 +81,10 @@ export default function App() {
         <Route path="/teste-certificado" element={<TesteCertificado />} />
         <Route path="/pre-inscricoes" element={<PreInscricoes />} />
         <Route path="/matriculas-turma" element={<MatriculasTurma />} />
-        {/* Nova rota administrativa */}
+        
+        {/* Rotas administrativas */}
         <Route path="/admin/unificar" element={<AdminUnificacao />} />
+        <Route path="/restaurados" element={<ListarRestaurados />} />
       </Route>
     </Routes>
   );
