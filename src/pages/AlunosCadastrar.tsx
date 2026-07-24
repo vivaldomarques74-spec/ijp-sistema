@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { salvarAluno } from "../services/salvarAluno";
+import { verificarCpfDuplicado } from "../services/validarCpf";
 
 export default function AlunosCadastrar() {
   const navigate = useNavigate();
@@ -16,6 +17,10 @@ export default function AlunosCadastrar() {
   const [turmas, setTurmas] = useState<any[]>([]);
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
+
+  // Estado para validação de CPF
+  const [cpfStatus, setCpfStatus] = useState({ mensagem: "", existe: false, verificando: false });
+  const cpfTimeoutRef = useRef<number | null>(null); // Correção: usar number em vez de NodeJS.Timeout
 
   useEffect(() => {
     const carregarCursos = async () => {
@@ -40,6 +45,33 @@ export default function AlunosCadastrar() {
     carregarTurmas();
   }, [dadosAluno.cursoAtualId]);
 
+  // Efeito para verificar CPF com debounce
+  useEffect(() => {
+    const cpf = dadosAluno.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) {
+      setCpfStatus({ mensagem: "", existe: false, verificando: false });
+      return;
+    }
+    if (cpfTimeoutRef.current) clearTimeout(cpfTimeoutRef.current);
+    setCpfStatus(prev => ({ ...prev, verificando: true }));
+    cpfTimeoutRef.current = setTimeout(async () => {
+      try {
+        const existe = await verificarCpfDuplicado(cpf);
+        setCpfStatus({
+          mensagem: existe ? "⚠️ CPF já cadastrado" : "✅ CPF disponível",
+          existe,
+          verificando: false,
+        });
+      } catch (error) {
+        console.error("Erro ao verificar CPF:", error);
+        setCpfStatus({ mensagem: "Erro ao verificar CPF", existe: false, verificando: false });
+      }
+    }, 500);
+    return () => {
+      if (cpfTimeoutRef.current) clearTimeout(cpfTimeoutRef.current);
+    };
+  }, [dadosAluno.cpf]);
+
   const handleChange = (e: any) => {
     const { name, value, type, checked } = e.target;
     setDadosAluno(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
@@ -58,6 +90,10 @@ export default function AlunosCadastrar() {
 
   const salvar = async () => {
     if (!dadosAluno.nomeCompleto) return alert("Informe o nome");
+    if (cpfStatus.existe) {
+      alert("CPF já cadastrado. Não é possível salvar.");
+      return;
+    }
     setCarregando(true);
     try {
       await salvarAluno({
@@ -85,25 +121,30 @@ export default function AlunosCadastrar() {
       <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <input placeholder="Nome completo" name="nomeCompleto" value={dadosAluno.nomeCompleto} onChange={handleChange} style={inputStyle} />
-          <input placeholder="CPF" name="cpf" onChange={handleChange} style={inputStyle} />
-          <input placeholder="Endereço" name="endereco" onChange={handleChange} style={inputStyle} />
-          <input placeholder="Email" name="email" onChange={handleChange} style={inputStyle} />
-          <input placeholder="Telefone" name="telefone" onChange={handleChange} style={inputStyle} />
-          <input type="date" name="nascimento" onChange={handleChange} style={inputStyle} />
+          <input placeholder="CPF" name="cpf" value={dadosAluno.cpf} onChange={handleChange} style={inputStyle} />
+          {cpfStatus.mensagem && (
+            <div style={{ gridColumn: "span 2", color: cpfStatus.existe ? "red" : "green", fontSize: 14, marginBottom: 8 }}>
+              {cpfStatus.verificando ? "Verificando..." : cpfStatus.mensagem}
+            </div>
+          )}
+          <input placeholder="Endereço" name="endereco" value={dadosAluno.endereco} onChange={handleChange} style={inputStyle} />
+          <input placeholder="Email" name="email" value={dadosAluno.email} onChange={handleChange} style={inputStyle} />
+          <input placeholder="Telefone" name="telefone" value={dadosAluno.telefone} onChange={handleChange} style={inputStyle} />
+          <input type="date" name="nascimento" value={dadosAluno.nascimento} onChange={handleChange} style={inputStyle} />
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
-          <input type="checkbox" name="menor" onChange={handleChange} />
+          <input type="checkbox" name="menor" checked={dadosAluno.menor} onChange={handleChange} />
           Menor de idade
         </label>
         {dadosAluno.menor && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-            <input placeholder="Nome do responsável" name="responsavelNome" onChange={handleChange} style={inputStyle} />
-            <input placeholder="CPF do responsável" name="responsavelCpf" onChange={handleChange} style={inputStyle} />
-            <input placeholder="Telefone do responsável" name="responsavelTelefone" onChange={handleChange} style={inputStyle} />
-            <input placeholder="Email do responsável" name="responsavelEmail" onChange={handleChange} style={inputStyle} />
+            <input placeholder="Nome do responsável" name="responsavelNome" value={dadosAluno.responsavelNome} onChange={handleChange} style={inputStyle} />
+            <input placeholder="CPF do responsável" name="responsavelCpf" value={dadosAluno.responsavelCpf} onChange={handleChange} style={inputStyle} />
+            <input placeholder="Telefone do responsável" name="responsavelTelefone" value={dadosAluno.responsavelTelefone} onChange={handleChange} style={inputStyle} />
+            <input placeholder="Email do responsável" name="responsavelEmail" value={dadosAluno.responsavelEmail} onChange={handleChange} style={inputStyle} />
           </div>
         )}
-        <button onClick={salvar} disabled={carregando} style={{ padding: "8px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+        <button onClick={salvar} disabled={carregando || cpfStatus.existe} style={{ padding: "8px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
           {carregando ? "Salvando..." : "Salvar Aluno"}
         </button>
       </div>

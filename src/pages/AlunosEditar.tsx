@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { doc, getDoc, updateDoc, collection, getDocs, arrayUnion, runTransaction, addDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { verificarCpfDuplicado } from "../services/validarCpf";
 
 export default function AlunosEditar() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +22,10 @@ export default function AlunosEditar() {
   const [novaTurmaId, setNovaTurmaId] = useState("");
   const [novoServicoId, setNovoServicoId] = useState("");
   const [novaSenhaId, setNovaSenhaId] = useState("");
+
+  // Validação de CPF
+  const [cpfStatus, setCpfStatus] = useState({ mensagem: "", existe: false, verificando: false });
+  const cpfTimeoutRef = useRef<number | null>(null); // Correção: usar number
 
   useEffect(() => {
     carregarDados();
@@ -65,6 +70,33 @@ export default function AlunosEditar() {
     };
     carregarSenhas();
   }, [novoServicoId]);
+
+  // Validação de CPF com debounce
+  useEffect(() => {
+    const cpf = dadosAluno.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) {
+      setCpfStatus({ mensagem: "", existe: false, verificando: false });
+      return;
+    }
+    if (cpfTimeoutRef.current) clearTimeout(cpfTimeoutRef.current);
+    setCpfStatus(prev => ({ ...prev, verificando: true }));
+    cpfTimeoutRef.current = setTimeout(async () => {
+      try {
+        const existe = await verificarCpfDuplicado(cpf, id);
+        setCpfStatus({
+          mensagem: existe ? "⚠️ CPF já cadastrado" : "✅ CPF disponível",
+          existe,
+          verificando: false,
+        });
+      } catch (error) {
+        console.error("Erro ao verificar CPF:", error);
+        setCpfStatus({ mensagem: "Erro ao verificar CPF", existe: false, verificando: false });
+      }
+    }, 500);
+    return () => {
+      if (cpfTimeoutRef.current) clearTimeout(cpfTimeoutRef.current);
+    };
+  }, [dadosAluno.cpf, id]);
 
   const adicionarCurso = async () => {
     if (!novoCursoId || !novaTurmaId) return alert("Selecione curso e turma");
@@ -148,6 +180,10 @@ export default function AlunosEditar() {
   };
 
   const salvar = async () => {
+    if (cpfStatus.existe) {
+      alert("CPF já cadastrado. Não é possível salvar.");
+      return;
+    }
     await updateDoc(doc(db, "alunos", id!), {
       nomeCompleto: dadosAluno.nomeCompleto,
       cpf: dadosAluno.cpf,
@@ -167,7 +203,6 @@ export default function AlunosEditar() {
     navigate("/alunos");
   };
 
-  // Funções para obter nomes com fallback
   const getCursoNome = (cursoId: string) => {
     const curso = cursos.find(c => c.id === cursoId);
     return curso?.nome || "Curso não encontrado";
@@ -196,6 +231,11 @@ export default function AlunosEditar() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <input placeholder="Nome" value={dadosAluno.nomeCompleto} onChange={handleChange} name="nomeCompleto" style={inputStyle} />
           <input placeholder="CPF" value={dadosAluno.cpf} onChange={handleChange} name="cpf" style={inputStyle} />
+          {cpfStatus.mensagem && (
+            <div style={{ gridColumn: "span 2", color: cpfStatus.existe ? "red" : "green", fontSize: 14, marginBottom: 8 }}>
+              {cpfStatus.verificando ? "Verificando..." : cpfStatus.mensagem}
+            </div>
+          )}
           <input placeholder="Endereço" value={dadosAluno.endereco} onChange={handleChange} name="endereco" style={inputStyle} />
           <input placeholder="Email" value={dadosAluno.email} onChange={handleChange} name="email" style={inputStyle} />
           <input placeholder="Telefone" value={dadosAluno.telefone} onChange={handleChange} name="telefone" style={inputStyle} />
@@ -218,7 +258,9 @@ export default function AlunosEditar() {
           <option value="inativo">Inativo</option>
         </select>
         <textarea placeholder="Observações" value={dadosAluno.observacoes} onChange={handleChange} name="observacoes" style={{ ...inputStyle, minHeight: 60 }} />
-        <button onClick={salvar} style={buttonStyle("primary")}>Salvar Alterações</button>
+        <button onClick={salvar} disabled={cpfStatus.existe} style={buttonStyle("primary")}>
+          Salvar Alterações
+        </button>
       </div>
 
       <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
