@@ -22,9 +22,9 @@
 .certificate-wrapper {
   width: 297mm;
   height: 210mm;
-  padding: 10mm 18mm;
+  padding: 14mm 18mm 18mm 18mm; /* padding inferior aumentado para 18mm */
   box-sizing: border-box;
-  background: #ffffff;
+  background: #fcfbf8;
   font-family: 'Montserrat', sans-serif;
   position: relative;
   overflow: hidden;
@@ -112,11 +112,13 @@
   text-align: center;
   margin-bottom: 2mm;
 }
+
 .certificate-logo {
-  width: 60mm;
+  width: 70mm;
   height: auto;
-  margin-bottom: 1mm;
+  margin-bottom: 2mm;
 }
+
 .certificate-institution {
   font-family: 'CormorantBold', serif;
   font-size: 22pt;
@@ -126,6 +128,7 @@
   letter-spacing: 3px;
   text-transform: uppercase;
 }
+
 .certificate-cnpj {
   font-family: 'Montserrat', sans-serif;
   font-size: 8pt;
@@ -134,15 +137,17 @@
   margin: 0 0 1mm 0;
   text-align: center;
 }
+
 .certificate-divider {
   width: 70mm;
   height: 1.5px;
   background: #c9a96e;
   margin: 2mm auto;
 }
+
 .certificate-title {
   font-family: 'Cormorant', serif;
-  font-size: 34pt;
+  font-size: 40pt;
   font-weight: 300;
   font-style: italic;
   color: #1a2a4f;
@@ -150,13 +155,14 @@
   letter-spacing: 6px;
   position: relative;
 }
+
 .certificate-title::after {
   content: '❦';
   display: block;
   font-size: 14pt;
   color: #c9a96e;
   letter-spacing: 6px;
-  margin-top: 0.2mm;
+  margin-top: 0.5mm;
   font-style: normal;
 }
 
@@ -168,19 +174,21 @@
   padding: 0 4mm;
   text-align: center;
 }
+
 .certificate-body-text {
   font-family: 'Montserrat', sans-serif;
   font-size: 14pt;
   color: #2a2a2a;
   line-height: 1.7;
-  margin: 0 0 0.5mm 0;
+  margin: 0 0 1mm 0;
 }
+
 .certificate-student-name {
   font-family: 'CormorantBold', serif;
   font-weight: 700;
   color: #0a1a3a;
   letter-spacing: 2px;
-  margin: 0.5mm 0 1mm 0;
+  margin: 1mm 0 2mm 0;
   line-height: 1.2;
   text-shadow: 0 1px 2px rgba(0,0,0,0.02);
   overflow-wrap: anywhere;
@@ -188,14 +196,16 @@
   max-width: 100%;
   text-wrap: balance;
 }
+
 .certificate-course-name {
   font-family: 'CormorantBold', serif;
   font-weight: 600;
   color: #1a2a4f;
   letter-spacing: 2px;
-  margin: 0 auto 1mm;
+  margin: 0 auto 2mm;
   max-width: 210mm;
 }
+
 .certificate-details {
   display: flex;
   justify-content: center;
@@ -203,57 +213,81 @@
   font-family: 'Montserrat', sans-serif;
   font-size: 12pt;
   color: #3a3a3a;
-  margin-top: 1mm;
+  margin-top: 2mm;
 }
+
 .certificate-details strong {
   font-weight: 600;
 }
+
 .certificate-issue-date {
   font-family: 'Montserrat', sans-serif;
   font-size: 11pt;
   color: #555;
-  margin-top: 1mm;
+  margin-top: 2mm;
+}
+
+.certificate-footer {
+  text-align: center;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 7pt;
+  color: #999;
+  opacity: 0.75;
+  border-top: 1px solid #d4c5a0;
+  padding-top: 2mm;
+  margin-top: 2mm;
+  line-height: 1.6;
+  letter-spacing: 0.5px;
+}
+.certificate-footer span {
+  display: block;
 }
 
 .certificate-signatures {
-  margin-top: 2mm;
-  padding-top: 2mm;
+  margin-top: 2mm; /* reduzido de 6mm para subir */
+  padding-top: 2mm; /* reduzido de 4mm */
   border-top: 1px solid #d4c5a0;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 4mm;
+  gap: 4mm; /* reduzido */
 }
+
 .signature-block {
   text-align: center;
-  min-width: 55mm;
+  min-width: 45mm; /* reduzido de 55mm */
   flex: 1 1 auto;
 }
+
 .signature-block-president {
-  min-width: 70mm;
+  min-width: 60mm; /* reduzido de 70mm */
 }
+
 .signature-image {
-  height: 18mm;
+  height: 22mm; /* reduzido de 26mm */
   width: auto;
-  margin-bottom: 0.5mm;
+  margin-bottom: 1mm;
   opacity: 0.9;
   object-fit: contain;
   display: block;
   margin-left: auto;
   margin-right: auto;
 }
+
 .signature-line {
   width: min(80mm, 100%);
   border-bottom: 1px solid #666;
-  margin: 0 auto 0.5mm;
+  margin: 0 auto 1mm auto;
 }
+
 .signature-name {
   font-family: 'CormorantBold', serif;
   font-size: 13pt;
   font-weight: 600;
   color: #0a1a3a;
 }
+
 .signature-role {
   font-family: 'Montserrat', sans-serif;
   font-size: 9pt;
@@ -261,11 +295,13 @@
   letter-spacing: 1px;
   text-transform: uppercase;
 }
+
 .signature-org {
   font-family: 'Montserrat', sans-serif;
   font-size: 9pt;
   color: #777;
 }
+
 .signatures-1 {
   justify-content: space-between;
 }
@@ -280,25 +316,10 @@
   flex: 0 0 30%;
   min-width: 50mm;
 }
+
 .signature-president-bottom {
   flex: 0 0 100%;
-  margin-top: 1mm;
+  margin-top: 4mm;
   display: flex;
   justify-content: center;
-}
-
-.certificate-footer {
-  text-align: center;
-  font-family: 'Montserrat', sans-serif;
-  font-size: 6pt;
-  color: #999;
-  opacity: 0.75;
-  border-top: 1px solid #d4c5a0;
-  padding-top: 0.5mm;
-  margin-top: 0.5mm;
-  line-height: 1.5;
-  letter-spacing: 0.5px;
-}
-.certificate-footer span {
-  display: block;
 }

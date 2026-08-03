@@ -3,7 +3,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import CertificateTemplate from "./CertificateTemplate";
+import CertificateTemplate from "./CertificateTemplate"; // CORRIGIDO: mesmo diretório
 
 // Interfaces
 interface Curso {
@@ -153,7 +153,6 @@ export default function Certificados() {
   };
 
   const gerarPDF = async (aluno: Aluno) => {
-    // Validação dos professores
     for (let i = 0; i < nomesProfessores.length; i++) {
       if (!nomesProfessores[i].trim()) {
         alert(`Preencha o nome do Professor ${i + 1}`);
@@ -164,22 +163,24 @@ export default function Certificados() {
     const turma = turmas.find(t => t.id === turmaId)!;
     const cursoNome = cursos.find(c => c.id === cursoId)?.nome || "Curso";
     const cargaHoraria = turma?.cargaHoraria || 720;
-    const dataInicio = turma?.dataInicio ? turma.dataInicio.toDate().toLocaleDateString() : "08 de Junho";
-    const dataFim = turma?.dataFim ? turma.dataFim.toDate().toLocaleDateString() : "08 de Setembro de 2026";
+
+    // 🔥 CORREÇÃO: força timezone UTC para evitar deslocamento de dia
+    const dataInicio = turma?.dataInicio
+      ? turma.dataInicio.toDate().toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+      : "08 de Junho";
+    const dataFim = turma?.dataFim
+      ? turma.dataFim.toDate().toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+      : "08 de Setembro de 2026";
 
     setGerando(true);
-
-    let container: HTMLDivElement | null = null;
-    let reactRoot: any = null;
-
     try {
-      container = document.createElement("div");
+      const container = document.createElement("div");
       container.style.position = "fixed";
       container.style.top = "-9999px";
       container.style.left = "-9999px";
       container.style.width = "297mm";
       container.style.height = "210mm";
-      container.style.background = "#ffffff"; // branco
+      container.style.background = "#fcfbf8";
       document.body.appendChild(container);
 
       const root = document.createElement("div");
@@ -188,7 +189,7 @@ export default function Certificados() {
       container.appendChild(root);
 
       const ReactDOM = await import("react-dom/client");
-      reactRoot = ReactDOM.createRoot(root);
+      const reactRoot = ReactDOM.createRoot(root);
       reactRoot.render(
         <CertificateTemplate
           alunoNome={aluno.nomeCompleto}
@@ -203,9 +204,7 @@ export default function Certificados() {
         />
       );
 
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const images = root.querySelectorAll("img");
       await Promise.all(
@@ -219,13 +218,13 @@ export default function Certificados() {
         })
       );
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       const canvas = await html2canvas(root, {
         scale: 5,
         useCORS: true,
         logging: false,
-        backgroundColor: "#ffffff", // branco
+        backgroundColor: "#fcfbf8",
         windowWidth: root.scrollWidth,
         windowHeight: root.scrollHeight,
       });
@@ -243,16 +242,12 @@ export default function Certificados() {
       const nomeSanitizado = aluno.nomeCompleto.replace(/[^\w-]/g, "_");
       pdf.save(`certificado_${nomeSanitizado}.pdf`);
 
+      reactRoot.unmount();
+      document.body.removeChild(container);
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
       alert("Erro ao gerar certificado. Tente novamente.");
     } finally {
-      if (reactRoot) {
-        try { reactRoot.unmount(); } catch (_) {}
-      }
-      if (container && container.parentNode) {
-        try { document.body.removeChild(container); } catch (_) {}
-      }
       setGerando(false);
     }
   };
