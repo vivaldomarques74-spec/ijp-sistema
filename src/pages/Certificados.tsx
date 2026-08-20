@@ -3,7 +3,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import CertificateTemplate from "./CertificateTemplate"; // CORRIGIDO: mesmo diretório
+import CertificateTemplate from "./CertificateTemplate";
 
 // Interfaces
 interface Curso {
@@ -164,7 +164,6 @@ export default function Certificados() {
     const cursoNome = cursos.find(c => c.id === cursoId)?.nome || "Curso";
     const cargaHoraria = turma?.cargaHoraria || 720;
 
-    // 🔥 CORREÇÃO: força timezone UTC para evitar deslocamento de dia
     const dataInicio = turma?.dataInicio
       ? turma.dataInicio.toDate().toLocaleDateString('pt-BR', { timeZone: 'UTC' })
       : "08 de Junho";
@@ -180,7 +179,7 @@ export default function Certificados() {
       container.style.left = "-9999px";
       container.style.width = "297mm";
       container.style.height = "210mm";
-      container.style.background = "#fcfbf8";
+      container.style.background = "#ffffff"; // BRANCO
       document.body.appendChild(container);
 
       const root = document.createElement("div");
@@ -221,12 +220,12 @@ export default function Certificados() {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       const canvas = await html2canvas(root, {
-        scale: 5,
+        scale: 4,
         useCORS: true,
         logging: false,
-        backgroundColor: "#fcfbf8",
-        windowWidth: root.scrollWidth,
-        windowHeight: root.scrollHeight,
+        backgroundColor: "#ffffff", // BRANCO
+        width: root.scrollWidth,
+        height: root.scrollHeight,
       });
 
       const pdf = new jsPDF({

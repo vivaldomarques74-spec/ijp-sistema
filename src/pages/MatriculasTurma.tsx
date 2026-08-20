@@ -36,7 +36,12 @@ export default function MatriculasTurma() {
       const alunosSnap = await getDocs(collection(db, "alunos"));
       const lista = alunosSnap.docs
         .filter(d => turma.alunos.includes(d.id))
-        .map(d => ({ id: d.id, nome: d.data().nomeCompleto, matricula: d.data().matricula }));
+        .map(d => ({
+          id: d.id,
+          nome: d.data().nomeCompleto,
+          matricula: d.data().matricula,
+          telefone: d.data().telefone || "" // 🔥 ADICIONADO TELEFONE
+        }));
       lista.sort((a, b) => a.nome.localeCompare(b.nome));
       setAlunos(lista);
       setCarregando(false);
@@ -110,6 +115,7 @@ export default function MatriculasTurma() {
               <tr>
                 <th style="width: 40px;">Nº</th>
                 <th>Nome do Aluno</th>
+                <th>Telefone</th> <!-- 🔥 ADICIONADO -->
                 <th class="assinatura">Assinatura</th>
               </tr>
             </thead>
@@ -118,6 +124,7 @@ export default function MatriculasTurma() {
                 <tr>
                   <td style="text-align: center;">${i + 1}</td>
                   <td>${a.nome}</td>
+                  <td>${a.telefone || ''}</td> <!-- 🔥 ADICIONADO -->
                   <td class="assinatura"><div class="assinatura-linha"></div></td>
                 </tr>
               `).join("")}
@@ -173,6 +180,7 @@ export default function MatriculasTurma() {
                 <tr style={{ borderBottom: "1px solid #e0e4e8" }}>
                   <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Nome</th>
                   <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Matrícula</th>
+                  <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Telefone</th> {/* 🔥 ADICIONADO */}
                   <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
                 </tr>
               </thead>
@@ -181,6 +189,7 @@ export default function MatriculasTurma() {
                   <tr key={a.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
                     <td style={{ padding: 12 }}>{a.nome}</td>
                     <td style={{ padding: 12 }}>{a.matricula}</td>
+                    <td style={{ padding: 12 }}>{a.telefone || "-"}</td> {/* 🔥 ADICIONADO */}
                     <td style={{ padding: 12 }}>
                       <button onClick={() => removerAluno(a.id, a.nome)} style={buttonDanger}>Remover</button>
                     </td>
