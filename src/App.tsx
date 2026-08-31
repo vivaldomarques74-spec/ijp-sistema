@@ -25,6 +25,7 @@ import CadastrarSenhaProfissional from "./pages/CadastrarSenhaProfissional";
 import ProfissionalLayout from "./layout/ProfissionalLayout";
 import ProfissionalAgenda from "./pages/ProfissionalAgenda";
 import ProfissionalProntuario from "./pages/ProfissionalProntuario";
+import ProfissionalPacientes from "./pages/ProfissionalPacientes"; // 🔥 ADICIONADO
 
 import MigracaoPsicologia from "./pages/MigracaoPsicologia";
 import Notificacoes from "./pages/Notificacoes";
@@ -37,9 +38,8 @@ import Inscricao from "./pages/Inscricao";
 import PreInscricoes from "./pages/PreInscricoes";
 import MatriculasTurma from "./pages/MatriculasTurma";
 
-// Import das páginas administrativas
 import AdminUnificacao from "./pages/AdminUnificacao";
-import AdminRestaurarAlunos from "./pages/AdminRestaurarAlunos"; // Nome corrigido
+import AdminRestaurarAlunos from "./pages/AdminRestaurarAlunos";
 
 export default function App() {
   return (
@@ -53,6 +53,7 @@ export default function App() {
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
         <Route path="agenda" element={<ProfissionalAgenda />} />
         <Route path="paciente/:alunoId" element={<ProfissionalProntuario />} />
+        <Route path="pacientes" element={<ProfissionalPacientes />} /> {/* 🔥 ADICIONADO */}
       </Route>
 
       <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
@@ -82,9 +83,8 @@ export default function App() {
         <Route path="/pre-inscricoes" element={<PreInscricoes />} />
         <Route path="/matriculas-turma" element={<MatriculasTurma />} />
         
-        {/* Rotas administrativas */}
         <Route path="/admin/unificar" element={<AdminUnificacao />} />
-        <Route path="/admin/restaurar" element={<AdminRestaurarAlunos />} /> {/* Rota ajustada */}
+        <Route path="/admin/restaurar" element={<AdminRestaurarAlunos />} />
       </Route>
     </Routes>
   );

@@ -36,10 +36,11 @@ export default function SaudePacientes() {
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
+
   const [modalReagendar, setModalReagendar] = useState<any>(null);
+  const [horariosLivres, setHorariosLivres] = useState<Agendamento[]>([]);
   const [novoProfissionalId, setNovoProfissionalId] = useState("");
   const [novoHorarioId, setNovoHorarioId] = useState("");
-  const [horariosLivres, setHorariosLivres] = useState<Agendamento[]>([]);
   const [buscandoHorarios, setBuscandoHorarios] = useState(false);
 
   useEffect(() => {
@@ -125,8 +126,8 @@ export default function SaudePacientes() {
     carregarPacientes();
   }, [filtroProfissional, filtroServico, filtroPeriodo]);
 
-  const abrirModalReagendar = (paciente: Paciente) => {
-    setModalReagendar({ paciente });
+  const abrirModalReagendar = async (paciente: Paciente, profissionalLogado: any) => {
+    setModalReagendar({ paciente, profissionalLogado });
     setNovoProfissionalId(paciente.profissionalId);
     setNovoHorarioId("");
     setHorariosLivres([]);
@@ -167,7 +168,12 @@ export default function SaudePacientes() {
     if (!novoHorarioId) return alert("Selecione um horário.");
     if (!modalReagendar) return;
 
-    const { paciente } = modalReagendar;
+    const { paciente, profissionalLogado } = modalReagendar;
+    if (profissionalLogado?.tipo !== "supervisor" && novoProfissionalId !== paciente.profissionalId) {
+      alert("Apenas supervisores podem reagendar para outro profissional.");
+      return;
+    }
+
     try {
       await updateDoc(doc(db, "agendamentos", paciente.id), {
         alunoId: null,
@@ -245,14 +251,12 @@ export default function SaudePacientes() {
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
                   <td style={{ padding: 12 }}>{p.status}</td>
                   <td style={{ padding: 12 }}>
+                    {/* 🔥 APENAS REAGENDAR - SEM BOTÃO FICHA */}
                     <button
-                      onClick={() => window.open(`/profissional/${p.profissionalId}/paciente/${p.alunoId}`, "_blank")}
-                      style={{ ...styleButton("#0070f3"), marginRight: 4 }}
-                    >
-                      Ficha
-                    </button>
-                    <button
-                      onClick={() => abrirModalReagendar(p)}
+                      onClick={() => {
+                        const profLogado = profissionais.find(prof => prof.id === p.profissionalId) || profissionais[0] || { tipo: "profissional" };
+                        abrirModalReagendar(p, profLogado);
+                      }}
                       style={{ ...styleButton("#ffc107"), color: "#000" }}
                     >
                       Reagendar
@@ -265,6 +269,7 @@ export default function SaudePacientes() {
         </div>
       )}
 
+      {/* Modal de reagendamento */}
       {modalReagendar && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
