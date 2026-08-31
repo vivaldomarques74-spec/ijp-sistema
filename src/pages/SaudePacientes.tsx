@@ -32,14 +32,14 @@ export default function SaudePacientes() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [filtroProfissional, setFiltroProfissional] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("todos");
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
-
   const [modalReagendar, setModalReagendar] = useState<any>(null);
-  const [horariosLivres, setHorariosLivres] = useState<Agendamento[]>([]);
   const [novoProfissionalId, setNovoProfissionalId] = useState("");
   const [novoHorarioId, setNovoHorarioId] = useState("");
+  const [horariosLivres, setHorariosLivres] = useState<Agendamento[]>([]);
   const [buscandoHorarios, setBuscandoHorarios] = useState(false);
 
   useEffect(() => {
@@ -58,13 +58,23 @@ export default function SaudePacientes() {
       const snap = await getDocs(collection(db, "agendamentos"));
       const agendamentos: Agendamento[] = [];
 
+      const hoje = new Date().toISOString().split("T")[0];
+      const semanaAtras = new Date();
+      semanaAtras.setDate(semanaAtras.getDate() - 7);
+      const semanaAtrasStr = semanaAtras.toISOString().split("T")[0];
+
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
         if (data.alunoId) {
-          agendamentos.push({
-            id: docSnap.id,
-            ...data,
-          } as Agendamento);
+          let incluir = true;
+          if (filtroPeriodo === "hoje" && data.data !== hoje) incluir = false;
+          if (filtroPeriodo === "semana" && data.data < semanaAtrasStr) incluir = false;
+          if (incluir) {
+            agendamentos.push({
+              id: docSnap.id,
+              ...data,
+            } as Agendamento);
+          }
         }
       }
 
@@ -113,10 +123,10 @@ export default function SaudePacientes() {
 
   useEffect(() => {
     carregarPacientes();
-  }, [filtroProfissional, filtroServico]);
+  }, [filtroProfissional, filtroServico, filtroPeriodo]);
 
-  const abrirModalReagendar = async (paciente: Paciente, profissionalLogado: any) => {
-    setModalReagendar({ paciente, profissionalLogado });
+  const abrirModalReagendar = (paciente: Paciente) => {
+    setModalReagendar({ paciente });
     setNovoProfissionalId(paciente.profissionalId);
     setNovoHorarioId("");
     setHorariosLivres([]);
@@ -157,12 +167,7 @@ export default function SaudePacientes() {
     if (!novoHorarioId) return alert("Selecione um horário.");
     if (!modalReagendar) return;
 
-    const { paciente, profissionalLogado } = modalReagendar;
-    if (profissionalLogado?.tipo !== "supervisor" && novoProfissionalId !== paciente.profissionalId) {
-      alert("Apenas supervisores podem reagendar para outro profissional.");
-      return;
-    }
-
+    const { paciente } = modalReagendar;
     try {
       await updateDoc(doc(db, "agendamentos", paciente.id), {
         alunoId: null,
@@ -198,6 +203,11 @@ export default function SaudePacientes() {
     <div>
       <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Pacientes (todos os agendamentos)</h3>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={filtroPeriodo} onChange={e => setFiltroPeriodo(e.target.value)} style={styleSelect}>
+          <option value="todos">Todos os períodos</option>
+          <option value="hoje">Hoje</option>
+          <option value="semana">Última semana</option>
+        </select>
         <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)} style={styleSelect}>
           <option value="">Todos os profissionais</option>
           {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
@@ -242,10 +252,7 @@ export default function SaudePacientes() {
                       Ficha
                     </button>
                     <button
-                      onClick={() => {
-                        const profLogado = profissionais.find(prof => prof.id === p.profissionalId) || profissionais[0] || { tipo: "profissional" };
-                        abrirModalReagendar(p, profLogado);
-                      }}
+                      onClick={() => abrirModalReagendar(p)}
                       style={{ ...styleButton("#ffc107"), color: "#000" }}
                     >
                       Reagendar
