@@ -73,7 +73,7 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 2. Reordenar matrículas (CORRIGIDO)
+  // 2. Reordenar matrículas
   const handleReordenar = async () => {
     if (!confirm("Reordenar matrículas?")) return;
     setCarregando(true);
@@ -81,8 +81,7 @@ export default function AdminUnificacao() {
     try {
       const alunosRef = collection(db, "alunos");
       const snapshot = await getDocs(alunosRef);
-      const alunos: any[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Ordenar por matriculaNumero (fallback para 0)
+      const alunos = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
       alunos.sort((a, b) => (a.matriculaNumero || 0) - (b.matriculaNumero || 0));
       let i = 1;
       for (const aluno of alunos) {
@@ -128,13 +127,14 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 4. Corrigir Tipo de Serviço (texto -> ID)
+  // 4. CORRIGIR TIPO DE SERVIÇO (texto -> ID) - incluindo filaEspera
   const handleCorrigirTipoServico = async () => {
-    if (!confirm("Isso vai corrigir os tipos de serviço nos agendamentos e profissionais. Continuar?")) return;
+    if (!confirm("Isso vai corrigir os tipos de serviço nos agendamentos, profissionais e fila de espera. Continuar?")) return;
     setCarregando(true);
     setLogs([]);
 
     try {
+      // 1. Buscar os serviços para mapear nomes para IDs
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       const mapa: Record<string, string> = {};
       servSnap.forEach(d => {
@@ -144,7 +144,7 @@ export default function AdminUnificacao() {
 
       adicionarLog(`📌 Mapeamento: ${Object.keys(mapa).join(", ")}`);
 
-      // Corrigir agendamentos
+      // 2. Corrigir agendamentos
       const agendSnap = await getDocs(collection(db, "agendamentos"));
       let countAgend = 0;
       for (const docSnap of agendSnap.docs) {
@@ -160,7 +160,7 @@ export default function AdminUnificacao() {
         }
       }
 
-      // Corrigir profissionais (especialidade)
+      // 3. Corrigir profissionais (especialidade)
       const profSnap = await getDocs(collection(db, "profissionais"));
       let countProf = 0;
       for (const docSnap of profSnap.docs) {
@@ -176,7 +176,23 @@ export default function AdminUnificacao() {
         }
       }
 
-      adicionarLog(`🎉 Correção concluída! ${countAgend} agendamentos e ${countProf} profissionais corrigidos.`);
+      // 🔥 4. CORRIGIR FILA DE ESPERA
+      const filaSnap = await getDocs(collection(db, "filaEspera"));
+      let countFila = 0;
+      for (const docSnap of filaSnap.docs) {
+        const data = docSnap.data();
+        const tipoId = data.tipoId;
+        if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
+          const novoId = mapa[tipoId.toLowerCase()];
+          if (tipoId !== novoId) {
+            await updateDoc(docSnap.ref, { tipoId: novoId });
+            countFila++;
+            adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${novoId}"`);
+          }
+        }
+      }
+
+      adicionarLog(`🎉 Correção concluída! ${countAgend} agendamentos, ${countProf} profissionais e ${countFila} registros na fila corrigidos.`);
     } catch (error: any) {
       adicionarLog(`❌ Erro: ${error.message}`);
     } finally {
