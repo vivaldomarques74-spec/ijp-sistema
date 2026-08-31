@@ -37,14 +37,12 @@ export default function AdminUnificacao() {
 
         for (const sec of secundarios) {
           adicionarLog(`  Unificando ${sec.id} (${sec.nomeCompleto})`);
-          // Presenças
           const presencasSnap = await getDocs(collection(db, "presencas"));
           for (const pDoc of presencasSnap.docs) {
             if (pDoc.data().alunoId === sec.id) {
               await updateDoc(pDoc.ref, { alunoId: principal.id });
             }
           }
-          // Turmas
           const turmasSnap = await getDocs(collection(db, "turmas"));
           for (const tDoc of turmasSnap.docs) {
             const data = tDoc.data();
@@ -54,7 +52,6 @@ export default function AdminUnificacao() {
               await updateDoc(tDoc.ref, { alunos: newAlunos });
             }
           }
-          // Fila
           const filaSnap = await getDocs(collection(db, "filaEspera"));
           for (const fDoc of filaSnap.docs) {
             if (fDoc.data().alunoId === sec.id) {
@@ -127,24 +124,50 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 4. CORRIGIR TIPO DE SERVIÇO (texto -> ID) - incluindo filaEspera
-  const handleCorrigirTipoServico = async () => {
-    if (!confirm("Isso vai corrigir os tipos de serviço nos agendamentos, profissionais e fila de espera. Continuar?")) return;
+  // 🔥 4. PADRONIZAR TUDO (filaa, agendamentos, profissionais, alunos)
+  const handlePadronizarTudo = async () => {
+    if (!confirm("Isso vai padronizar TODOS os tipos de serviço em fila, agendamentos, profissionais e alunos. Continuar?")) return;
     setCarregando(true);
     setLogs([]);
 
     try {
-      // 1. Buscar os serviços para mapear nomes para IDs
+      // Mapear nomes para IDs
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       const mapa: Record<string, string> = {};
+      const mapaNomes: Record<string, string> = {};
       servSnap.forEach(d => {
         const nome = d.data().nome.toLowerCase().trim();
         mapa[nome] = d.id;
+        mapaNomes[d.id] = d.data().nome;
       });
 
       adicionarLog(`📌 Mapeamento: ${Object.keys(mapa).join(", ")}`);
+      let total = 0;
 
-      // 2. Corrigir agendamentos
+      // 4a. Corrigir FILA DE ESPERA
+      const filaSnap = await getDocs(collection(db, "filaEspera"));
+      let countFila = 0;
+      for (const docSnap of filaSnap.docs) {
+        const data = docSnap.data();
+        const tipoId = data.tipoId;
+        if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
+          const novoId = mapa[tipoId.toLowerCase()];
+          if (tipoId !== novoId) {
+            await updateDoc(docSnap.ref, { tipoId: novoId });
+            countFila++;
+            adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${novoId}"`);
+          }
+        } else if (typeof tipoId === "string" && !mapa[tipoId.toLowerCase()]) {
+          // Se não encontrou, pode ser que o ID já seja um ID, verificar se é um ID válido
+          const servicoExiste = servSnap.docs.some(d => d.id === tipoId);
+          if (!servicoExiste) {
+            adicionarLog(`⚠️ Fila ${docSnap.id}: tipoId "${tipoId}" não corresponde a nenhum serviço.`);
+          }
+        }
+      }
+      total += countFila;
+
+      // 4b. Corrigir AGENDAMENTOS
       const agendSnap = await getDocs(collection(db, "agendamentos"));
       let countAgend = 0;
       for (const docSnap of agendSnap.docs) {
@@ -159,8 +182,9 @@ export default function AdminUnificacao() {
           }
         }
       }
+      total += countAgend;
 
-      // 3. Corrigir profissionais (especialidade)
+      // 4c. Corrigir PROFISSIONAIS (especialidade)
       const profSnap = await getDocs(collection(db, "profissionais"));
       let countProf = 0;
       for (const docSnap of profSnap.docs) {
@@ -175,24 +199,37 @@ export default function AdminUnificacao() {
           }
         }
       }
+      total += countProf;
 
-      // 🔥 4. CORRIGIR FILA DE ESPERA
-      const filaSnap = await getDocs(collection(db, "filaEspera"));
-      let countFila = 0;
-      for (const docSnap of filaSnap.docs) {
+      // 4d. Corrigir ALUNOS (servicosAtivos)
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      let countAlunos = 0;
+      for (const docSnap of alunosSnap.docs) {
         const data = docSnap.data();
-        const tipoId = data.tipoId;
-        if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
-          const novoId = mapa[tipoId.toLowerCase()];
-          if (tipoId !== novoId) {
-            await updateDoc(docSnap.ref, { tipoId: novoId });
-            countFila++;
-            adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${novoId}"`);
+        const servicosAtivos = data.servicosAtivos || [];
+        if (servicosAtivos.length > 0) {
+          let modificado = false;
+          const novosServicos = servicosAtivos.map((servico: any) => {
+            const tipoId = servico.tipoId;
+            if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
+              const novoId = mapa[tipoId.toLowerCase()];
+              if (tipoId !== novoId) {
+                modificado = true;
+                return { ...servico, tipoId: novoId };
+              }
+            }
+            return servico;
+          });
+          if (modificado) {
+            await updateDoc(docSnap.ref, { servicosAtivos: novosServicos });
+            countAlunos++;
+            adicionarLog(`✅ Aluno ${docSnap.id}: servicosAtivos corrigidos`);
           }
         }
       }
+      total += countAlunos;
 
-      adicionarLog(`🎉 Correção concluída! ${countAgend} agendamentos, ${countProf} profissionais e ${countFila} registros na fila corrigidos.`);
+      adicionarLog(`🎉 PADRONIZAÇÃO CONCLUÍDA! ${total} registros corrigidos (${countFila} fila, ${countAgend} agendamentos, ${countProf} profissionais, ${countAlunos} alunos).`);
     } catch (error: any) {
       adicionarLog(`❌ Erro: ${error.message}`);
     } finally {
@@ -214,8 +251,8 @@ export default function AdminUnificacao() {
         <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 20px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>
           {carregando ? "Processando..." : "Corrigir CPFs"}
         </button>
-        <button onClick={handleCorrigirTipoServico} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Corrigindo..." : "Corrigir Tipo de Serviço"}
+        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
+          {carregando ? "Padronizando..." : "🔧 PADRONIZAR TUDO"}
         </button>
       </div>
       <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 400, overflow: "auto", border: "1px solid #dee2e6" }}>
