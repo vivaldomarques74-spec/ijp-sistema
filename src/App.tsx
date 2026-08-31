@@ -37,7 +37,6 @@ import PresencaProfessor from "./pages/PresencaProfessor";
 import Inscricao from "./pages/Inscricao";
 import PreInscricoes from "./pages/PreInscricoes";
 import MatriculasTurma from "./pages/MatriculasTurma";
-
 import AdminUnificacao from "./pages/AdminUnificacao";
 
 export default function App() {

@@ -16,6 +16,7 @@ interface Paciente {
   profissionalId: string;
   profissionalNome: string;
   agendamentoId: string;
+  status: string;
 }
 
 interface Estagiario {
@@ -45,7 +46,7 @@ export default function ProfissionalPacientes() {
       const snap = await getDocs(q);
       if (!snap.empty) {
         const docProf = snap.docs[0];
-        const profData = docProf.data() as any; // cast para any
+        const profData = { id: docProf.id, ...docProf.data() } as any;
         setProfissionalId(docProf.id);
         setProfissionalNome(profData.nome || "");
 
@@ -72,30 +73,32 @@ export default function ProfissionalPacientes() {
     carregarAux();
   }, []);
 
-  // Carregar pacientes
+  // Carregar pacientes (TODOS, independente de status ou data)
   const carregarPacientes = async () => {
     if (!profissionalId) return;
     setCarregando(true);
     try {
+      // IDs para filtrar: próprio + supervisionados
       let idsParaFiltrar = [profissionalId];
       if (supervisionadosIds.length > 0) {
         idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
       }
 
       const snap = await getDocs(collection(db, "agendamentos"));
-      const hoje = new Date().toISOString().split("T")[0];
+      
+      // 🔥 ALTERAÇÃO PRINCIPAL: remove filtro de data e status
       let agendamentos = snap.docs
         .filter(d => {
           const data = d.data() as any;
+          // Inclui todos que têm alunoId e estão nos profissionais filtrados
           return (
-            data.status === "ocupado" &&
             data.alunoId &&
-            data.data >= hoje &&
             idsParaFiltrar.includes(data.profissionalId)
           );
         })
         .map(d => ({ id: d.id, ...(d.data() as any) }));
 
+      // Aplicar filtro de estagiário
       if (filtroEstagiarioId) {
         agendamentos = agendamentos.filter(a => a.profissionalId === filtroEstagiarioId);
       }
@@ -103,9 +106,10 @@ export default function ProfissionalPacientes() {
         agendamentos = agendamentos.filter(a => a.tipoId === filtroServico);
       }
 
+      // Ordenar por data (mais recentes primeiro) e depois horário
       agendamentos.sort((a, b) => {
         if (a.data === b.data) return a.horario.localeCompare(b.horario);
-        return a.data.localeCompare(b.data);
+        return b.data.localeCompare(a.data); // mais recentes primeiro
       });
 
       const profMap: Record<string, string> = {};
@@ -132,6 +136,7 @@ export default function ProfissionalPacientes() {
             profissionalId: ag.profissionalId,
             profissionalNome: profMap[ag.profissionalId] || "Desconhecido",
             agendamentoId: ag.id,
+            status: ag.status || "",
           });
         }
       }
@@ -200,6 +205,7 @@ export default function ProfissionalPacientes() {
     marginRight: 4,
   });
 
+  // Contar pacientes por estagiário
   const contarPacientesPorEstagiario = (estagiarioId: string) => {
     return todosPacientes.filter(p => p.profissionalId === estagiarioId).length;
   };
@@ -211,6 +217,7 @@ export default function ProfissionalPacientes() {
         {profissionalNome && <span style={{ fontSize: 14, fontWeight: "normal", color: "#6b7a8f", marginLeft: 8 }}>({profissionalNome})</span>}
       </h3>
 
+      {/* Lista de estagiários */}
       {estagiarios.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -239,6 +246,7 @@ export default function ProfissionalPacientes() {
         </div>
       )}
 
+      {/* Filtros */}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <select value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={styleSelect}>
           <option value="">Todos os serviços</option>
@@ -260,6 +268,7 @@ export default function ProfissionalPacientes() {
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Serviço</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Data/Horário</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Profissional</th>
+                <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Status</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
               </tr>
             </thead>
@@ -273,6 +282,14 @@ export default function ProfissionalPacientes() {
                   <td style={{ padding: 12 }}>{p.data} {p.horario}</td>
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
                   <td style={{ padding: 12 }}>
+                    {p.status === "realizado" && "Atendido"}
+                    {p.status === "faltaJustificada" && "Falta justificada"}
+                    {p.status === "faltaInjustificada" && "Falta injustificada"}
+                    {p.status === "ocupado" && "Agendado"}
+                    {!p.status && "-"}
+                  </td>
+                  <td style={{ padding: 12 }}>
+                    {/* Botão Ficha */}
                     <button
                       onClick={() => window.open(`/profissional/${codigo}/paciente/${p.alunoId}`, "_blank")}
                       style={styleButton("#0070f3")}
@@ -280,13 +297,14 @@ export default function ProfissionalPacientes() {
                       Ficha
                     </button>
 
+                    {/* Transferir para estagiário (apenas para supervisor) */}
                     {supervisionadosIds.length > 0 && (
                       <select
                         value=""
                         onChange={(e) => {
                           if (e.target.value) {
                             transferirParaEstagiario(p, e.target.value);
-                            e.target.value = "";
+                            e.target.value = ""; // reset
                           }
                         }}
                         style={{ padding: "4px 8px", marginLeft: 4, borderRadius: 4, border: "1px solid #ccc" }}
@@ -305,12 +323,15 @@ export default function ProfissionalPacientes() {
                       </select>
                     )}
 
-                    <button
-                      onClick={() => transferirParaFila(p)}
-                      style={styleButton("#dc3545")}
-                    >
-                      Fila
-                    </button>
+                    {/* Transferir para fila (apenas se ainda estiver agendado) */}
+                    {p.status === "ocupado" && (
+                      <button
+                        onClick={() => transferirParaFila(p)}
+                        style={styleButton("#dc3545")}
+                      >
+                        Fila
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
