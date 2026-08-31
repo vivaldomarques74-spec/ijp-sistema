@@ -2,6 +2,18 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
+interface Agendamento {
+  id: string;
+  profissionalId: string;
+  tipoId: string;
+  data: string;
+  horario: string;
+  status: string;
+  alunoId: string;
+  pacienteInfo?: any;
+  [key: string]: any;
+}
+
 interface Paciente {
   id: string;
   alunoId: string;
@@ -16,12 +28,6 @@ interface Paciente {
   status: string;
 }
 
-interface HorarioDisponivel {
-  id: string;
-  data: string;
-  horario: string;
-}
-
 export default function SaudePacientes() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [filtroProfissional, setFiltroProfissional] = useState("");
@@ -29,14 +35,9 @@ export default function SaudePacientes() {
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
-  
-  // Modal reagendar
-  const [modalReagendar, setModalReagendar] = useState<{
-    paciente: Paciente;
-    profissionalLogado: any;
-  } | null>(null);
-  
-  const [horariosLivres, setHorariosLivres] = useState<HorarioDisponivel[]>([]);
+
+  const [modalReagendar, setModalReagendar] = useState<any>(null);
+  const [horariosLivres, setHorariosLivres] = useState<Agendamento[]>([]);
   const [novoProfissionalId, setNovoProfissionalId] = useState("");
   const [novoHorarioId, setNovoHorarioId] = useState("");
   const [buscandoHorarios, setBuscandoHorarios] = useState(false);
@@ -55,13 +56,15 @@ export default function SaudePacientes() {
     setCarregando(true);
     try {
       const snap = await getDocs(collection(db, "agendamentos"));
-      const hoje = new Date().toISOString().split("T")[0];
-      const agendamentos: any[] = [];
+      const agendamentos: Agendamento[] = [];
 
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
-        if (data.status === "ocupado" && data.alunoId && data.data >= hoje) {
-          agendamentos.push({ id: docSnap.id, ...data });
+        if (data.alunoId) {
+          agendamentos.push({
+            id: docSnap.id,
+            ...data,
+          } as Agendamento);
         }
       }
 
@@ -75,7 +78,7 @@ export default function SaudePacientes() {
 
       filtrados.sort((a, b) => {
         if (a.data === b.data) return a.horario.localeCompare(b.horario);
-        return a.data.localeCompare(b.data);
+        return b.data.localeCompare(a.data);
       });
 
       const lista: Paciente[] = [];
@@ -92,11 +95,11 @@ export default function SaudePacientes() {
             matricula: aluno.matricula || "",
             servicoNome: serv?.nome || ag.tipoId,
             tipoId: ag.tipoId,
-            data: ag.data,
-            horario: ag.horario,
-            profissionalId: ag.profissionalId,
+            data: ag.data || "",
+            horario: ag.horario || "",
+            profissionalId: ag.profissionalId || "",
             profissionalNome: prof?.nome || "Desconhecido",
-            status: ag.status,
+            status: ag.status || "",
           });
         }
       }
@@ -125,7 +128,7 @@ export default function SaudePacientes() {
     try {
       const hoje = new Date().toISOString().split("T")[0];
       const snap = await getDocs(collection(db, "agendamentos"));
-      const horarios: HorarioDisponivel[] = [];
+      const horarios: Agendamento[] = [];
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
         if (data.profissionalId === novoProfissionalId && data.data >= hoje &&
@@ -133,9 +136,8 @@ export default function SaudePacientes() {
             !data.alunoId && !data.pacienteInfo) {
           horarios.push({
             id: docSnap.id,
-            data: data.data,
-            horario: data.horario,
-          });
+            ...data,
+          } as Agendamento);
         }
       }
       horarios.sort((a, b) => {
@@ -156,21 +158,17 @@ export default function SaudePacientes() {
     if (!modalReagendar) return;
 
     const { paciente, profissionalLogado } = modalReagendar;
-    
-    // Verificar permissão: se não for supervisor, só pode reagendar para o mesmo profissional
     if (profissionalLogado?.tipo !== "supervisor" && novoProfissionalId !== paciente.profissionalId) {
       alert("Apenas supervisores podem reagendar para outro profissional.");
       return;
     }
 
     try {
-      // Liberar horário antigo
       await updateDoc(doc(db, "agendamentos", paciente.id), {
         alunoId: null,
         status: "livre",
       });
 
-      // Ocupar novo horário
       await updateDoc(doc(db, "agendamentos", novoHorarioId), {
         alunoId: paciente.alunoId,
         status: "ocupado",
@@ -198,7 +196,7 @@ export default function SaudePacientes() {
 
   return (
     <div>
-      <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Pacientes em atendimento</h3>
+      <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Pacientes (todos os agendamentos)</h3>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)} style={styleSelect}>
           <option value="">Todos os profissionais</option>
@@ -212,7 +210,7 @@ export default function SaudePacientes() {
       </div>
 
       {carregando && <p>Carregando...</p>}
-      {!carregando && pacientes.length === 0 && <p>Nenhum paciente encontrado.</p>}
+      {!carregando && pacientes.length === 0 && <p>Nenhum agendamento encontrado.</p>}
       {pacientes.length > 0 && (
         <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -223,6 +221,7 @@ export default function SaudePacientes() {
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Serviço</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Data/Horário</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Profissional</th>
+                <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Status</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
               </tr>
             </thead>
@@ -234,6 +233,7 @@ export default function SaudePacientes() {
                   <td style={{ padding: 12 }}>{p.servicoNome}</td>
                   <td style={{ padding: 12 }}>{p.data} {p.horario}</td>
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
+                  <td style={{ padding: 12 }}>{p.status}</td>
                   <td style={{ padding: 12 }}>
                     <button
                       onClick={() => window.open(`/profissional/${p.profissionalId}/paciente/${p.alunoId}`, "_blank")}
@@ -258,7 +258,6 @@ export default function SaudePacientes() {
         </div>
       )}
 
-      {/* Modal de reagendamento */}
       {modalReagendar && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -267,7 +266,6 @@ export default function SaudePacientes() {
           <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
             <h3>Reagendar Paciente</h3>
             <p><strong>{modalReagendar.paciente.nome}</strong> - {modalReagendar.paciente.servicoNome}</p>
-            
             <div style={{ marginBottom: 12 }}>
               <label>Profissional: </label>
               <select
@@ -287,13 +285,11 @@ export default function SaudePacientes() {
                 ))}
               </select>
             </div>
-
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <button onClick={buscarHorarios} disabled={buscandoHorarios || !novoProfissionalId} style={{ ...styleButton("#0070f3"), width: "100%" }}>
                 {buscandoHorarios ? "Buscando..." : "🔍 Buscar horários disponíveis"}
               </button>
             </div>
-
             {horariosLivres.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <label>Horário: </label>
@@ -309,7 +305,6 @@ export default function SaudePacientes() {
                 </select>
               </div>
             )}
-
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={handleReagendar} disabled={!novoHorarioId} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
                 Reagendar
