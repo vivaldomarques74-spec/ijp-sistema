@@ -57,7 +57,6 @@ export default function ProfissionalPacientes() {
         const profData = { id: docProf.id, ...docProf.data() } as any;
         setProfissionalId(docProf.id);
         setProfissionalNome(profData.nome || "");
-
         if (profData.tipo === "supervisor") {
           const estQuery = query(collection(db, "profissionais"), where("supervisorId", "==", docProf.id));
           const estSnap = await getDocs(estQuery);
@@ -96,7 +95,7 @@ export default function ProfissionalPacientes() {
 
       const lista: Paciente[] = [];
 
-      // 1. Agendamentos
+      // Agendamentos
       const snapAgend = await getDocs(collection(db, "agendamentos"));
       for (const docSnap of snapAgend.docs) {
         const data = docSnap.data();
@@ -124,7 +123,7 @@ export default function ProfissionalPacientes() {
         }
       }
 
-      // 2. Fila de espera
+      // Fila de espera (status aguardando ou vinculado)
       const snapFila = await getDocs(collection(db, "filaEspera"));
       for (const docSnap of snapFila.docs) {
         const data = docSnap.data();
@@ -141,7 +140,7 @@ export default function ProfissionalPacientes() {
               nome: aluno.nomeCompleto,
               matricula: aluno.matricula || "",
               telefone: aluno.telefone || "",
-              servicoNome: servMap[data.tipoId] || data.tipoId,
+              servicoNome: servMap[data.tipoId] || data.tipoId || "Serviço",
               tipoId: data.tipoId,
               data: "",
               horario: "",
@@ -155,7 +154,7 @@ export default function ProfissionalPacientes() {
         }
       }
 
-      // Filtros
+      // Aplicar filtros
       let filtrados = lista;
       if (filtroEstagiarioId) {
         filtrados = filtrados.filter(p => p.profissionalId === filtroEstagiarioId);
@@ -165,13 +164,8 @@ export default function ProfissionalPacientes() {
         const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
         const idServico = filtroServico;
         filtrados = filtrados.filter(p => {
-          const tipoIdPaciente = p.tipoId || "";
-          const tipoIdLower = tipoIdPaciente.toLowerCase().trim();
-          return (
-            tipoIdPaciente === idServico ||
-            tipoIdLower === nomeServico ||
-            tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim()
-          );
+          const tipoIdLower = (p.tipoId || "").toLowerCase().trim();
+          return p.tipoId === idServico || tipoIdLower === nomeServico;
         });
       }
 
@@ -199,18 +193,17 @@ export default function ProfissionalPacientes() {
     carregarPacientes();
   }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
 
-  // VINCULAR PACIENTE DA FILA (sem horário)
+  // VINCULAR PACIENTE (sem horário)
   const vincularPaciente = async (paciente: Paciente, profissionalId: string) => {
     if (!profissionalId) return alert("Selecione um profissional.");
     const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
     if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome}?`)) return;
-
     try {
       await updateDoc(doc(db, "filaEspera", paciente.id), {
         profissionalId: profissionalId,
         status: "vinculado"
       });
-      alert(`Paciente vinculado a ${profissionalNome}!`);
+      alert(`Paciente vinculado a ${profissionalNome}! Ele saiu da fila e aguarda agendamento de horário.`);
       setVinculando(null);
       carregarPacientes();
     } catch (error: any) {
@@ -224,7 +217,6 @@ export default function ProfissionalPacientes() {
     if (!data || !horario) return alert("Preencha data e horário.");
     const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
     if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome} na data ${data} ${horario}?`)) return;
-
     try {
       await addDoc(collection(db, "agendamentos"), {
         alunoId: paciente.alunoId,
@@ -255,11 +247,8 @@ export default function ProfissionalPacientes() {
     if (novoProfissionalId === paciente.profissionalId) return alert("O paciente já está com este profissional.");
     const profissionalNome = profissionais.find(p => p.id === novoProfissionalId)?.nome || "profissional";
     if (!confirm(`Reagendar ${paciente.nome} para ${profissionalNome}?`)) return;
-
     try {
-      await updateDoc(doc(db, "agendamentos", paciente.id), {
-        profissionalId: novoProfissionalId
-      });
+      await updateDoc(doc(db, "agendamentos", paciente.id), { profissionalId: novoProfissionalId });
       alert(`Paciente reagendado para ${profissionalNome}!`);
       carregarPacientes();
     } catch (error: any) {
@@ -389,9 +378,7 @@ export default function ProfissionalPacientes() {
                         <select
                           onChange={(e) => {
                             const profId = e.target.value;
-                            if (profId) {
-                              setVinculando({ paciente: p, profissionalId: profId });
-                            }
+                            if (profId) setVinculando({ paciente: p, profissionalId: profId });
                           }}
                           style={{ ...styleSelect, width: "auto", marginRight: 4 }}
                         >

@@ -40,6 +40,7 @@ export default function SaudeFila() {
       return;
     }
     const carregarFila = async () => {
+      // Buscar todos com status aguardando ou vinculado
       const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
       const snap = await getDocs(q);
 
@@ -47,11 +48,14 @@ export default function SaudeFila() {
       const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
       const idServico = tipoId;
 
+      console.log("🔍 Buscando fila para serviço:", idServico, nomeServico);
+
       const lista = [];
       for (const docFil of snap.docs) {
         const data = docFil.data();
         const tipoIdFila = data.tipoId;
         const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
+        // Fallback: compara por ID ou nome
         const corresponde = 
           tipoIdFila === idServico || 
           tipoIdLower === nomeServico ||
@@ -147,7 +151,7 @@ export default function SaudeFila() {
     }
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // Recarregar fila
+    // recarregar fila
     const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
     const snap = await getDocs(q);
     const servicoSelecionado = tipos.find(t => t.id === tipoId);
@@ -191,7 +195,7 @@ export default function SaudeFila() {
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
-        // Recarregar fila
+        // recarregar
         const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
         const snap = await getDocs(q);
         const servicoSelecionado = tipos.find(t => t.id === tipoId);
