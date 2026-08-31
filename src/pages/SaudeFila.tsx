@@ -50,7 +50,7 @@ export default function SaudeFila() {
             alunoId: data.alunoId,
             nome: alunoSnap.data().nomeCompleto,
             matricula: alunoSnap.data().matricula,
-            tipoId: data.tipoId || "", // garantir string
+            tipoId: data.tipoId || "",
           });
         }
       }
@@ -71,7 +71,6 @@ export default function SaudeFila() {
       return;
     }
 
-    // Se não houver filtro, mostra todos
     if (!tipoId) {
       setFilaExibida(todosPacientes);
       const novasSelecoes: Record<string, any> = {};
@@ -91,7 +90,6 @@ export default function SaudeFila() {
     const nomeServico = servicoSelecionado.nome.toLowerCase().trim();
     const idServico = tipoId.toLowerCase().trim();
 
-    // 🔥 Filtro robusto: compara ID ou nome (case-insensitive)
     const filtrados = todosPacientes.filter(p => {
       const tipoIdPaciente = (p.tipoId || "").toString().toLowerCase().trim();
       return tipoIdPaciente === idServico || tipoIdPaciente === nomeServico;
@@ -105,7 +103,7 @@ export default function SaudeFila() {
     setSelecoes(novasSelecoes);
   }, [tipoId, todosPacientes, tipos]);
 
-  // Carregar horários (sem alterações)
+  // Carregar horários
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];

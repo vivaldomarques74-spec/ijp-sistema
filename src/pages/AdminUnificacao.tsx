@@ -8,9 +8,9 @@ export default function AdminUnificacao() {
 
   const adicionarLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
-  // Unificar duplicatas
+  // 1. Unificar duplicatas
   const handleUnificar = async () => {
-    if (!confirm("Tem certeza? Isso vai unificar duplicatas.")) return;
+    if (!confirm("Tem certeza? Isso vai unificar duplicatas e pode afetar muitos dados.")) return;
     setCarregando(true);
     setLogs([]);
     try {
@@ -73,7 +73,7 @@ export default function AdminUnificacao() {
     }
   };
 
-  // Reordenar matrículas
+  // 2. Reordenar matrículas
   const handleReordenar = async () => {
     if (!confirm("Reordenar matrículas?")) return;
     setCarregando(true);
@@ -99,9 +99,9 @@ export default function AdminUnificacao() {
     }
   };
 
-  // Corrigir CPFs
+  // 3. Corrigir CPFs
   const handleCorrigirCpfs = async () => {
-    if (!confirm("Remover pontos e traços de todos os CPFs?")) return;
+    if (!confirm("Isso vai remover pontos e traços de todos os CPFs no banco. Continuar?")) return;
     setCarregando(true);
     setLogs([]);
     try {
@@ -127,12 +127,14 @@ export default function AdminUnificacao() {
     }
   };
 
-  // Padronizar tipos de serviço
+  // 4. PADRONIZAR TUDO (FORÇADO)
   const handlePadronizarTudo = async () => {
-    if (!confirm("Padronizar tipos de serviço?")) return;
+    if (!confirm("Isso vai FORÇAR a correção de todos os tipoId textuais para IDs. Continuar?")) return;
     setCarregando(true);
     setLogs([]);
+
     try {
+      // 1. Mapear todos os serviços (nome -> ID)
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       const mapa: Record<string, string> = {};
       servSnap.forEach(d => {
@@ -141,58 +143,92 @@ export default function AdminUnificacao() {
       });
       adicionarLog(`📌 Mapeamento: ${Object.keys(mapa).join(", ")}`);
 
-      // Fila
+      let total = 0;
+
+      // 2. Corrigir FILA DE ESPERA (FORÇADAMENTE)
       const filaSnap = await getDocs(collection(db, "filaEspera"));
       let countFila = 0;
       for (const docSnap of filaSnap.docs) {
         const data = docSnap.data();
         const tipoId = data.tipoId;
-        if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
-          const novoId = mapa[tipoId.toLowerCase()];
-          if (tipoId !== novoId) {
-            await updateDoc(docSnap.ref, { tipoId: novoId });
+        if (typeof tipoId === "string") {
+          const chave = tipoId.toLowerCase().trim();
+          if (mapa[chave] && tipoId !== mapa[chave]) {
+            await updateDoc(docSnap.ref, { tipoId: mapa[chave] });
             countFila++;
-            adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${novoId}"`);
+            adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${mapa[chave]}"`);
           }
         }
       }
       adicionarLog(`🎉 Fila: ${countFila} corrigidos.`);
+      total += countFila;
 
-      // Agendamentos
+      // 3. Corrigir AGENDAMENTOS
       const agendSnap = await getDocs(collection(db, "agendamentos"));
       let countAgend = 0;
       for (const docSnap of agendSnap.docs) {
         const data = docSnap.data();
         const tipoId = data.tipoId;
-        if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
-          const novoId = mapa[tipoId.toLowerCase()];
-          if (tipoId !== novoId) {
-            await updateDoc(docSnap.ref, { tipoId: novoId });
+        if (typeof tipoId === "string") {
+          const chave = tipoId.toLowerCase().trim();
+          if (mapa[chave] && tipoId !== mapa[chave]) {
+            await updateDoc(docSnap.ref, { tipoId: mapa[chave] });
             countAgend++;
-            adicionarLog(`✅ Agendamento ${docSnap.id}: "${tipoId}" -> "${novoId}"`);
+            adicionarLog(`✅ Agendamento ${docSnap.id}: "${tipoId}" -> "${mapa[chave]}"`);
           }
         }
       }
       adicionarLog(`🎉 Agendamentos: ${countAgend} corrigidos.`);
+      total += countAgend;
 
-      // Profissionais
+      // 4. Corrigir PROFISSIONAIS (especialidade)
       const profSnap = await getDocs(collection(db, "profissionais"));
       let countProf = 0;
       for (const docSnap of profSnap.docs) {
         const data = docSnap.data();
         const especialidade = data.especialidade;
-        if (typeof especialidade === "string" && mapa[especialidade.toLowerCase()]) {
-          const novoId = mapa[especialidade.toLowerCase()];
-          if (especialidade !== novoId) {
-            await updateDoc(docSnap.ref, { especialidade: novoId });
+        if (typeof especialidade === "string") {
+          const chave = especialidade.toLowerCase().trim();
+          if (mapa[chave] && especialidade !== mapa[chave]) {
+            await updateDoc(docSnap.ref, { especialidade: mapa[chave] });
             countProf++;
-            adicionarLog(`✅ Profissional ${docSnap.id}: "${especialidade}" -> "${novoId}"`);
+            adicionarLog(`✅ Profissional ${docSnap.id}: "${especialidade}" -> "${mapa[chave]}"`);
           }
         }
       }
       adicionarLog(`🎉 Profissionais: ${countProf} corrigidos.`);
+      total += countProf;
 
-      adicionarLog(`🎉 Padronização concluída!`);
+      // 5. Corrigir ALUNOS (servicosAtivos)
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      let countAlunos = 0;
+      for (const docSnap of alunosSnap.docs) {
+        const data = docSnap.data();
+        const servicosAtivos = data.servicosAtivos || [];
+        if (servicosAtivos.length > 0) {
+          let modificado = false;
+          const novosServicos = servicosAtivos.map((servico: any) => {
+            const tipoId = servico.tipoId;
+            if (typeof tipoId === "string") {
+              const chave = tipoId.toLowerCase().trim();
+              if (mapa[chave] && tipoId !== mapa[chave]) {
+                modificado = true;
+                return { ...servico, tipoId: mapa[chave] };
+              }
+            }
+            return servico;
+          });
+          if (modificado) {
+            await updateDoc(docSnap.ref, { servicosAtivos: novosServicos });
+            countAlunos++;
+            adicionarLog(`✅ Aluno ${docSnap.id}: servicosAtivos corrigidos`);
+          }
+        }
+      }
+      adicionarLog(`🎉 Alunos: ${countAlunos} corrigidos.`);
+      total += countAlunos;
+
+      adicionarLog(`🎯 TOTAL: ${total} registros corrigidos.`);
     } catch (error: any) {
       adicionarLog(`❌ Erro: ${error.message}`);
     } finally {
@@ -205,10 +241,18 @@ export default function AdminUnificacao() {
       <h1 style={{ color: "#1a2a4f" }}>Administração – Correção e Unificação</h1>
       <p style={{ color: "#6b7a8f" }}>Ferramentas para manutenção de dados.</p>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Unificar CPFs Duplicados</button>
-        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Reordenar Matrículas</button>
-        <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 20px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>Corrigir CPFs</button>
-        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>PADRONIZAR TUDO</button>
+        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          {carregando ? "Processando..." : "Unificar CPFs Duplicados"}
+        </button>
+        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          {carregando ? "Processando..." : "Reordenar Matrículas"}
+        </button>
+        <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 20px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          {carregando ? "Processando..." : "Corrigir CPFs"}
+        </button>
+        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
+          {carregando ? "Padronizando..." : "🔧 PADRONIZAR TUDO"}
+        </button>
       </div>
       <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 400, overflow: "auto", border: "1px solid #dee2e6" }}>
         {logs.length === 0 && <span style={{ color: "#6b7a8f" }}>Nenhum log ainda.</span>}
