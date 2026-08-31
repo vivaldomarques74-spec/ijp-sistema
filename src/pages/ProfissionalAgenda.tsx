@@ -15,6 +15,16 @@ interface Agendamento {
   pacienteInfo?: { nome: string; telefone: string };
   nomeAluno?: string;
   groupId?: string;
+  nomeProfissional?: string;
+}
+
+interface Profissional {
+  id: string;
+  nome: string;
+  codigo: string;
+  tipo: string;
+  supervisorId?: string;
+  [key: string]: any;
 }
 
 function getLocalDate(): string {
@@ -27,13 +37,14 @@ function getLocalDate(): string {
 
 export default function ProfissionalAgenda() {
   const { codigo } = useParams();
-  const [profissional, setProfissional] = useState<any>(null);
+  const [profissional, setProfissional] = useState<Profissional | null>(null);
   const [agenda, setAgenda] = useState<Agendamento[]>([]);
   const [dataSelecionada, setDataSelecionada] = useState(getLocalDate());
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [supervisionadosIds, setSupervisionadosIds] = useState<string[]>([]);
 
-  // Verificar autenticação ao carregar a página
+  // Verificar autenticação
   useEffect(() => {
     if (localStorage.getItem("profissionalAutenticado") !== "true") {
       alert("Sessão expirada. Faça login novamente.");
@@ -41,26 +52,51 @@ export default function ProfissionalAgenda() {
     }
   }, []);
 
+  // Carregar profissional e supervisionados (se for supervisor)
   useEffect(() => {
     const carregarProfissional = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const docProf = snap.docs[0];
-        setProfissional({ id: docProf.id, ...docProf.data() });
+        const profData = { id: docProf.id, ...docProf.data() } as Profissional;
+        setProfissional(profData);
         setProfissionalId(docProf.id);
+
+        // Se for supervisor, buscar IDs dos estagiários supervisionados
+        if (profData.tipo === "supervisor") {
+          const estagiariosQuery = query(
+            collection(db, "profissionais"),
+            where("supervisorId", "==", docProf.id)
+          );
+          const estSnap = await getDocs(estagiariosQuery);
+          const ids = estSnap.docs.map(d => d.id);
+          setSupervisionadosIds(ids);
+        } else {
+          setSupervisionadosIds([]);
+        }
       }
     };
     carregarProfissional();
   }, [codigo]);
 
+  // Carregar agenda
   const carregarAgenda = async () => {
     if (!profissionalId) return;
     setCarregando(true);
     try {
+      // Lista de profissionais para filtrar: o próprio + supervisionados (se houver)
+      let idsParaFiltrar = [profissionalId];
+      if (supervisionadosIds.length > 0) {
+        idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
+      }
+
       const snap = await getDocs(collection(db, "agendamentos"));
       let horarios = snap.docs
-        .filter(d => d.data().profissionalId === profissionalId && d.data().data === dataSelecionada)
+        .filter(d => {
+          const data = d.data();
+          return idsParaFiltrar.includes(data.profissionalId) && data.data === dataSelecionada;
+        })
         .map(d => {
           const data = d.data();
           return {
@@ -74,10 +110,18 @@ export default function ProfissionalAgenda() {
             alunoId: data.alunoId,
             pacienteInfo: data.pacienteInfo,
             groupId: data.groupId,
+            nomeProfissional: "",
           } as Agendamento;
         });
 
+      // Buscar nomes dos profissionais e dos alunos
+      const todosProfissionais = await getDocs(collection(db, "profissionais"));
+      const profMap: Record<string, string> = {};
+      todosProfissionais.docs.forEach(d => {
+        profMap[d.id] = d.data().nome;
+      });
       for (const h of horarios) {
+        h.nomeProfissional = profMap[h.profissionalId] || "Desconhecido";
         if (h.alunoId) {
           const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
           if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
@@ -95,10 +139,9 @@ export default function ProfissionalAgenda() {
 
   useEffect(() => {
     carregarAgenda();
-  }, [profissionalId, dataSelecionada]);
+  }, [profissionalId, dataSelecionada, supervisionadosIds]);
 
   const registrarPresenca = async (ag: Agendamento, tipo: string) => {
-    // Verificar autenticação
     if (localStorage.getItem("profissionalAutenticado") !== "true") {
       alert("Sessão expirada. Faça login novamente.");
       window.location.href = "/acesso-profissional";
@@ -115,12 +158,12 @@ export default function ProfissionalAgenda() {
     try {
       await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
       alert(`Registrado como ${tipo === "presente" ? "Compareceu" : tipo === "faltaJustificada" ? "Falta justificada" : "Falta injustificada"}`);
-      
+
       if (tipo === "faltaInjustificada") {
         const faltasQuery = query(
           collection(db, "agendamentos"),
           where("alunoId", "==", ag.alunoId),
-          where("profissionalId", "==", profissionalId),
+          where("profissionalId", "==", ag.profissionalId),
           where("tipoId", "==", ag.tipoId),
           where("status", "==", "faltaInjustificada")
         );
@@ -178,16 +221,26 @@ export default function ProfissionalAgenda() {
     <div>
       <div style={{ marginBottom: 20 }}>
         <h2>Agenda do Profissional</h2>
-        <p><strong>Código:</strong> {codigo} | <strong>Nome:</strong> {profissional?.nome || "Carregando..."}</p>
+        <p>
+          <strong>Código:</strong> {codigo} | <strong>Nome:</strong>{" "}
+          {profissional?.nome || "Carregando..."}
+        </p>
+        {supervisionadosIds.length > 0 && (
+          <p>
+            <strong>Supervisionando:</strong> {supervisionadosIds.length} estagiário(s)
+          </p>
+        )}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <label>Data: </label>
           <input
             type="date"
             value={dataSelecionada}
-            onChange={e => setDataSelecionada(e.target.value)}
+            onChange={(e) => setDataSelecionada(e.target.value)}
             style={{ padding: 4 }}
           />
-          <button onClick={carregarAgenda} style={{ padding: "4px 8px" }}>Recarregar</button>
+          <button onClick={carregarAgenda} style={{ padding: "4px 8px" }}>
+            Recarregar
+          </button>
         </div>
       </div>
       {carregando && <p>Carregando horários...</p>}
@@ -197,29 +250,85 @@ export default function ProfissionalAgenda() {
             <thead>
               <tr>
                 <th style={{ textAlign: "left", padding: 8 }}>Horário</th>
+                <th style={{ textAlign: "left", padding: 8 }}>Profissional</th>
                 <th style={{ textAlign: "left", padding: 8 }}>Paciente</th>
                 <th style={{ textAlign: "left", padding: 8 }}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {agenda.map(ag => (
+              {agenda.map((ag) => (
                 <tr key={ag.id}>
                   <td style={{ padding: 8 }}>{ag.horario}</td>
-                  <td style={{ padding: 8 }}>{ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}</td>
+                  <td style={{ padding: 8 }}>{ag.nomeProfissional}</td>
                   <td style={{ padding: 8 }}>
-                    {ag.alunoId && (ag.status === "agendado" || ag.status === "ocupado") && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        <button onClick={() => registrarPresenca(ag, "presente")} style={{ background: "#28a745", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>Compareceu</button>
-                        <button onClick={() => registrarPresenca(ag, "faltaJustificada")} style={{ background: "#ffc107", color: "#000", border: "none", padding: "6px 10px", borderRadius: 4 }}>Falta justificada</button>
-                        <button onClick={() => registrarPresenca(ag, "faltaInjustificada")} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>Falta injustificada</button>
-                      </div>
-                    )}
+                    {ag.nomeAluno ||
+                      (ag.tipoPaciente === "particular"
+                        ? ag.pacienteInfo?.nome
+                        : "Livre")}
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    {ag.alunoId &&
+                      (ag.status === "agendado" || ag.status === "ocupado") && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          <button
+                            onClick={() => registrarPresenca(ag, "presente")}
+                            style={{
+                              background: "#28a745",
+                              color: "#fff",
+                              border: "none",
+                              padding: "6px 10px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            Compareceu
+                          </button>
+                          <button
+                            onClick={() => registrarPresenca(ag, "faltaJustificada")}
+                            style={{
+                              background: "#ffc107",
+                              color: "#000",
+                              border: "none",
+                              padding: "6px 10px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            Falta justificada
+                          </button>
+                          <button
+                            onClick={() => registrarPresenca(ag, "faltaInjustificada")}
+                            style={{
+                              background: "#dc3545",
+                              color: "#fff",
+                              border: "none",
+                              padding: "6px 10px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            Falta injustificada
+                          </button>
+                        </div>
+                      )}
                     {ag.status === "realizado" && "Atendido"}
                     {ag.status === "faltaJustificada" && "Falta justificada"}
                     {ag.status === "faltaInjustificada" && "Falta injustificada"}
                     {!ag.alunoId && "Livre"}
                     {ag.alunoId && (
-                      <button onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")} style={{ marginLeft: 8, background: "#0070f3", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>
+                      <button
+                        onClick={() =>
+                          window.open(
+                            `/profissional/${codigo}/paciente/${ag.alunoId}`,
+                            "_blank"
+                          )
+                        }
+                        style={{
+                          marginLeft: 8,
+                          background: "#0070f3",
+                          color: "#fff",
+                          border: "none",
+                          padding: "6px 10px",
+                          borderRadius: 4,
+                        }}
+                      >
                         Ficha
                       </button>
                     )}
@@ -228,14 +337,14 @@ export default function ProfissionalAgenda() {
               ))}
               {agenda.length === 0 && (
                 <tr>
-                  <td colSpan={3} style={{ padding: 8, textAlign: "center" }}>
+                  <td colSpan={4} style={{ padding: 8, textAlign: "center" }}>
                     Nenhum horário para esta data.
                   </td>
                 </tr>
               )}
             </tbody>
-        </table>
-      </div>
+          </table>
+        </div>
       )}
     </div>
   );
