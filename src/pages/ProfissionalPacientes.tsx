@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { collection, getDocs, doc, getDoc, query, where, deleteDoc, addDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 interface Paciente {
@@ -17,6 +17,7 @@ interface Paciente {
   profissionalNome: string;
   agendamentoId: string;
   status: string;
+  origem: "agendamento" | "fila";
 }
 
 interface Estagiario {
@@ -38,11 +39,7 @@ export default function ProfissionalPacientes() {
   const [filtroEstagiarioId, setFiltroEstagiarioId] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
-  const [reagendando, setReagendando] = useState<Paciente | null>(null);
-  const [novaData, setNovaData] = useState("");
-  const [novoHorario, setNovoHorario] = useState("");
 
-  // Carregar profissional e estagiários supervisionados
   useEffect(() => {
     const carregarProfissional = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
@@ -65,7 +62,6 @@ export default function ProfissionalPacientes() {
     carregarProfissional();
   }, [codigo]);
 
-  // Carregar profissionais e serviços
   useEffect(() => {
     const carregarAux = async () => {
       const profSnap = await getDocs(collection(db, "profissionais"));
@@ -76,7 +72,6 @@ export default function ProfissionalPacientes() {
     carregarAux();
   }, []);
 
-  // Carregar pacientes
   const carregarPacientes = async () => {
     if (!profissionalId) return;
     setCarregando(true);
@@ -86,62 +81,93 @@ export default function ProfissionalPacientes() {
         idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
       }
 
-      const snap = await getDocs(collection(db, "agendamentos"));
-      
-      let agendamentos = snap.docs
-        .filter(d => {
-          const data = d.data() as any;
-          return (
-            data.alunoId &&
-            idsParaFiltrar.includes(data.profissionalId)
-          );
-        })
-        .map(d => ({ id: d.id, ...(d.data() as any) }));
-
-      if (filtroEstagiarioId) {
-        agendamentos = agendamentos.filter(a => a.profissionalId === filtroEstagiarioId);
-      }
-      if (filtroServico) {
-        agendamentos = agendamentos.filter(a => a.tipoId === filtroServico);
-      }
-
-      agendamentos.sort((a, b) => {
-        if (a.data === b.data) return a.horario.localeCompare(b.horario);
-        return b.data.localeCompare(a.data);
-      });
-
       const profMap: Record<string, string> = {};
       profissionais.forEach(p => { profMap[p.id] = p.nome; });
-
       const servMap: Record<string, string> = {};
       servicos.forEach(s => { servMap[s.id] = s.nome; });
 
       const lista: Paciente[] = [];
-      for (const ag of agendamentos) {
-        const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
-        if (alunoSnap.exists()) {
-          const aluno = alunoSnap.data();
-          lista.push({
-            id: ag.id,
-            alunoId: ag.alunoId,
-            nome: aluno.nomeCompleto,
-            matricula: aluno.matricula || "",
-            telefone: aluno.telefone || "",
-            servicoNome: servMap[ag.tipoId] || ag.tipoId,
-            tipoId: ag.tipoId,
-            data: ag.data,
-            horario: ag.horario,
-            profissionalId: ag.profissionalId,
-            profissionalNome: profMap[ag.profissionalId] || "Desconhecido",
-            agendamentoId: ag.id,
-            status: ag.status || "",
-          });
+
+      // 1. Agendamentos
+      const snapAgend = await getDocs(collection(db, "agendamentos"));
+      for (const docSnap of snapAgend.docs) {
+        const data = docSnap.data();
+        if (data.alunoId && idsParaFiltrar.includes(data.profissionalId)) {
+          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+          if (alunoSnap.exists()) {
+            const aluno = alunoSnap.data();
+            lista.push({
+              id: docSnap.id,
+              alunoId: data.alunoId,
+              nome: aluno.nomeCompleto,
+              matricula: aluno.matricula || "",
+              telefone: aluno.telefone || "",
+              servicoNome: servMap[data.tipoId] || data.tipoId,
+              tipoId: data.tipoId,
+              data: data.data || "",
+              horario: data.horario || "",
+              profissionalId: data.profissionalId,
+              profissionalNome: profMap[data.profissionalId] || "Desconhecido",
+              agendamentoId: docSnap.id,
+              status: data.status || "",
+              origem: "agendamento",
+            });
+          }
         }
       }
-      setPacientes(lista);
-      setTodosPacientes(lista);
+
+      // 2. Fila de espera
+      const snapFila = await getDocs(collection(db, "filaEspera"));
+      for (const docSnap of snapFila.docs) {
+        const data = docSnap.data();
+        if (data.alunoId && data.status === "aguardando" && idsParaFiltrar.includes(data.profissionalId)) {
+          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+          if (alunoSnap.exists()) {
+            const aluno = alunoSnap.data();
+            lista.push({
+              id: docSnap.id,
+              alunoId: data.alunoId,
+              nome: aluno.nomeCompleto,
+              matricula: aluno.matricula || "",
+              telefone: aluno.telefone || "",
+              servicoNome: servMap[data.tipoId] || data.tipoId,
+              tipoId: data.tipoId,
+              data: "",
+              horario: "",
+              profissionalId: data.profissionalId || "",
+              profissionalNome: data.profissionalId ? profMap[data.profissionalId] || "Desconhecido" : "Aguardando",
+              agendamentoId: docSnap.id,
+              status: "aguardando",
+              origem: "fila",
+            });
+          }
+        }
+      }
+
+      // Aplicar filtros
+      let filtrados = lista;
+      if (filtroEstagiarioId) {
+        filtrados = filtrados.filter(p => p.profissionalId === filtroEstagiarioId);
+      }
+      if (filtroServico) {
+        filtrados = filtrados.filter(p => p.tipoId === filtroServico);
+      }
+
+      filtrados.sort((a, b) => {
+        if (a.origem === "fila" && b.origem !== "fila") return -1;
+        if (a.origem !== "fila" && b.origem === "fila") return 1;
+        if (a.data && b.data) {
+          if (a.data === b.data) return (a.horario || "").localeCompare(b.horario || "");
+          return b.data.localeCompare(a.data);
+        }
+        return 0;
+      });
+
+      setPacientes(filtrados);
+      setTodosPacientes(filtrados);
     } catch (error) {
       console.error("Erro ao carregar pacientes:", error);
+      alert("Erro ao carregar pacientes.");
     } finally {
       setCarregando(false);
     }
@@ -151,72 +177,6 @@ export default function ProfissionalPacientes() {
     carregarPacientes();
   }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
 
-  // Transferir paciente para estagiário
-  const transferirParaEstagiario = async (paciente: Paciente, estagiarioId: string) => {
-    if (!estagiarioId) return alert("Selecione um estagiário.");
-    const estagiarioNome = estagiarios.find(e => e.id === estagiarioId)?.nome || "estagiário";
-    if (!confirm(`Transferir ${paciente.nome} para ${estagiarioNome}?`)) return;
-
-    try {
-      await updateDoc(doc(db, "agendamentos", paciente.id), { profissionalId: estagiarioId });
-      alert(`Paciente transferido para ${estagiarioNome}!`);
-      carregarPacientes();
-    } catch (error) {
-      console.error("Erro ao transferir:", error);
-      alert("Erro ao transferir paciente.");
-    }
-  };
-
-  // Transferir para fila
-  const transferirParaFila = async (paciente: Paciente) => {
-    if (!confirm(`Remover ${paciente.nome} do horário e colocar na fila de espera?`)) return;
-    try {
-      await deleteDoc(doc(db, "agendamentos", paciente.id));
-      const filaQuery = query(collection(db, "filaEspera"), where("alunoId", "==", paciente.alunoId), where("status", "==", "aguardando"));
-      const filaSnap = await getDocs(filaQuery);
-      if (filaSnap.empty) {
-        await addDoc(collection(db, "filaEspera"), {
-          alunoId: paciente.alunoId,
-          tipoId: paciente.tipoId,
-          dataSolicitacao: new Date(),
-          status: "aguardando",
-          modalidade: "presencial",
-        });
-      }
-      alert("Paciente retornou à fila.");
-      carregarPacientes();
-    } catch (error) {
-      console.error("Erro ao transferir para fila:", error);
-      alert("Erro ao transferir para fila.");
-    }
-  };
-
-  // Reagendar paciente
-  const abrirModalReagendamento = (paciente: Paciente) => {
-    setReagendando(paciente);
-    setNovaData(paciente.data);
-    setNovoHorario(paciente.horario);
-  };
-
-  const confirmarReagendamento = async () => {
-    if (!reagendando) return;
-    if (!novaData || !novoHorario) return alert("Preencha data e horário");
-    
-    try {
-      await updateDoc(doc(db, "agendamentos", reagendando.id), {
-        data: novaData,
-        horario: novoHorario,
-      });
-      alert("Paciente reagendado com sucesso!");
-      setReagendando(null);
-      carregarPacientes();
-    } catch (error) {
-      console.error("Erro ao reagendar:", error);
-      alert("Erro ao reagendar.");
-    }
-  };
-
-  // Estilos
   const styleSelect = { padding: 8, border: "1px solid #ccc", borderRadius: 8, background: "#fff" };
   const styleButton = (bg: string, color = "#fff") => ({
     padding: "4px 12px",
@@ -299,13 +259,16 @@ export default function ProfissionalPacientes() {
                   <td style={{ padding: 12 }}>{p.matricula}</td>
                   <td style={{ padding: 12 }}>{p.telefone}</td>
                   <td style={{ padding: 12 }}>{p.servicoNome}</td>
-                  <td style={{ padding: 12 }}>{p.data} {p.horario}</td>
+                  <td style={{ padding: 12 }}>
+                    {p.origem === "fila" ? "Aguardando horário" : `${p.data} ${p.horario}`}
+                  </td>
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
                   <td style={{ padding: 12 }}>
                     {p.status === "realizado" && "Atendido"}
                     {p.status === "faltaJustificada" && "Falta justificada"}
                     {p.status === "faltaInjustificada" && "Falta injustificada"}
                     {p.status === "ocupado" && "Agendado"}
+                    {p.status === "aguardando" && "Aguardando"}
                     {!p.status && "-"}
                   </td>
                   <td style={{ padding: 12 }}>
@@ -315,45 +278,12 @@ export default function ProfissionalPacientes() {
                     >
                       Ficha
                     </button>
-
-                    <button
-                      onClick={() => abrirModalReagendamento(p)}
-                      style={styleButton("#ffc107", "#000")}
-                    >
-                      Reagendar
-                    </button>
-
-                    {supervisionadosIds.length > 0 && (
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            transferirParaEstagiario(p, e.target.value);
-                            e.target.value = "";
-                          }
-                        }}
-                        style={{ padding: "4px 8px", marginLeft: 4, borderRadius: 4, border: "1px solid #ccc" }}
-                      >
-                        <option value="">Vincular</option>
-                        {estagiarios
-                          .filter(est => est.id !== p.profissionalId)
-                          .map(est => (
-                            <option key={est.id} value={est.id}>
-                              {est.nome}
-                            </option>
-                          ))}
-                        {p.profissionalId !== profissionalId && (
-                          <option value={profissionalId}>Para mim</option>
-                        )}
-                      </select>
-                    )}
-
-                    {p.status === "ocupado" && (
+                    {p.origem === "fila" && (
                       <button
-                        onClick={() => transferirParaFila(p)}
-                        style={styleButton("#dc3545")}
+                        onClick={() => alert("Vincular a um horário em breve")}
+                        style={styleButton("#28a745")}
                       >
-                        Fila
+                        Vincular
                       </button>
                     )}
                   </td>
@@ -361,55 +291,6 @@ export default function ProfissionalPacientes() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Modal de Reagendamento */}
-      {reagendando && (
-        <div style={{
-          position: "fixed",
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: "#fff",
-            padding: 24,
-            borderRadius: 12,
-            maxWidth: 400,
-            width: "90%"
-          }}>
-            <h3>Reagendar {reagendando.nome}</h3>
-            <div style={{ marginBottom: 12 }}>
-              <label>Data: </label>
-              <input
-                type="date"
-                value={novaData}
-                onChange={e => setNovaData(e.target.value)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
-              />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label>Horário: </label>
-              <input
-                type="time"
-                value={novoHorario}
-                onChange={e => setNovoHorario(e.target.value)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={confirmarReagendamento} style={styleButton("#28a745")}>
-                Confirmar
-              </button>
-              <button onClick={() => setReagendando(null)} style={styleButton("#6c757d")}>
-                Cancelar
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
