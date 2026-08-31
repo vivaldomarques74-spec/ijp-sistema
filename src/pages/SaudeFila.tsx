@@ -35,7 +35,7 @@ export default function SaudeFila() {
     carregarProfissionais();
   }, []);
 
-  // Carregar TODOS os pacientes da fila (sem filtro de tipo)
+  // Carregar TODOS os pacientes da fila
   useEffect(() => {
     const carregarTodos = async () => {
       const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
@@ -64,7 +64,7 @@ export default function SaudeFila() {
     carregarTodos();
   }, []);
 
-  // Aplicar filtro quando tipoId mudar
+  // Aplicar filtro
   useEffect(() => {
     if (todosPacientes.length === 0) {
       setFilaExibida([]);
@@ -90,6 +90,7 @@ export default function SaudeFila() {
     const nomeServico = servicoSelecionado.nome.toLowerCase().trim();
     const idServico = tipoId.toLowerCase().trim();
 
+    // 🔥 Filtro robusto: ID ou nome (case-insensitive)
     const filtrados = todosPacientes.filter(p => {
       const tipoIdPaciente = (p.tipoId || "").toString().toLowerCase().trim();
       return tipoIdPaciente === idServico || tipoIdPaciente === nomeServico;
@@ -168,7 +169,7 @@ export default function SaudeFila() {
     }
     const filaDoc = filaExibida.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // Recarregar todos
+    // Recarregar
     const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
     const snap = await getDocs(q);
     const lista = [];

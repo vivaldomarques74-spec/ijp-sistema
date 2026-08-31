@@ -10,7 +10,7 @@ export default function AdminUnificacao() {
 
   // 1. Unificar duplicatas
   const handleUnificar = async () => {
-    if (!confirm("Tem certeza? Isso vai unificar duplicatas e pode afetar muitos dados.")) return;
+    if (!confirm("Tem certeza? Isso vai unificar duplicatas.")) return;
     setCarregando(true);
     setLogs([]);
     try {
@@ -101,7 +101,7 @@ export default function AdminUnificacao() {
 
   // 3. Corrigir CPFs
   const handleCorrigirCpfs = async () => {
-    if (!confirm("Isso vai remover pontos e traços de todos os CPFs no banco. Continuar?")) return;
+    if (!confirm("Remover pontos e traços de todos os CPFs?")) return;
     setCarregando(true);
     setLogs([]);
     try {
@@ -157,6 +157,8 @@ export default function AdminUnificacao() {
             await updateDoc(docSnap.ref, { tipoId: mapa[chave] });
             countFila++;
             adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${mapa[chave]}"`);
+          } else if (!mapa[chave]) {
+            adicionarLog(`⚠️ Fila ${docSnap.id}: tipoId "${tipoId}" não encontrado no mapeamento.`);
           }
         }
       }
