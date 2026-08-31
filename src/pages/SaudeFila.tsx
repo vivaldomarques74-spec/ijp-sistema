@@ -40,11 +40,9 @@ export default function SaudeFila() {
       return;
     }
     const carregarFila = async () => {
-      // 🔥 Buscar TODOS os pacientes com status "aguardando" (sem filtrar por tipoId)
-      const q = query(collection(db, "filaEspera"), where("status", "==", "aguardando"));
+      const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
       const snap = await getDocs(q);
 
-      // Obter o serviço selecionado
       const servicoSelecionado = tipos.find(t => t.id === tipoId);
       const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
       const idServico = tipoId;
@@ -53,7 +51,6 @@ export default function SaudeFila() {
       for (const docFil of snap.docs) {
         const data = docFil.data();
         const tipoIdFila = data.tipoId;
-        // 🔥 Verifica se o tipoId do documento corresponde ao ID ou ao nome (case-insensitive)
         const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
         const corresponde = 
           tipoIdFila === idServico || 
@@ -86,7 +83,6 @@ export default function SaudeFila() {
     carregarFila();
   }, [tipoId, tipos]);
 
-  // Carregar horários disponíveis (sem alterações)
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
@@ -131,9 +127,6 @@ export default function SaudeFila() {
     if (profissionais.length > 0) carregarHorarios();
   }, [profissionais, tipoId]);
 
-  // Funções vincular, removerDaFila, formatarData, atualizarSelecao (sem alterações, mas precisam ser incluídas)
-  // Vou repetir aqui para completude, mas você pode manter as mesmas do seu arquivo original.
-
   const vincular = async (alunoId: string) => {
     const selecao = selecoes[alunoId];
     if (!selecao.profissionalId) return alert("Selecione um profissional");
@@ -154,8 +147,8 @@ export default function SaudeFila() {
     }
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // Recarregar a fila
-    const q = query(collection(db, "filaEspera"), where("status", "==", "aguardando"));
+    // Recarregar fila
+    const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
     const snap = await getDocs(q);
     const servicoSelecionado = tipos.find(t => t.id === tipoId);
     const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
@@ -198,8 +191,8 @@ export default function SaudeFila() {
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
-        // Recarregar a fila
-        const q = query(collection(db, "filaEspera"), where("status", "==", "aguardando"));
+        // Recarregar fila
+        const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
         const snap = await getDocs(q);
         const servicoSelecionado = tipos.find(t => t.id === tipoId);
         const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
@@ -258,7 +251,7 @@ export default function SaudeFila() {
       </select>
       {tipoId && (
         <div>
-          {fila.length === 0 && <p>Nenhum paciente aguardando.</p>}
+          {fila.length === 0 && <p>Nenhum paciente aguardando ou vinculado.</p>}
           {fila.map(paciente => (
             <div key={paciente.alunoId} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

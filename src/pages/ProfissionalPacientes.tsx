@@ -94,9 +94,6 @@ export default function ProfissionalPacientes() {
       const servMap: Record<string, string> = {};
       servicos.forEach(s => { servMap[s.id] = s.nome; });
 
-      const servMapNomes: Record<string, string> = {};
-      servicos.forEach(s => { servMapNomes[s.id] = s.nome.toLowerCase().trim(); });
-
       const lista: Paciente[] = [];
 
       // 1. Agendamentos
@@ -158,7 +155,7 @@ export default function ProfissionalPacientes() {
         }
       }
 
-      // Aplicar filtros
+      // Filtros
       let filtrados = lista;
       if (filtroEstagiarioId) {
         filtrados = filtrados.filter(p => p.profissionalId === filtroEstagiarioId);
@@ -166,9 +163,15 @@ export default function ProfissionalPacientes() {
       if (filtroServico) {
         const servicoSelecionado = servicos.find(s => s.id === filtroServico);
         const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+        const idServico = filtroServico;
         filtrados = filtrados.filter(p => {
-          const tipoIdLower = p.tipoId?.toLowerCase?.()?.trim() || "";
-          return p.tipoId === filtroServico || tipoIdLower === nomeServico;
+          const tipoIdPaciente = p.tipoId || "";
+          const tipoIdLower = tipoIdPaciente.toLowerCase().trim();
+          return (
+            tipoIdPaciente === idServico ||
+            tipoIdLower === nomeServico ||
+            tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim()
+          );
         });
       }
 
@@ -196,6 +199,7 @@ export default function ProfissionalPacientes() {
     carregarPacientes();
   }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
 
+  // VINCULAR PACIENTE DA FILA (sem horário)
   const vincularPaciente = async (paciente: Paciente, profissionalId: string) => {
     if (!profissionalId) return alert("Selecione um profissional.");
     const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
@@ -206,7 +210,7 @@ export default function ProfissionalPacientes() {
         profissionalId: profissionalId,
         status: "vinculado"
       });
-      alert(`Paciente vinculado a ${profissionalNome}! Ele saiu da fila e aguarda agendamento de horário.`);
+      alert(`Paciente vinculado a ${profissionalNome}!`);
       setVinculando(null);
       carregarPacientes();
     } catch (error: any) {
@@ -214,6 +218,7 @@ export default function ProfissionalPacientes() {
     }
   };
 
+  // VINCULAR COM DATA E HORÁRIO
   const vincularComData = async (paciente: Paciente, profissionalId: string, data: string, horario: string) => {
     if (!profissionalId) return alert("Selecione um profissional.");
     if (!data || !horario) return alert("Preencha data e horário.");
@@ -231,13 +236,11 @@ export default function ProfissionalPacientes() {
         tipoPaciente: "social",
         createdAt: new Date(),
       });
-
       await updateDoc(doc(db, "filaEspera", paciente.id), {
         status: "atendido",
         profissionalId: profissionalId,
         dataVinculo: new Date()
       });
-
       alert(`Paciente vinculado com agendamento em ${data} ${horario}!`);
       setModalData(null);
       carregarPacientes();
@@ -246,6 +249,7 @@ export default function ProfissionalPacientes() {
     }
   };
 
+  // REAGENDAR (trocar profissional)
   const reagendarPaciente = async (paciente: Paciente, novoProfissionalId: string) => {
     if (!novoProfissionalId) return alert("Selecione um profissional.");
     if (novoProfissionalId === paciente.profissionalId) return alert("O paciente já está com este profissional.");
@@ -263,6 +267,7 @@ export default function ProfissionalPacientes() {
     }
   };
 
+  // REMOVER DA FILA
   const removerDaFila = async (paciente: Paciente) => {
     if (!confirm(`Remover ${paciente.nome} da fila?`)) return;
     try {
