@@ -25,6 +25,7 @@ import CadastrarSenhaProfissional from "./pages/CadastrarSenhaProfissional";
 import ProfissionalLayout from "./layout/ProfissionalLayout";
 import ProfissionalAgenda from "./pages/ProfissionalAgenda";
 import ProfissionalProntuario from "./pages/ProfissionalProntuario";
+import ProfissionalPacientes from "./pages/ProfissionalPacientes";
 
 import MigracaoPsicologia from "./pages/MigracaoPsicologia";
 import Notificacoes from "./pages/Notificacoes";
@@ -37,9 +38,7 @@ import Inscricao from "./pages/Inscricao";
 import PreInscricoes from "./pages/PreInscricoes";
 import MatriculasTurma from "./pages/MatriculasTurma";
 
-// Import das páginas de administração e restauração
 import AdminUnificacao from "./pages/AdminUnificacao";
-import ListarRestaurados from "./pages/ListarRestaurados";
 
 export default function App() {
   return (
@@ -53,6 +52,7 @@ export default function App() {
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
         <Route path="agenda" element={<ProfissionalAgenda />} />
         <Route path="paciente/:alunoId" element={<ProfissionalProntuario />} />
+        <Route path="pacientes" element={<ProfissionalPacientes />} />
       </Route>
 
       <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
@@ -81,10 +81,7 @@ export default function App() {
         <Route path="/teste-certificado" element={<TesteCertificado />} />
         <Route path="/pre-inscricoes" element={<PreInscricoes />} />
         <Route path="/matriculas-turma" element={<MatriculasTurma />} />
-        
-        {/* Rotas administrativas */}
         <Route path="/admin/unificar" element={<AdminUnificacao />} />
-        <Route path="/restaurados" element={<ListarRestaurados />} />
       </Route>
     </Routes>
   );
