@@ -34,25 +34,36 @@ export default function SaudeFila() {
     carregarProfissionais();
   }, []);
 
-  // 🔥 CARREGA TODOS OS PACIENTES DA FILA (independente do tipoId)
+  // 🔥 Carregar fila e aplicar filtro por nome do serviço
   useEffect(() => {
     const carregarFila = async () => {
       // Busca todos com status aguardando ou vinculado
       const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
       const snap = await getDocs(q);
 
+      // Descobrir qual serviço está selecionado (se houver)
+      const servicoSelecionado = tipos.find(t => t.id === tipoId);
+      const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+
       const lista = [];
       for (const docFil of snap.docs) {
         const data = docFil.data();
-        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-        if (alunoSnap.exists()) {
-          lista.push({
-            id: docFil.id,
-            alunoId: data.alunoId,
-            nome: alunoSnap.data().nomeCompleto,
-            matricula: alunoSnap.data().matricula,
-            tipoId: data.tipoId, // para referência
-          });
+        const tipoIdFila = data.tipoId || "";
+        const tipoIdLower = tipoIdFila.toLowerCase().trim();
+
+        // Se nenhum serviço selecionado, mostra todos
+        // Se serviço selecionado, filtra pelo nome (case-insensitive)
+        if (!tipoId || tipoIdLower === nomeServico || tipoIdFila === tipoId) {
+          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+          if (alunoSnap.exists()) {
+            lista.push({
+              id: docFil.id,
+              alunoId: data.alunoId,
+              nome: alunoSnap.data().nomeCompleto,
+              matricula: alunoSnap.data().matricula,
+              tipoId: tipoIdFila,
+            });
+          }
         }
       }
 
@@ -67,7 +78,7 @@ export default function SaudeFila() {
       setSelecoes(novasSelecoes);
     };
     carregarFila();
-  }, []); // 🔥 Não depende de tipoId
+  }, [tipoId, tipos]); // 🔥 Recarrega quando mudar o serviço selecionado
 
   useEffect(() => {
     const carregarHorarios = async () => {
@@ -113,6 +124,7 @@ export default function SaudeFila() {
     if (profissionais.length > 0) carregarHorarios();
   }, [profissionais]);
 
+  // Funções vincular, removerDaFila, formatarData, atualizarSelecao (mantidas iguais)
   const vincular = async (alunoId: string) => {
     const selecao = selecoes[alunoId];
     if (!selecao.profissionalId) return alert("Selecione um profissional");
@@ -133,21 +145,27 @@ export default function SaudeFila() {
     }
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // Recarregar a fila
+    // Recarregar a fila (para atualizar a lista)
     const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
     const snap = await getDocs(q);
+    const servicoSelecionado = tipos.find(t => t.id === tipoId);
+    const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
     const lista = [];
     for (const docFil of snap.docs) {
       const data = docFil.data();
-      const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-      if (alunoSnap.exists()) {
-        lista.push({
-          id: docFil.id,
-          alunoId: data.alunoId,
-          nome: alunoSnap.data().nomeCompleto,
-          matricula: alunoSnap.data().matricula,
-          tipoId: data.tipoId,
-        });
+      const tipoIdFila = data.tipoId || "";
+      const tipoIdLower = tipoIdFila.toLowerCase().trim();
+      if (!tipoId || tipoIdLower === nomeServico || tipoIdFila === tipoId) {
+        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+        if (alunoSnap.exists()) {
+          lista.push({
+            id: docFil.id,
+            alunoId: data.alunoId,
+            nome: alunoSnap.data().nomeCompleto,
+            matricula: alunoSnap.data().matricula,
+            tipoId: tipoIdFila,
+          });
+        }
       }
     }
     lista.sort((a, b) => {
@@ -167,20 +185,27 @@ export default function SaudeFila() {
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
+        // Recarregar
         const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
         const snap = await getDocs(q);
+        const servicoSelecionado = tipos.find(t => t.id === tipoId);
+        const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
         const lista = [];
         for (const docFil of snap.docs) {
           const data = docFil.data();
-          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-          if (alunoSnap.exists()) {
-            lista.push({
-              id: docFil.id,
-              alunoId: data.alunoId,
-              nome: alunoSnap.data().nomeCompleto,
-              matricula: alunoSnap.data().matricula,
-              tipoId: data.tipoId,
-            });
+          const tipoIdFila = data.tipoId || "";
+          const tipoIdLower = tipoIdFila.toLowerCase().trim();
+          if (!tipoId || tipoIdLower === nomeServico || tipoIdFila === tipoId) {
+            const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+            if (alunoSnap.exists()) {
+              lista.push({
+                id: docFil.id,
+                alunoId: data.alunoId,
+                nome: alunoSnap.data().nomeCompleto,
+                matricula: alunoSnap.data().matricula,
+                tipoId: tipoIdFila,
+              });
+            }
           }
         }
         lista.sort((a, b) => {
