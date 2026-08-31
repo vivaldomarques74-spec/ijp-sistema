@@ -38,6 +38,7 @@ export default function ProfissionalPacientes() {
   const [filtroEstagiarioId, setFiltroEstagiarioId] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("");
 
   // Carregar profissional e estagiários supervisionados
   useEffect(() => {
@@ -86,11 +87,9 @@ export default function ProfissionalPacientes() {
 
       const snap = await getDocs(collection(db, "agendamentos"));
       
-      // 🔥 ALTERAÇÃO PRINCIPAL: remove filtro de data e status
       let agendamentos = snap.docs
         .filter(d => {
           const data = d.data() as any;
-          // Inclui todos que têm alunoId e estão nos profissionais filtrados
           return (
             data.alunoId &&
             idsParaFiltrar.includes(data.profissionalId)
@@ -105,11 +104,14 @@ export default function ProfissionalPacientes() {
       if (filtroServico) {
         agendamentos = agendamentos.filter(a => a.tipoId === filtroServico);
       }
+      if (filtroStatus) {
+        agendamentos = agendamentos.filter(a => a.status === filtroStatus);
+      }
 
       // Ordenar por data (mais recentes primeiro) e depois horário
       agendamentos.sort((a, b) => {
         if (a.data === b.data) return a.horario.localeCompare(b.horario);
-        return b.data.localeCompare(a.data); // mais recentes primeiro
+        return b.data.localeCompare(a.data);
       });
 
       const profMap: Record<string, string> = {};
@@ -151,7 +153,7 @@ export default function ProfissionalPacientes() {
 
   useEffect(() => {
     carregarPacientes();
-  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
+  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico, filtroStatus]);
 
   // Transferir paciente para estagiário
   const transferirParaEstagiario = async (paciente: Paciente, estagiarioId: string) => {
@@ -252,6 +254,13 @@ export default function ProfissionalPacientes() {
           <option value="">Todos os serviços</option>
           {servicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
         </select>
+        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} style={styleSelect}>
+          <option value="">Todos os status</option>
+          <option value="ocupado">Agendado</option>
+          <option value="realizado">Atendido</option>
+          <option value="faltaJustificada">Falta justificada</option>
+          <option value="faltaInjustificada">Falta injustificada</option>
+        </select>
         <button onClick={carregarPacientes} style={styleButton("#0070f3")}>Buscar</button>
       </div>
 
@@ -297,14 +306,14 @@ export default function ProfissionalPacientes() {
                       Ficha
                     </button>
 
-                    {/* Transferir para estagiário (apenas para supervisor) */}
+                    {/* Vincular a estagiário (supervisor) */}
                     {supervisionadosIds.length > 0 && (
                       <select
                         value=""
                         onChange={(e) => {
                           if (e.target.value) {
                             transferirParaEstagiario(p, e.target.value);
-                            e.target.value = ""; // reset
+                            e.target.value = "";
                           }
                         }}
                         style={{ padding: "4px 8px", marginLeft: 4, borderRadius: 4, border: "1px solid #ccc" }}
@@ -323,7 +332,7 @@ export default function ProfissionalPacientes() {
                       </select>
                     )}
 
-                    {/* Transferir para fila (apenas se ainda estiver agendado) */}
+                    {/* Fila (apenas se estiver ocupado) */}
                     {p.status === "ocupado" && (
                       <button
                         onClick={() => transferirParaFila(p)}
