@@ -40,30 +40,32 @@ export default function SaudeFila() {
       return;
     }
     const carregarFila = async () => {
-      // Busca o nome do serviço selecionado (para fallback)
-      const tipoSelecionado = tipos.find(t => t.id === tipoId);
-      const nomeServico = tipoSelecionado?.nome?.toLowerCase().trim() || "";
+      // 🔥 Buscar TODOS os pacientes com status "aguardando" (sem filtrar por tipoId)
+      const q = query(collection(db, "filaEspera"), where("status", "==", "aguardando"));
+      const snap = await getDocs(q);
 
-      // Primeira consulta: pelo ID
-      const q1 = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
-      const snap1 = await getDocs(q1);
+      // Obter o serviço selecionado
+      const servicoSelecionado = tipos.find(t => t.id === tipoId);
+      const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+      const idServico = tipoId;
 
-      // Segunda consulta: pelo nome (fallback)
-      const q2 = query(collection(db, "filaEspera"), where("tipoId", "==", nomeServico), where("status", "==", "aguardando"));
-      const snap2 = await getDocs(q2);
-
-      // Unir resultados, evitando duplicados
-      const ids = new Set<string>();
-      const docs = [...snap1.docs, ...snap2.docs];
       const lista = [];
-      for (const docFil of docs) {
-        if (!ids.has(docFil.id)) {
-          ids.add(docFil.id);
-          const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+      for (const docFil of snap.docs) {
+        const data = docFil.data();
+        const tipoIdFila = data.tipoId;
+        // 🔥 Verifica se o tipoId do documento corresponde ao ID ou ao nome (case-insensitive)
+        const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
+        const corresponde = 
+          tipoIdFila === idServico || 
+          tipoIdLower === nomeServico ||
+          tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim();
+
+        if (corresponde) {
+          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
           if (alunoSnap.exists()) {
             lista.push({
               id: docFil.id,
-              alunoId: docFil.data().alunoId,
+              alunoId: data.alunoId,
               nome: alunoSnap.data().nomeCompleto,
               matricula: alunoSnap.data().matricula,
             });
@@ -84,7 +86,7 @@ export default function SaudeFila() {
     carregarFila();
   }, [tipoId, tipos]);
 
-  // Carregar horários disponíveis
+  // Carregar horários disponíveis (sem alterações)
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
@@ -129,6 +131,9 @@ export default function SaudeFila() {
     if (profissionais.length > 0) carregarHorarios();
   }, [profissionais, tipoId]);
 
+  // Funções vincular, removerDaFila, formatarData, atualizarSelecao (sem alterações, mas precisam ser incluídas)
+  // Vou repetir aqui para completude, mas você pode manter as mesmas do seu arquivo original.
+
   const vincular = async (alunoId: string) => {
     const selecao = selecoes[alunoId];
     if (!selecao.profissionalId) return alert("Selecione um profissional");
@@ -149,24 +154,27 @@ export default function SaudeFila() {
     }
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // recarregar fila
-    const tipoSelecionado = tipos.find(t => t.id === tipoId);
-    const nomeServico = tipoSelecionado?.nome?.toLowerCase().trim() || "";
-    const q1 = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
-    const snap1 = await getDocs(q1);
-    const q2 = query(collection(db, "filaEspera"), where("tipoId", "==", nomeServico), where("status", "==", "aguardando"));
-    const snap2 = await getDocs(q2);
-    const ids = new Set<string>();
-    const docs = [...snap1.docs, ...snap2.docs];
+    // Recarregar a fila
+    const q = query(collection(db, "filaEspera"), where("status", "==", "aguardando"));
+    const snap = await getDocs(q);
+    const servicoSelecionado = tipos.find(t => t.id === tipoId);
+    const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+    const idServico = tipoId;
     const lista = [];
-    for (const docFil of docs) {
-      if (!ids.has(docFil.id)) {
-        ids.add(docFil.id);
-        const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+    for (const docFil of snap.docs) {
+      const data = docFil.data();
+      const tipoIdFila = data.tipoId;
+      const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
+      const corresponde = 
+        tipoIdFila === idServico || 
+        tipoIdLower === nomeServico ||
+        tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim();
+      if (corresponde) {
+        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
         if (alunoSnap.exists()) {
           lista.push({
             id: docFil.id,
-            alunoId: docFil.data().alunoId,
+            alunoId: data.alunoId,
             nome: alunoSnap.data().nomeCompleto,
             matricula: alunoSnap.data().matricula,
           });
@@ -190,24 +198,27 @@ export default function SaudeFila() {
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
-        // recarregar
-        const tipoSelecionado = tipos.find(t => t.id === tipoId);
-        const nomeServico = tipoSelecionado?.nome?.toLowerCase().trim() || "";
-        const q1 = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
-        const snap1 = await getDocs(q1);
-        const q2 = query(collection(db, "filaEspera"), where("tipoId", "==", nomeServico), where("status", "==", "aguardando"));
-        const snap2 = await getDocs(q2);
-        const ids = new Set<string>();
-        const docs = [...snap1.docs, ...snap2.docs];
+        // Recarregar a fila
+        const q = query(collection(db, "filaEspera"), where("status", "==", "aguardando"));
+        const snap = await getDocs(q);
+        const servicoSelecionado = tipos.find(t => t.id === tipoId);
+        const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+        const idServico = tipoId;
         const lista = [];
-        for (const docFil of docs) {
-          if (!ids.has(docFil.id)) {
-            ids.add(docFil.id);
-            const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+        for (const docFil of snap.docs) {
+          const data = docFil.data();
+          const tipoIdFila = data.tipoId;
+          const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
+          const corresponde = 
+            tipoIdFila === idServico || 
+            tipoIdLower === nomeServico ||
+            tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim();
+          if (corresponde) {
+            const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
             if (alunoSnap.exists()) {
               lista.push({
                 id: docFil.id,
-                alunoId: docFil.data().alunoId,
+                alunoId: data.alunoId,
                 nome: alunoSnap.data().nomeCompleto,
                 matricula: alunoSnap.data().matricula,
               });
