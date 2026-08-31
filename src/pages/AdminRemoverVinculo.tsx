@@ -10,9 +10,16 @@ interface Vinculo {
   status?: string;
 }
 
+interface Aluno {
+  id: string;
+  nomeCompleto: string;
+  matricula: string;
+  [key: string]: any;
+}
+
 export default function AdminRemoverVinculo() {
   const [busca, setBusca] = useState("");
-  const [alunoEncontrado, setAlunoEncontrado] = useState<any>(null);
+  const [alunoEncontrado, setAlunoEncontrado] = useState<Aluno | null>(null);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [mensagem, setMensagem] = useState("");
@@ -25,33 +32,41 @@ export default function AdminRemoverVinculo() {
     setVinculos([]);
 
     try {
-      // Buscar aluno pelo nome (usando like - Firestore não tem like, então busca por prefixo ou exato)
       const alunosRef = collection(db, "alunos");
-      const q = query(alunosRef, where("nomeCompleto", "==", busca));
-      const snap = await getDocs(q);
+      // Tenta busca exata
+      let q = query(alunosRef, where("nomeCompleto", "==", busca));
+      let snap = await getDocs(q);
 
+      // Se não encontrar, tenta busca por prefixo (startsWith)
       if (snap.empty) {
-        // Tenta buscar por parte do nome (usando startsWith)
-        // Firestore não suporta startsWith diretamente, mas podemos usar >= e <=
-        const q2 = query(
+        q = query(
           alunosRef,
           where("nomeCompleto", ">=", busca),
           where("nomeCompleto", "<=", busca + "\uf8ff")
         );
-        const snap2 = await getDocs(q2);
-        if (snap2.empty) {
-          setMensagem("Aluno não encontrado.");
-          setCarregando(false);
-          return;
-        }
-        // Se encontrou múltiplos, mostra o primeiro (ou podemos listar)
-        const docSnap = snap2.docs[0];
-        setAlunoEncontrado({ id: docSnap.id, ...docSnap.data() });
-        await buscarVinculos(docSnap.id);
-      } else {
-        const docSnap = snap.docs[0];
-        setAlunoEncontrado({ id: docSnap.id, ...docSnap.data() });
-        await buscarVinculos(docSnap.id);
+        snap = await getDocs(q);
+      }
+
+      if (snap.empty) {
+        setMensagem("Aluno não encontrado.");
+        setCarregando(false);
+        return;
+      }
+
+      // Pega o primeiro resultado
+      const docSnap = snap.docs[0];
+      const data = docSnap.data();
+      const alunoData: Aluno = {
+        id: docSnap.id,
+        nomeCompleto: data.nomeCompleto || "",
+        matricula: data.matricula || "",
+        ...data,
+      };
+      setAlunoEncontrado(alunoData);
+      await buscarVinculos(docSnap.id);
+
+      if (snap.size > 1) {
+        setMensagem(`Encontrados ${snap.size} alunos. Exibindo o primeiro: ${alunoData.nomeCompleto}`);
       }
     } catch (error: any) {
       setMensagem(`Erro: ${error.message}`);
@@ -115,12 +130,16 @@ export default function AdminRemoverVinculo() {
 
   const removerTodosVinculos = async () => {
     if (!confirm(`Remover TODOS os ${vinculos.length} vínculos?`)) return;
-    for (const v of vinculos) {
-      const collectionName = v.tipo === "fila" ? "filaEspera" : "agendamentos";
-      await deleteDoc(doc(db, collectionName, v.id));
+    try {
+      for (const v of vinculos) {
+        const collectionName = v.tipo === "fila" ? "filaEspera" : "agendamentos";
+        await deleteDoc(doc(db, collectionName, v.id));
+      }
+      setVinculos([]);
+      setMensagem("Todos os vínculos removidos!");
+    } catch (error: any) {
+      setMensagem(`Erro ao remover todos: ${error.message}`);
     }
-    setVinculos([]);
-    setMensagem("Todos os vínculos removidos!");
   };
 
   const styleButton = (bg: string, color = "#fff") => ({
@@ -142,7 +161,7 @@ export default function AdminRemoverVinculo() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <input
           type="text"
-          placeholder="Nome ou ID do aluno"
+          placeholder="Nome completo ou ID do aluno"
           value={busca}
           onChange={e => setBusca(e.target.value)}
           style={{ flex: 1, padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
@@ -161,7 +180,16 @@ export default function AdminRemoverVinculo() {
       )}
 
       {mensagem && (
-        <div style={{ padding: 12, borderRadius: 8, marginBottom: 16, background: "#f8f9fa", border: "1px solid #dee2e6" }}>
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 8,
+            marginBottom: 16,
+            background: mensagem.includes("Erro") ? "#f8d7da" : "#d4edda",
+            border: `1px solid ${mensagem.includes("Erro") ? "#f5c6cb" : "#c3e6cb"}`,
+            color: mensagem.includes("Erro") ? "#721c24" : "#155724",
+          }}
+        >
           {mensagem}
         </div>
       )}
@@ -174,7 +202,15 @@ export default function AdminRemoverVinculo() {
             </button>
           </div>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 8, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                background: "#fff",
+                borderRadius: 8,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+              }}
+            >
               <thead>
                 <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #dee2e6" }}>
                   <th style={{ padding: 12, textAlign: "left" }}>Tipo</th>
