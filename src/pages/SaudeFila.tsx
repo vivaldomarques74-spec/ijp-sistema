@@ -50,7 +50,7 @@ export default function SaudeFila() {
             alunoId: data.alunoId,
             nome: alunoSnap.data().nomeCompleto,
             matricula: alunoSnap.data().matricula,
-            tipoId: data.tipoId,
+            tipoId: data.tipoId || "", // garantir string
           });
         }
       }
@@ -74,7 +74,6 @@ export default function SaudeFila() {
     // Se não houver filtro, mostra todos
     if (!tipoId) {
       setFilaExibida(todosPacientes);
-      // Atualizar seleções para todos os pacientes
       const novasSelecoes: Record<string, any> = {};
       for (const p of todosPacientes) {
         novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
@@ -83,24 +82,22 @@ export default function SaudeFila() {
       return;
     }
 
-    // Aplicar filtro por serviço
     const servicoSelecionado = tipos.find(t => t.id === tipoId);
-    const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
-    const idServico = tipoId;
+    if (!servicoSelecionado) {
+      setFilaExibida([]);
+      return;
+    }
 
+    const nomeServico = servicoSelecionado.nome.toLowerCase().trim();
+    const idServico = tipoId.toLowerCase().trim();
+
+    // 🔥 Filtro robusto: compara ID ou nome (case-insensitive)
     const filtrados = todosPacientes.filter(p => {
-      const tipoIdPaciente = p.tipoId || "";
-      const tipoIdLower = tipoIdPaciente.toLowerCase().trim();
-      // Compara por ID, nome completo ou nome em lowercase
-      return (
-        tipoIdPaciente === idServico ||
-        tipoIdLower === nomeServico ||
-        tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim()
-      );
+      const tipoIdPaciente = (p.tipoId || "").toString().toLowerCase().trim();
+      return tipoIdPaciente === idServico || tipoIdPaciente === nomeServico;
     });
 
     setFilaExibida(filtrados);
-    // Atualizar seleções apenas para os filtrados
     const novasSelecoes: Record<string, any> = {};
     for (const p of filtrados) {
       novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
@@ -108,7 +105,7 @@ export default function SaudeFila() {
     setSelecoes(novasSelecoes);
   }, [tipoId, todosPacientes, tipos]);
 
-  // Carregar horários (igual ao anterior)
+  // Carregar horários (sem alterações)
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
@@ -186,7 +183,7 @@ export default function SaudeFila() {
           alunoId: data.alunoId,
           nome: alunoSnap.data().nomeCompleto,
           matricula: alunoSnap.data().matricula,
-          tipoId: data.tipoId,
+          tipoId: data.tipoId || "",
         });
       }
     }
@@ -216,7 +213,7 @@ export default function SaudeFila() {
               alunoId: data.alunoId,
               nome: alunoSnap.data().nomeCompleto,
               matricula: alunoSnap.data().matricula,
-              tipoId: data.tipoId,
+              tipoId: data.tipoId || "",
             });
           }
         }
