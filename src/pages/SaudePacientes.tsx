@@ -24,11 +24,12 @@ export default function SaudePacientes() {
     setCarregando(true);
     try {
       const snap = await getDocs(collection(db, "agendamentos"));
-      const hoje = new Date().toISOString().split("T")[0];
+      
+      // 🔥 CORREÇÃO: mostra TODOS os pacientes com alunoId
       let agendamentos = snap.docs
         .filter(d => {
           const data = d.data() as any;
-          return data.status === "ocupado" && data.alunoId && data.data >= hoje;
+          return data.alunoId; // todos que têm alunoId, sem filtrar por data ou status
         })
         .map(d => ({ id: d.id, ...(d.data() as any) }));
 
@@ -37,26 +38,31 @@ export default function SaudePacientes() {
 
       agendamentos.sort((a, b) => {
         if (a.data === b.data) return a.horario.localeCompare(b.horario);
-        return a.data.localeCompare(b.data);
+        return b.data.localeCompare(a.data);
       });
+
+      const profMap: Record<string, string> = {};
+      profissionais.forEach(p => { profMap[p.id] = p.nome; });
+
+      const servMap: Record<string, string> = {};
+      servicos.forEach(s => { servMap[s.id] = s.nome; });
 
       const lista = [];
       for (const ag of agendamentos) {
         const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
         if (alunoSnap.exists()) {
           const aluno = alunoSnap.data();
-          const prof = profissionais.find(p => p.id === ag.profissionalId);
-          const serv = servicos.find(s => s.id === ag.tipoId);
           lista.push({
             id: ag.id,
             alunoId: ag.alunoId,
             nome: aluno.nomeCompleto,
-            matricula: aluno.matricula,
-            servicoNome: serv?.nome || ag.tipoId,
+            matricula: aluno.matricula || "",
+            servicoNome: servMap[ag.tipoId] || ag.tipoId,
+            tipoId: ag.tipoId,
             data: ag.data,
             horario: ag.horario,
-            profissionalNome: prof?.nome || "Desconhecido",
-            tipoId: ag.tipoId,
+            profissionalNome: profMap[ag.profissionalId] || "Desconhecido",
+            status: ag.status || "",
           });
         }
       }
@@ -94,7 +100,7 @@ export default function SaudePacientes() {
 
   return (
     <div>
-      <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Pacientes em atendimento</h3>
+      <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>Pacientes</h3>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <select value={filtroProfissional} onChange={e => setFiltroProfissional(e.target.value)} style={selectStyle}>
           <option value="">Todos os profissionais</option>
@@ -118,6 +124,7 @@ export default function SaudePacientes() {
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Serviço</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Data/Horário</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Profissional</th>
+                <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Status</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
               </tr>
             </thead>
@@ -130,7 +137,14 @@ export default function SaudePacientes() {
                   <td style={{ padding: 12 }}>{p.data} {p.horario}</td>
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
                   <td style={{ padding: 12 }}>
-                    <button onClick={() => trocarProfissional(p)} style={{ ...buttonStyle, background: "#ffc107", color: "#000" }}>Trocar</button>
+                    {p.status === "realizado" && "Atendido"}
+                    {p.status === "faltaJustificada" && "Falta justificada"}
+                    {p.status === "faltaInjustificada" && "Falta injustificada"}
+                    {p.status === "ocupado" && "Agendado"}
+                    {!p.status && "-"}
+                  </td>
+                  <td style={{ padding: 12 }}>
+                    <button onClick={() => trocarProfissional(p)} style={{ ...buttonStyle, background: "#ffc107", color: "#000" }}>Fila</button>
                   </td>
                 </tr>
               ))}

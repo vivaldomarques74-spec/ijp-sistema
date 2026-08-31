@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { doc, getDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, query, where, orderBy } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, addDoc, query, where, deleteDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 type Evolucao = {
@@ -8,19 +8,15 @@ type Evolucao = {
   texto: string;
   data: any;
   createdAt: any;
-  profissionalId?: string;
-  profissionalNome?: string;
 };
 
 export default function ProfissionalProntuario() {
-  const { codigo, alunoId } = useParams();
+  const { alunoId, codigo } = useParams();
   const [aluno, setAluno] = useState<any>({});
   const [evolucoes, setEvolucoes] = useState<Evolucao[]>([]);
   const [novaEvolucao, setNovaEvolucao] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [profissional, setProfissional] = useState<any>(null);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [textoEditando, setTextoEditando] = useState("");
 
   // Verificar autenticação
   useEffect(() => {
@@ -30,7 +26,7 @@ export default function ProfissionalProntuario() {
     }
   }, []);
 
-  // Carregar profissional logado
+  // Carregar dados do profissional para verificar se é supervisor
   useEffect(() => {
     const carregarProfissional = async () => {
       if (!codigo) return;
@@ -50,17 +46,22 @@ export default function ProfissionalProntuario() {
       const alunoSnap = await getDoc(doc(db, "alunos", alunoId));
       if (alunoSnap.exists()) setAluno(alunoSnap.data());
 
-      // Carregar evoluções existentes
-      const q = query(collection(db, "prontuarios"), where("alunoId", "==", alunoId), orderBy("data", "desc"));
-      const snap = await getDocs(q);
-      const lista = snap.docs.map(d => ({
-        id: d.id,
-        texto: d.data().texto,
-        data: d.data().data,
-        createdAt: d.data().createdAt || d.data().data,
-        profissionalId: d.data().profissionalId,
-        profissionalNome: d.data().profissionalNome,
-      }));
+      // Carregar evoluções existentes (sem where para evitar índice)
+      const snap = await getDocs(collection(db, "prontuarios"));
+      const lista = snap.docs
+        .filter(d => d.data().alunoId === alunoId)
+        .map(d => ({
+          id: d.id,
+          texto: d.data().texto,
+          data: d.data().data,
+          createdAt: d.data().createdAt || d.data().data,
+        }));
+      // Ordenar por data (mais recente primeiro)
+      lista.sort((a, b) => {
+        const dateA = a.data?.toDate?.() || new Date(0);
+        const dateB = b.data?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
       setEvolucoes(lista);
     };
     carregar();
@@ -75,8 +76,6 @@ export default function ProfissionalProntuario() {
 
     if (!novaEvolucao.trim()) return alert("Digite a evolução");
     if (!alunoId) return alert("Aluno não identificado");
-    if (!profissional) return alert("Profissional não identificado");
-
     setCarregando(true);
     try {
       const agora = new Date();
@@ -85,22 +84,24 @@ export default function ProfissionalProntuario() {
         texto: novaEvolucao,
         data: agora,
         createdAt: agora,
-        profissionalId: profissional.id,
-        profissionalNome: profissional.nome,
       });
       alert("Evolução salva com sucesso");
       setNovaEvolucao("");
       // Recarregar evoluções
-      const q = query(collection(db, "prontuarios"), where("alunoId", "==", alunoId), orderBy("data", "desc"));
-      const snap = await getDocs(q);
-      const lista = snap.docs.map(d => ({
-        id: d.id,
-        texto: d.data().texto,
-        data: d.data().data,
-        createdAt: d.data().createdAt || d.data().data,
-        profissionalId: d.data().profissionalId,
-        profissionalNome: d.data().profissionalNome,
-      }));
+      const snap = await getDocs(collection(db, "prontuarios"));
+      const lista = snap.docs
+        .filter(d => d.data().alunoId === alunoId)
+        .map(d => ({
+          id: d.id,
+          texto: d.data().texto,
+          data: d.data().data,
+          createdAt: d.data().createdAt || d.data().data,
+        }));
+      lista.sort((a, b) => {
+        const dateA = a.data?.toDate?.() || new Date(0);
+        const dateB = b.data?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
       setEvolucoes(lista);
     } catch (error: any) {
       console.error("Erro ao salvar evolução:", error);
@@ -110,69 +111,33 @@ export default function ProfissionalProntuario() {
     }
   };
 
-  const editarEvolucao = async (id: string, textoAtual: string) => {
-    setEditandoId(id);
-    setTextoEditando(textoAtual);
-  };
-
-  const salvarEdicao = async (id: string) => {
-    if (localStorage.getItem("profissionalAutenticado") !== "true") {
-      alert("Sessão expirada. Faça login novamente.");
-      window.location.href = "/acesso-profissional";
-      return;
-    }
-
-    if (!textoEditando.trim()) return alert("Digite o texto da evolução");
-
-    try {
-      await updateDoc(doc(db, "prontuarios", id), {
-        texto: textoEditando,
-        updatedAt: new Date(),
-      });
-      alert("Evolução atualizada!");
-      setEditandoId(null);
-      setTextoEditando("");
-      // Recarregar
-      const q = query(collection(db, "prontuarios"), where("alunoId", "==", alunoId), orderBy("data", "desc"));
-      const snap = await getDocs(q);
-      const lista = snap.docs.map(d => ({
-        id: d.id,
-        texto: d.data().texto,
-        data: d.data().data,
-        createdAt: d.data().createdAt || d.data().data,
-        profissionalId: d.data().profissionalId,
-        profissionalNome: d.data().profissionalNome,
-      }));
-      setEvolucoes(lista);
-    } catch (error: any) {
-      console.error("Erro ao editar evolução:", error);
-      alert(`Erro ao editar: ${error.message}`);
-    }
-  };
-
   const excluirEvolucao = async (id: string) => {
     if (!window.confirm("Tem certeza que deseja excluir esta evolução?")) return;
 
-    if (localStorage.getItem("profissionalAutenticado") !== "true") {
-      alert("Sessão expirada. Faça login novamente.");
-      window.location.href = "/acesso-profissional";
+    // Verificar se o profissional é supervisor
+    if (profissional?.tipo !== "supervisor") {
+      alert("Apenas supervisores podem excluir evoluções.");
       return;
     }
 
     try {
       await deleteDoc(doc(db, "prontuarios", id));
-      alert("Evolução excluída!");
-      // Recarregar
-      const q = query(collection(db, "prontuarios"), where("alunoId", "==", alunoId), orderBy("data", "desc"));
-      const snap = await getDocs(q);
-      const lista = snap.docs.map(d => ({
-        id: d.id,
-        texto: d.data().texto,
-        data: d.data().data,
-        createdAt: d.data().createdAt || d.data().data,
-        profissionalId: d.data().profissionalId,
-        profissionalNome: d.data().profissionalNome,
-      }));
+      alert("Evolução excluída com sucesso!");
+      // Recarregar evoluções
+      const snap = await getDocs(collection(db, "prontuarios"));
+      const lista = snap.docs
+        .filter(d => d.data().alunoId === alunoId)
+        .map(d => ({
+          id: d.id,
+          texto: d.data().texto,
+          data: d.data().data,
+          createdAt: d.data().createdAt || d.data().data,
+        }));
+      lista.sort((a, b) => {
+        const dateA = a.data?.toDate?.() || new Date(0);
+        const dateB = b.data?.toDate?.() || new Date(0);
+        return dateB - dateA;
+      });
       setEvolucoes(lista);
     } catch (error: any) {
       console.error("Erro ao excluir evolução:", error);
@@ -183,56 +148,71 @@ export default function ProfissionalProntuario() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Prontuário de {aluno.nomeCompleto || "Carregando..."}</h2>
+      {profissional?.tipo === "supervisor" && (
+        <p style={{ color: "#6b7a8f", fontSize: 14 }}>
+          🔑 Modo supervisor - você pode editar e excluir evoluções
+        </p>
+      )}
       <div style={{ marginBottom: 20 }}>
         <textarea
           rows={5}
-          style={{ width: "100%", padding: 8, marginBottom: 8 }}
+          style={{ width: "100%", padding: 8, marginBottom: 8, borderRadius: 8, border: "1px solid #ccc" }}
           value={novaEvolucao}
           onChange={e => setNovaEvolucao(e.target.value)}
           placeholder="Digite a evolução do atendimento (pode ser para qualquer data)..."
         />
-        <button onClick={salvarEvolucao} disabled={carregando}>
+        <button
+          onClick={salvarEvolucao}
+          disabled={carregando}
+          style={{
+            padding: "8px 20px",
+            background: "#0070f3",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            cursor: "pointer",
+          }}
+        >
           {carregando ? "Salvando..." : "Salvar Evolução"}
         </button>
       </div>
 
-      <h3>Histórico de evoluções</h3>
+      <h3>Histórico de evoluções ({evolucoes.length})</h3>
       {evolucoes.length === 0 && <p>Nenhuma evolução registrada.</p>}
       <ul style={{ listStyle: "none", padding: 0 }}>
         {evolucoes.map(ev => (
-          <li key={ev.id} style={{ borderBottom: "1px solid #eee", marginBottom: 12, paddingBottom: 8 }}>
+          <li
+            key={ev.id}
+            style={{
+              borderBottom: "1px solid #eee",
+              marginBottom: 12,
+              paddingBottom: 8,
+              background: "#f9f9f9",
+              padding: 12,
+              borderRadius: 8,
+            }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <small>
-                {ev.data?.toDate().toLocaleString() || "Data desconhecida"}
-                {ev.profissionalNome && ` - ${ev.profissionalNome}`}
+              <small style={{ color: "#888" }}>
+                {ev.data?.toDate?.()?.toLocaleString() || "Data desconhecida"}
               </small>
-              <div>
-                <button onClick={() => editarEvolucao(ev.id, ev.texto)} style={{ marginRight: 8 }}>
-                  Editar
-                </button>
-                <button onClick={() => excluirEvolucao(ev.id)} style={{ color: "red" }}>
+              {profissional?.tipo === "supervisor" && (
+                <button
+                  onClick={() => excluirEvolucao(ev.id)}
+                  style={{
+                    background: "#dc3545",
+                    color: "#fff",
+                    border: "none",
+                    padding: "4px 12px",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                  }}
+                >
                   Excluir
                 </button>
-              </div>
+              )}
             </div>
-            {editandoId === ev.id ? (
-              <div>
-                <textarea
-                  rows={3}
-                  style={{ width: "100%", padding: 8, marginTop: 8 }}
-                  value={textoEditando}
-                  onChange={e => setTextoEditando(e.target.value)}
-                />
-                <button onClick={() => salvarEdicao(ev.id)} style={{ marginTop: 4 }}>
-                  Salvar edição
-                </button>
-                <button onClick={() => { setEditandoId(null); setTextoEditando(""); }} style={{ marginTop: 4, marginLeft: 8 }}>
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <p style={{ whiteSpace: "pre-wrap" }}>{ev.texto}</p>
-            )}
+            <p style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{ev.texto}</p>
           </li>
         ))}
       </ul>

@@ -38,7 +38,9 @@ export default function ProfissionalPacientes() {
   const [filtroEstagiarioId, setFiltroEstagiarioId] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("");
+  const [reagendando, setReagendando] = useState<Paciente | null>(null);
+  const [novaData, setNovaData] = useState("");
+  const [novoHorario, setNovoHorario] = useState("");
 
   // Carregar profissional e estagiários supervisionados
   useEffect(() => {
@@ -63,7 +65,7 @@ export default function ProfissionalPacientes() {
     carregarProfissional();
   }, [codigo]);
 
-  // Carregar profissionais e serviços para os selects
+  // Carregar profissionais e serviços
   useEffect(() => {
     const carregarAux = async () => {
       const profSnap = await getDocs(collection(db, "profissionais"));
@@ -74,12 +76,11 @@ export default function ProfissionalPacientes() {
     carregarAux();
   }, []);
 
-  // Carregar pacientes (TODOS, independente de status ou data)
+  // Carregar pacientes
   const carregarPacientes = async () => {
     if (!profissionalId) return;
     setCarregando(true);
     try {
-      // IDs para filtrar: próprio + supervisionados
       let idsParaFiltrar = [profissionalId];
       if (supervisionadosIds.length > 0) {
         idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
@@ -97,18 +98,13 @@ export default function ProfissionalPacientes() {
         })
         .map(d => ({ id: d.id, ...(d.data() as any) }));
 
-      // Aplicar filtro de estagiário
       if (filtroEstagiarioId) {
         agendamentos = agendamentos.filter(a => a.profissionalId === filtroEstagiarioId);
       }
       if (filtroServico) {
         agendamentos = agendamentos.filter(a => a.tipoId === filtroServico);
       }
-      if (filtroStatus) {
-        agendamentos = agendamentos.filter(a => a.status === filtroStatus);
-      }
 
-      // Ordenar por data (mais recentes primeiro) e depois horário
       agendamentos.sort((a, b) => {
         if (a.data === b.data) return a.horario.localeCompare(b.horario);
         return b.data.localeCompare(a.data);
@@ -153,7 +149,7 @@ export default function ProfissionalPacientes() {
 
   useEffect(() => {
     carregarPacientes();
-  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico, filtroStatus]);
+  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
 
   // Transferir paciente para estagiário
   const transferirParaEstagiario = async (paciente: Paciente, estagiarioId: string) => {
@@ -171,7 +167,7 @@ export default function ProfissionalPacientes() {
     }
   };
 
-  // Transferir para fila (remover do agendamento)
+  // Transferir para fila
   const transferirParaFila = async (paciente: Paciente) => {
     if (!confirm(`Remover ${paciente.nome} do horário e colocar na fila de espera?`)) return;
     try {
@@ -195,6 +191,31 @@ export default function ProfissionalPacientes() {
     }
   };
 
+  // Reagendar paciente
+  const abrirModalReagendamento = (paciente: Paciente) => {
+    setReagendando(paciente);
+    setNovaData(paciente.data);
+    setNovoHorario(paciente.horario);
+  };
+
+  const confirmarReagendamento = async () => {
+    if (!reagendando) return;
+    if (!novaData || !novoHorario) return alert("Preencha data e horário");
+    
+    try {
+      await updateDoc(doc(db, "agendamentos", reagendando.id), {
+        data: novaData,
+        horario: novoHorario,
+      });
+      alert("Paciente reagendado com sucesso!");
+      setReagendando(null);
+      carregarPacientes();
+    } catch (error) {
+      console.error("Erro ao reagendar:", error);
+      alert("Erro ao reagendar.");
+    }
+  };
+
   // Estilos
   const styleSelect = { padding: 8, border: "1px solid #ccc", borderRadius: 8, background: "#fff" };
   const styleButton = (bg: string, color = "#fff") => ({
@@ -207,7 +228,6 @@ export default function ProfissionalPacientes() {
     marginRight: 4,
   });
 
-  // Contar pacientes por estagiário
   const contarPacientesPorEstagiario = (estagiarioId: string) => {
     return todosPacientes.filter(p => p.profissionalId === estagiarioId).length;
   };
@@ -219,7 +239,6 @@ export default function ProfissionalPacientes() {
         {profissionalNome && <span style={{ fontSize: 14, fontWeight: "normal", color: "#6b7a8f", marginLeft: 8 }}>({profissionalNome})</span>}
       </h3>
 
-      {/* Lista de estagiários */}
       {estagiarios.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -248,18 +267,10 @@ export default function ProfissionalPacientes() {
         </div>
       )}
 
-      {/* Filtros */}
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
         <select value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={styleSelect}>
           <option value="">Todos os serviços</option>
           {servicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-        </select>
-        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} style={styleSelect}>
-          <option value="">Todos os status</option>
-          <option value="ocupado">Agendado</option>
-          <option value="realizado">Atendido</option>
-          <option value="faltaJustificada">Falta justificada</option>
-          <option value="faltaInjustificada">Falta injustificada</option>
         </select>
         <button onClick={carregarPacientes} style={styleButton("#0070f3")}>Buscar</button>
       </div>
@@ -298,7 +309,6 @@ export default function ProfissionalPacientes() {
                     {!p.status && "-"}
                   </td>
                   <td style={{ padding: 12 }}>
-                    {/* Botão Ficha */}
                     <button
                       onClick={() => window.open(`/profissional/${codigo}/paciente/${p.alunoId}`, "_blank")}
                       style={styleButton("#0070f3")}
@@ -306,7 +316,13 @@ export default function ProfissionalPacientes() {
                       Ficha
                     </button>
 
-                    {/* Vincular a estagiário (supervisor) */}
+                    <button
+                      onClick={() => abrirModalReagendamento(p)}
+                      style={styleButton("#ffc107", "#000")}
+                    >
+                      Reagendar
+                    </button>
+
                     {supervisionadosIds.length > 0 && (
                       <select
                         value=""
@@ -332,7 +348,6 @@ export default function ProfissionalPacientes() {
                       </select>
                     )}
 
-                    {/* Fila (apenas se estiver ocupado) */}
                     {p.status === "ocupado" && (
                       <button
                         onClick={() => transferirParaFila(p)}
@@ -346,6 +361,55 @@ export default function ProfissionalPacientes() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal de Reagendamento */}
+      {reagendando && (
+        <div style={{
+          position: "fixed",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: "#fff",
+            padding: 24,
+            borderRadius: 12,
+            maxWidth: 400,
+            width: "90%"
+          }}>
+            <h3>Reagendar {reagendando.nome}</h3>
+            <div style={{ marginBottom: 12 }}>
+              <label>Data: </label>
+              <input
+                type="date"
+                value={novaData}
+                onChange={e => setNovaData(e.target.value)}
+                style={{ width: "100%", padding: 8, marginTop: 4 }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label>Horário: </label>
+              <input
+                type="time"
+                value={novoHorario}
+                onChange={e => setNovoHorario(e.target.value)}
+                style={{ width: "100%", padding: 8, marginTop: 4 }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={confirmarReagendamento} style={styleButton("#28a745")}>
+                Confirmar
+              </button>
+              <button onClick={() => setReagendando(null)} style={styleButton("#6c757d")}>
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
