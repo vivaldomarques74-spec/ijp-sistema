@@ -8,9 +8,9 @@ export default function AdminUnificacao() {
 
   const adicionarLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
-  // 1. Unificar duplicatas
+  // Unificar duplicatas
   const handleUnificar = async () => {
-    if (!confirm("Tem certeza? Isso vai unificar duplicatas e pode afetar muitos dados.")) return;
+    if (!confirm("Tem certeza? Isso vai unificar duplicatas.")) return;
     setCarregando(true);
     setLogs([]);
     try {
@@ -37,12 +37,14 @@ export default function AdminUnificacao() {
 
         for (const sec of secundarios) {
           adicionarLog(`  Unificando ${sec.id} (${sec.nomeCompleto})`);
+          // Presenças
           const presencasSnap = await getDocs(collection(db, "presencas"));
           for (const pDoc of presencasSnap.docs) {
             if (pDoc.data().alunoId === sec.id) {
               await updateDoc(pDoc.ref, { alunoId: principal.id });
             }
           }
+          // Turmas
           const turmasSnap = await getDocs(collection(db, "turmas"));
           for (const tDoc of turmasSnap.docs) {
             const data = tDoc.data();
@@ -52,6 +54,7 @@ export default function AdminUnificacao() {
               await updateDoc(tDoc.ref, { alunos: newAlunos });
             }
           }
+          // Fila
           const filaSnap = await getDocs(collection(db, "filaEspera"));
           for (const fDoc of filaSnap.docs) {
             if (fDoc.data().alunoId === sec.id) {
@@ -70,7 +73,7 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 2. Reordenar matrículas
+  // Reordenar matrículas
   const handleReordenar = async () => {
     if (!confirm("Reordenar matrículas?")) return;
     setCarregando(true);
@@ -96,9 +99,9 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 3. Corrigir CPFs (remover máscara)
+  // Corrigir CPFs
   const handleCorrigirCpfs = async () => {
-    if (!confirm("Isso vai remover pontos e traços de todos os CPFs no banco. Continuar?")) return;
+    if (!confirm("Remover pontos e traços de todos os CPFs?")) return;
     setCarregando(true);
     setLogs([]);
     try {
@@ -124,27 +127,21 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 🔥 4. PADRONIZAR TUDO (filaa, agendamentos, profissionais, alunos)
+  // Padronizar tipos de serviço
   const handlePadronizarTudo = async () => {
-    if (!confirm("Isso vai padronizar TODOS os tipos de serviço em fila, agendamentos, profissionais e alunos. Continuar?")) return;
+    if (!confirm("Padronizar tipos de serviço?")) return;
     setCarregando(true);
     setLogs([]);
-
     try {
-      // Mapear nomes para IDs
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       const mapa: Record<string, string> = {};
-      const mapaNomes: Record<string, string> = {};
       servSnap.forEach(d => {
         const nome = d.data().nome.toLowerCase().trim();
         mapa[nome] = d.id;
-        mapaNomes[d.id] = d.data().nome;
       });
-
       adicionarLog(`📌 Mapeamento: ${Object.keys(mapa).join(", ")}`);
-      let total = 0;
 
-      // 4a. Corrigir FILA DE ESPERA
+      // Fila
       const filaSnap = await getDocs(collection(db, "filaEspera"));
       let countFila = 0;
       for (const docSnap of filaSnap.docs) {
@@ -157,17 +154,11 @@ export default function AdminUnificacao() {
             countFila++;
             adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${novoId}"`);
           }
-        } else if (typeof tipoId === "string" && !mapa[tipoId.toLowerCase()]) {
-          // Se não encontrou, pode ser que o ID já seja um ID, verificar se é um ID válido
-          const servicoExiste = servSnap.docs.some(d => d.id === tipoId);
-          if (!servicoExiste) {
-            adicionarLog(`⚠️ Fila ${docSnap.id}: tipoId "${tipoId}" não corresponde a nenhum serviço.`);
-          }
         }
       }
-      total += countFila;
+      adicionarLog(`🎉 Fila: ${countFila} corrigidos.`);
 
-      // 4b. Corrigir AGENDAMENTOS
+      // Agendamentos
       const agendSnap = await getDocs(collection(db, "agendamentos"));
       let countAgend = 0;
       for (const docSnap of agendSnap.docs) {
@@ -182,9 +173,9 @@ export default function AdminUnificacao() {
           }
         }
       }
-      total += countAgend;
+      adicionarLog(`🎉 Agendamentos: ${countAgend} corrigidos.`);
 
-      // 4c. Corrigir PROFISSIONAIS (especialidade)
+      // Profissionais
       const profSnap = await getDocs(collection(db, "profissionais"));
       let countProf = 0;
       for (const docSnap of profSnap.docs) {
@@ -199,37 +190,9 @@ export default function AdminUnificacao() {
           }
         }
       }
-      total += countProf;
+      adicionarLog(`🎉 Profissionais: ${countProf} corrigidos.`);
 
-      // 4d. Corrigir ALUNOS (servicosAtivos)
-      const alunosSnap = await getDocs(collection(db, "alunos"));
-      let countAlunos = 0;
-      for (const docSnap of alunosSnap.docs) {
-        const data = docSnap.data();
-        const servicosAtivos = data.servicosAtivos || [];
-        if (servicosAtivos.length > 0) {
-          let modificado = false;
-          const novosServicos = servicosAtivos.map((servico: any) => {
-            const tipoId = servico.tipoId;
-            if (typeof tipoId === "string" && mapa[tipoId.toLowerCase()]) {
-              const novoId = mapa[tipoId.toLowerCase()];
-              if (tipoId !== novoId) {
-                modificado = true;
-                return { ...servico, tipoId: novoId };
-              }
-            }
-            return servico;
-          });
-          if (modificado) {
-            await updateDoc(docSnap.ref, { servicosAtivos: novosServicos });
-            countAlunos++;
-            adicionarLog(`✅ Aluno ${docSnap.id}: servicosAtivos corrigidos`);
-          }
-        }
-      }
-      total += countAlunos;
-
-      adicionarLog(`🎉 PADRONIZAÇÃO CONCLUÍDA! ${total} registros corrigidos (${countFila} fila, ${countAgend} agendamentos, ${countProf} profissionais, ${countAlunos} alunos).`);
+      adicionarLog(`🎉 Padronização concluída!`);
     } catch (error: any) {
       adicionarLog(`❌ Erro: ${error.message}`);
     } finally {
@@ -242,18 +205,10 @@ export default function AdminUnificacao() {
       <h1 style={{ color: "#1a2a4f" }}>Administração – Correção e Unificação</h1>
       <p style={{ color: "#6b7a8f" }}>Ferramentas para manutenção de dados.</p>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Processando..." : "Unificar CPFs Duplicados"}
-        </button>
-        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Processando..." : "Reordenar Matrículas"}
-        </button>
-        <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 20px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Processando..." : "Corrigir CPFs"}
-        </button>
-        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
-          {carregando ? "Padronizando..." : "🔧 PADRONIZAR TUDO"}
-        </button>
+        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Unificar CPFs Duplicados</button>
+        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Reordenar Matrículas</button>
+        <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 20px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>Corrigir CPFs</button>
+        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>PADRONIZAR TUDO</button>
       </div>
       <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 400, overflow: "auto", border: "1px solid #dee2e6" }}>
         {logs.length === 0 && <span style={{ color: "#6b7a8f" }}>Nenhum log ainda.</span>}

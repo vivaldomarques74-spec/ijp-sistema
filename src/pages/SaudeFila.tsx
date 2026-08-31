@@ -35,22 +35,42 @@ export default function SaudeFila() {
   }, []);
 
   useEffect(() => {
-    if (!tipoId) return;
+    if (!tipoId) {
+      setFila([]);
+      return;
+    }
     const carregarFila = async () => {
-      const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
-      const snap = await getDocs(q);
+      // Busca o nome do serviço selecionado (para fallback)
+      const tipoSelecionado = tipos.find(t => t.id === tipoId);
+      const nomeServico = tipoSelecionado?.nome?.toLowerCase().trim() || "";
+
+      // Primeira consulta: pelo ID
+      const q1 = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
+      const snap1 = await getDocs(q1);
+
+      // Segunda consulta: pelo nome (fallback)
+      const q2 = query(collection(db, "filaEspera"), where("tipoId", "==", nomeServico), where("status", "==", "aguardando"));
+      const snap2 = await getDocs(q2);
+
+      // Unir resultados, evitando duplicados
+      const ids = new Set<string>();
+      const docs = [...snap1.docs, ...snap2.docs];
       const lista = [];
-      for (const docFil of snap.docs) {
-        const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
-        if (alunoSnap.exists()) {
-          lista.push({
-            id: docFil.id,
-            alunoId: docFil.data().alunoId,
-            nome: alunoSnap.data().nomeCompleto,
-            matricula: alunoSnap.data().matricula,
-          });
+      for (const docFil of docs) {
+        if (!ids.has(docFil.id)) {
+          ids.add(docFil.id);
+          const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+          if (alunoSnap.exists()) {
+            lista.push({
+              id: docFil.id,
+              alunoId: docFil.data().alunoId,
+              nome: alunoSnap.data().nomeCompleto,
+              matricula: alunoSnap.data().matricula,
+            });
+          }
         }
       }
+
       lista.sort((a, b) => {
         const numA = parseInt(a.matricula.replace("IJP-", ""));
         const numB = parseInt(b.matricula.replace("IJP-", ""));
@@ -62,8 +82,9 @@ export default function SaudeFila() {
       setSelecoes(novasSelecoes);
     };
     carregarFila();
-  }, [tipoId]);
+  }, [tipoId, tipos]);
 
+  // Carregar horários disponíveis
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
@@ -129,18 +150,27 @@ export default function SaudeFila() {
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
     // recarregar fila
-    const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
-    const snap = await getDocs(q);
+    const tipoSelecionado = tipos.find(t => t.id === tipoId);
+    const nomeServico = tipoSelecionado?.nome?.toLowerCase().trim() || "";
+    const q1 = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
+    const snap1 = await getDocs(q1);
+    const q2 = query(collection(db, "filaEspera"), where("tipoId", "==", nomeServico), where("status", "==", "aguardando"));
+    const snap2 = await getDocs(q2);
+    const ids = new Set<string>();
+    const docs = [...snap1.docs, ...snap2.docs];
     const lista = [];
-    for (const docFil of snap.docs) {
-      const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
-      if (alunoSnap.exists()) {
-        lista.push({
-          id: docFil.id,
-          alunoId: docFil.data().alunoId,
-          nome: alunoSnap.data().nomeCompleto,
-          matricula: alunoSnap.data().matricula,
-        });
+    for (const docFil of docs) {
+      if (!ids.has(docFil.id)) {
+        ids.add(docFil.id);
+        const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+        if (alunoSnap.exists()) {
+          lista.push({
+            id: docFil.id,
+            alunoId: docFil.data().alunoId,
+            nome: alunoSnap.data().nomeCompleto,
+            matricula: alunoSnap.data().matricula,
+          });
+        }
       }
     }
     lista.sort((a, b) => {
@@ -161,18 +191,27 @@ export default function SaudeFila() {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
         // recarregar
-        const q = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
-        const snap = await getDocs(q);
+        const tipoSelecionado = tipos.find(t => t.id === tipoId);
+        const nomeServico = tipoSelecionado?.nome?.toLowerCase().trim() || "";
+        const q1 = query(collection(db, "filaEspera"), where("tipoId", "==", tipoId), where("status", "==", "aguardando"));
+        const snap1 = await getDocs(q1);
+        const q2 = query(collection(db, "filaEspera"), where("tipoId", "==", nomeServico), where("status", "==", "aguardando"));
+        const snap2 = await getDocs(q2);
+        const ids = new Set<string>();
+        const docs = [...snap1.docs, ...snap2.docs];
         const lista = [];
-        for (const docFil of snap.docs) {
-          const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
-          if (alunoSnap.exists()) {
-            lista.push({
-              id: docFil.id,
-              alunoId: docFil.data().alunoId,
-              nome: alunoSnap.data().nomeCompleto,
-              matricula: alunoSnap.data().matricula,
-            });
+        for (const docFil of docs) {
+          if (!ids.has(docFil.id)) {
+            ids.add(docFil.id);
+            const alunoSnap = await getDoc(doc(db, "alunos", docFil.data().alunoId));
+            if (alunoSnap.exists()) {
+              lista.push({
+                id: docFil.id,
+                alunoId: docFil.data().alunoId,
+                nome: alunoSnap.data().nomeCompleto,
+                matricula: alunoSnap.data().matricula,
+              });
+            }
           }
         }
         lista.sort((a, b) => {
