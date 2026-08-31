@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 interface Paciente {
@@ -26,6 +26,12 @@ interface Estagiario {
   codigo: string;
 }
 
+interface HorarioDisponivel {
+  id: string;
+  data: string;
+  horario: string;
+}
+
 export default function ProfissionalPacientes() {
   const { codigo } = useParams();
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
@@ -39,6 +45,12 @@ export default function ProfissionalPacientes() {
   const [filtroEstagiarioId, setFiltroEstagiarioId] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
+
+  // Estado para vincular
+  const [vinculando, setVinculando] = useState<{ paciente: Paciente; profissionalId: string; horarioId: string } | null>(null);
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<HorarioDisponivel[]>([]);
+  const [buscandoHorarios, setBuscandoHorarios] = useState(false);
+  const [profissionalSelecionadoId, setProfissionalSelecionadoId] = useState("");
 
   useEffect(() => {
     const carregarProfissional = async () => {
@@ -65,7 +77,7 @@ export default function ProfissionalPacientes() {
   useEffect(() => {
     const carregarAux = async () => {
       const profSnap = await getDocs(collection(db, "profissionais"));
-      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo })));
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       setServicos(servSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
     };
@@ -120,26 +132,30 @@ export default function ProfissionalPacientes() {
       const snapFila = await getDocs(collection(db, "filaEspera"));
       for (const docSnap of snapFila.docs) {
         const data = docSnap.data();
-        if (data.alunoId && data.status === "aguardando" && idsParaFiltrar.includes(data.profissionalId)) {
-          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-          if (alunoSnap.exists()) {
-            const aluno = alunoSnap.data();
-            lista.push({
-              id: docSnap.id,
-              alunoId: data.alunoId,
-              nome: aluno.nomeCompleto,
-              matricula: aluno.matricula || "",
-              telefone: aluno.telefone || "",
-              servicoNome: servMap[data.tipoId] || data.tipoId,
-              tipoId: data.tipoId,
-              data: "",
-              horario: "",
-              profissionalId: data.profissionalId || "",
-              profissionalNome: data.profissionalId ? profMap[data.profissionalId] || "Desconhecido" : "Aguardando",
-              agendamentoId: docSnap.id,
-              status: "aguardando",
-              origem: "fila",
-            });
+        if (data.alunoId && data.status === "aguardando") {
+          const profId = data.profissionalId || "";
+          const pertence = profId === "" || idsParaFiltrar.includes(profId);
+          if (pertence) {
+            const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+            if (alunoSnap.exists()) {
+              const aluno = alunoSnap.data();
+              lista.push({
+                id: docSnap.id,
+                alunoId: data.alunoId,
+                nome: aluno.nomeCompleto,
+                matricula: aluno.matricula || "",
+                telefone: aluno.telefone || "",
+                servicoNome: servMap[data.tipoId] || data.tipoId,
+                tipoId: data.tipoId,
+                data: "",
+                horario: "",
+                profissionalId: profId,
+                profissionalNome: profId ? profMap[profId] || "Desconhecido" : "Aguardando",
+                agendamentoId: docSnap.id,
+                status: "aguardando",
+                origem: "fila",
+              });
+            }
           }
         }
       }
@@ -176,6 +192,59 @@ export default function ProfissionalPacientes() {
   useEffect(() => {
     carregarPacientes();
   }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
+
+  const buscarHorariosParaVincular = async (paciente: Paciente, profissionalId: string) => {
+    if (!profissionalId) return alert("Selecione um profissional.");
+    setBuscandoHorarios(true);
+    try {
+      const hoje = new Date().toISOString().split("T")[0];
+      const snap = await getDocs(collection(db, "agendamentos"));
+      const horarios: HorarioDisponivel[] = [];
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        if (data.profissionalId === profissionalId && data.data >= hoje &&
+            (data.status === "livre" || data.status === "aguardandoVinculo") &&
+            !data.alunoId && !data.pacienteInfo) {
+          horarios.push({
+            id: docSnap.id,
+            data: data.data,
+            horario: data.horario,
+          });
+        }
+      }
+      horarios.sort((a, b) => {
+        if (a.data === b.data) return a.horario.localeCompare(b.horario);
+        return a.data.localeCompare(b.data);
+      });
+      setHorariosDisponiveis(horarios);
+      setVinculando({ paciente, profissionalId, horarioId: "" });
+      if (horarios.length === 0) alert("Nenhum horário disponível para este profissional.");
+    } catch (error: any) {
+      alert(`Erro ao buscar horários: ${error.message}`);
+    } finally {
+      setBuscandoHorarios(false);
+    }
+  };
+
+  const confirmarVinculo = async () => {
+    if (!vinculando) return;
+    if (!vinculando.horarioId) return alert("Selecione um horário.");
+
+    try {
+      await updateDoc(doc(db, "agendamentos", vinculando.horarioId), {
+        alunoId: vinculando.paciente.alunoId,
+        status: "ocupado",
+        tipoId: vinculando.paciente.tipoId,
+      });
+      await updateDoc(doc(db, "filaEspera", vinculando.paciente.id), { status: "atendido" });
+      alert("Paciente vinculado com sucesso!");
+      setVinculando(null);
+      setHorariosDisponiveis([]);
+      carregarPacientes();
+    } catch (error: any) {
+      alert(`Erro ao vincular: ${error.message}`);
+    }
+  };
 
   const styleSelect = { padding: 8, border: "1px solid #ccc", borderRadius: 8, background: "#fff" };
   const styleButton = (bg: string, color = "#fff") => ({
@@ -279,18 +348,72 @@ export default function ProfissionalPacientes() {
                       Ficha
                     </button>
                     {p.origem === "fila" && (
-                      <button
-                        onClick={() => alert("Vincular a um horário em breve")}
-                        style={styleButton("#28a745")}
-                      >
-                        Vincular
-                      </button>
+                      <>
+                        <select
+                          onChange={(e) => {
+                            const profId = e.target.value;
+                            setProfissionalSelecionadoId(profId);
+                          }}
+                          style={{ ...styleSelect, width: "auto", marginRight: 4 }}
+                        >
+                          <option value="">Profissional</option>
+                          {profissionais
+                            .filter(prof => supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
+                            .map(prof => (
+                              <option key={prof.id} value={prof.id}>{prof.nome}</option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            if (!profissionalSelecionadoId) return alert("Selecione um profissional.");
+                            buscarHorariosParaVincular(p, profissionalSelecionadoId);
+                          }}
+                          style={styleButton("#28a745")}
+                          disabled={buscandoHorarios}
+                        >
+                          {buscandoHorarios ? "..." : "Vincular"}
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal de vinculação */}
+      {vinculando && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+        }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
+            <h3>Vincular paciente</h3>
+            <p><strong>{vinculando.paciente.nome}</strong> - {vinculando.paciente.servicoNome}</p>
+            <div style={{ marginBottom: 12 }}>
+              <label>Horário disponível: </label>
+              <select
+                value={vinculando.horarioId}
+                onChange={e => setVinculando({ ...vinculando, horarioId: e.target.value })}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              >
+                <option value="">Selecione</option>
+                {horariosDisponiveis.map(h => (
+                  <option key={h.id} value={h.id}>{h.data} {h.horario}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={confirmarVinculo} disabled={!vinculando.horarioId} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
+                Confirmar
+              </button>
+              <button onClick={() => { setVinculando(null); setHorariosDisponiveis([]); }} style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
