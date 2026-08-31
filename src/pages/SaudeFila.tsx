@@ -34,43 +34,25 @@ export default function SaudeFila() {
     carregarProfissionais();
   }, []);
 
+  // 🔥 CARREGA TODOS OS PACIENTES DA FILA (independente do tipoId)
   useEffect(() => {
-    if (!tipoId) {
-      setFila([]);
-      return;
-    }
     const carregarFila = async () => {
-      // Buscar todos com status aguardando ou vinculado
+      // Busca todos com status aguardando ou vinculado
       const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
       const snap = await getDocs(q);
-
-      const servicoSelecionado = tipos.find(t => t.id === tipoId);
-      const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
-      const idServico = tipoId;
-
-      console.log("🔍 Buscando fila para serviço:", idServico, nomeServico);
 
       const lista = [];
       for (const docFil of snap.docs) {
         const data = docFil.data();
-        const tipoIdFila = data.tipoId;
-        const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
-        // Fallback: compara por ID ou nome
-        const corresponde = 
-          tipoIdFila === idServico || 
-          tipoIdLower === nomeServico ||
-          tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim();
-
-        if (corresponde) {
-          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-          if (alunoSnap.exists()) {
-            lista.push({
-              id: docFil.id,
-              alunoId: data.alunoId,
-              nome: alunoSnap.data().nomeCompleto,
-              matricula: alunoSnap.data().matricula,
-            });
-          }
+        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+        if (alunoSnap.exists()) {
+          lista.push({
+            id: docFil.id,
+            alunoId: data.alunoId,
+            nome: alunoSnap.data().nomeCompleto,
+            matricula: alunoSnap.data().matricula,
+            tipoId: data.tipoId, // para referência
+          });
         }
       }
 
@@ -85,7 +67,7 @@ export default function SaudeFila() {
       setSelecoes(novasSelecoes);
     };
     carregarFila();
-  }, [tipoId, tipos]);
+  }, []); // 🔥 Não depende de tipoId
 
   useEffect(() => {
     const carregarHorarios = async () => {
@@ -129,7 +111,7 @@ export default function SaudeFila() {
       setHorariosPorProfissional(porProfissional);
     };
     if (profissionais.length > 0) carregarHorarios();
-  }, [profissionais, tipoId]);
+  }, [profissionais]);
 
   const vincular = async (alunoId: string) => {
     const selecao = selecoes[alunoId];
@@ -151,31 +133,21 @@ export default function SaudeFila() {
     }
     const filaDoc = fila.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // recarregar fila
+    // Recarregar a fila
     const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
     const snap = await getDocs(q);
-    const servicoSelecionado = tipos.find(t => t.id === tipoId);
-    const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
-    const idServico = tipoId;
     const lista = [];
     for (const docFil of snap.docs) {
       const data = docFil.data();
-      const tipoIdFila = data.tipoId;
-      const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
-      const corresponde = 
-        tipoIdFila === idServico || 
-        tipoIdLower === nomeServico ||
-        tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim();
-      if (corresponde) {
-        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-        if (alunoSnap.exists()) {
-          lista.push({
-            id: docFil.id,
-            alunoId: data.alunoId,
-            nome: alunoSnap.data().nomeCompleto,
-            matricula: alunoSnap.data().matricula,
-          });
-        }
+      const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+      if (alunoSnap.exists()) {
+        lista.push({
+          id: docFil.id,
+          alunoId: data.alunoId,
+          nome: alunoSnap.data().nomeCompleto,
+          matricula: alunoSnap.data().matricula,
+          tipoId: data.tipoId,
+        });
       }
     }
     lista.sort((a, b) => {
@@ -195,31 +167,20 @@ export default function SaudeFila() {
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
-        // recarregar
         const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
         const snap = await getDocs(q);
-        const servicoSelecionado = tipos.find(t => t.id === tipoId);
-        const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
-        const idServico = tipoId;
         const lista = [];
         for (const docFil of snap.docs) {
           const data = docFil.data();
-          const tipoIdFila = data.tipoId;
-          const tipoIdLower = (tipoIdFila || "").toLowerCase().trim();
-          const corresponde = 
-            tipoIdFila === idServico || 
-            tipoIdLower === nomeServico ||
-            tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim();
-          if (corresponde) {
-            const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-            if (alunoSnap.exists()) {
-              lista.push({
-                id: docFil.id,
-                alunoId: data.alunoId,
-                nome: alunoSnap.data().nomeCompleto,
-                matricula: alunoSnap.data().matricula,
-              });
-            }
+          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+          if (alunoSnap.exists()) {
+            lista.push({
+              id: docFil.id,
+              alunoId: data.alunoId,
+              nome: alunoSnap.data().nomeCompleto,
+              matricula: alunoSnap.data().matricula,
+              tipoId: data.tipoId,
+            });
           }
         }
         lista.sort((a, b) => {
@@ -250,41 +211,37 @@ export default function SaudeFila() {
     <div>
       <h3 style={{ fontSize: 16, margin: "0 0 12px", color: "#1a2a4f" }}>Fila de Espera (Agendados)</h3>
       <select onChange={e => setTipoId(e.target.value)} value={tipoId} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, marginBottom: 16 }}>
-        <option value="">Selecione o tipo</option>
+        <option value="">Todos os serviços</option>
         {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
       </select>
-      {tipoId && (
-        <div>
-          {fila.length === 0 && <p>Nenhum paciente aguardando ou vinculado.</p>}
-          {fila.map(paciente => (
-            <div key={paciente.alunoId} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                <div style={{ flex: "1 1 180px" }}>
-                  <strong>{paciente.nome}</strong> <span style={{ fontSize: 13, color: "#6b7a8f" }}>({paciente.matricula})</span>
-                </div>
-                <div style={{ flex: "1 1 140px" }}>
-                  <select value={selecoes[paciente.alunoId]?.profissionalId || ""} onChange={e => atualizarSelecao(paciente.alunoId, "profissionalId", e.target.value)} style={selectStyle}>
-                    <option value="">Profissional</option>
-                    {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                  </select>
-                </div>
-                <div style={{ flex: "1 1 160px" }}>
-                  <select value={selecoes[paciente.alunoId]?.horarioId || ""} onChange={e => atualizarSelecao(paciente.alunoId, "horarioId", e.target.value)} disabled={!selecoes[paciente.alunoId]?.profissionalId} style={selectStyle}>
-                    <option value="">Horário</option>
-                    {selecoes[paciente.alunoId]?.profissionalId && horariosPorProfissional[selecoes[paciente.alunoId].profissionalId]?.map(h => (
-                      <option key={h.id} value={h.id}>{formatarData(h.data)} {h.horario} {h.groupId ? "(fixo)" : ""}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => vincular(paciente.alunoId)} style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Vincular</button>
-                  <button onClick={() => removerDaFila(paciente.alunoId, paciente.nome)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Remover</button>
-                </div>
-              </div>
+      {fila.length === 0 && <p>Nenhum paciente aguardando ou vinculado.</p>}
+      {fila.map(paciente => (
+        <div key={paciente.alunoId} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: "1 1 180px" }}>
+              <strong>{paciente.nome}</strong> <span style={{ fontSize: 13, color: "#6b7a8f" }}>({paciente.matricula})</span>
             </div>
-          ))}
+            <div style={{ flex: "1 1 140px" }}>
+              <select value={selecoes[paciente.alunoId]?.profissionalId || ""} onChange={e => atualizarSelecao(paciente.alunoId, "profissionalId", e.target.value)} style={selectStyle}>
+                <option value="">Profissional</option>
+                {profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: "1 1 160px" }}>
+              <select value={selecoes[paciente.alunoId]?.horarioId || ""} onChange={e => atualizarSelecao(paciente.alunoId, "horarioId", e.target.value)} disabled={!selecoes[paciente.alunoId]?.profissionalId} style={selectStyle}>
+                <option value="">Horário</option>
+                {selecoes[paciente.alunoId]?.profissionalId && horariosPorProfissional[selecoes[paciente.alunoId].profissionalId]?.map(h => (
+                  <option key={h.id} value={h.id}>{formatarData(h.data)} {h.horario} {h.groupId ? "(fixo)" : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => vincular(paciente.alunoId)} style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Vincular</button>
+              <button onClick={() => removerDaFila(paciente.alunoId, paciente.nome)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Remover</button>
+            </div>
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
