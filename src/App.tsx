@@ -38,6 +38,7 @@ import Inscricao from "./pages/Inscricao";
 import PreInscricoes from "./pages/PreInscricoes";
 import MatriculasTurma from "./pages/MatriculasTurma";
 import AdminUnificacao from "./pages/AdminUnificacao";
+import AdminRemoverVinculo from "./pages/AdminRemoverVinculo";
 
 export default function App() {
   return (
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/pre-inscricoes" element={<PreInscricoes />} />
         <Route path="/matriculas-turma" element={<MatriculasTurma />} />
         <Route path="/admin/unificar" element={<AdminUnificacao />} />
+        <Route path="/admin/remover-vinculo" element={<AdminRemoverVinculo />} />
       </Route>
     </Routes>
   );
