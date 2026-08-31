@@ -16,8 +16,8 @@ interface Agendamento {
 export default function SaudeFila() {
   const [tipos, setTipos] = useState<any[]>([]);
   const [tipoId, setTipoId] = useState("");
-  const [fila, setFila] = useState<any[]>([]);
-  const [filaCompleta, setFilaCompleta] = useState<any[]>([]);
+  const [todosPacientes, setTodosPacientes] = useState<any[]>([]);
+  const [filaExibida, setFilaExibida] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [horariosPorProfissional, setHorariosPorProfissional] = useState<Record<string, Agendamento[]>>({});
   const [selecoes, setSelecoes] = useState<Record<string, { profissionalId: string; horarioId: string }>>({});
@@ -35,12 +35,11 @@ export default function SaudeFila() {
     carregarProfissionais();
   }, []);
 
-  // Carrega TODOS os pacientes da fila (status aguardando ou vinculado)
+  // Carregar TODOS os pacientes da fila (sem filtro de tipo)
   useEffect(() => {
-    const carregarFila = async () => {
+    const carregarTodos = async () => {
       const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
       const snap = await getDocs(q);
-
       const lista = [];
       for (const docFil of snap.docs) {
         const data = docFil.data();
@@ -55,50 +54,61 @@ export default function SaudeFila() {
           });
         }
       }
-
       lista.sort((a, b) => {
         const numA = parseInt(a.matricula.replace("IJP-", ""));
         const numB = parseInt(b.matricula.replace("IJP-", ""));
         return numA - numB;
       });
-      setFilaCompleta(lista);
-      aplicarFiltro(lista, tipoId);
-      const novasSelecoes: Record<string, any> = {};
-      for (const p of lista) novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
-      setSelecoes(novasSelecoes);
+      setTodosPacientes(lista);
     };
-    carregarFila();
+    carregarTodos();
   }, []);
 
-  // Função para aplicar o filtro com fallback
-  const aplicarFiltro = (lista: any[], tipoSelecionado: string) => {
-    if (!tipoSelecionado) {
-      setFila(lista);
+  // Aplicar filtro quando tipoId mudar
+  useEffect(() => {
+    if (todosPacientes.length === 0) {
+      setFilaExibida([]);
       return;
     }
 
-    const servicoSelecionado = tipos.find(t => t.id === tipoSelecionado);
-    const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
-    const idServico = tipoSelecionado;
+    // Se não houver filtro, mostra todos
+    if (!tipoId) {
+      setFilaExibida(todosPacientes);
+      // Atualizar seleções para todos os pacientes
+      const novasSelecoes: Record<string, any> = {};
+      for (const p of todosPacientes) {
+        novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
+      }
+      setSelecoes(novasSelecoes);
+      return;
+    }
 
-    const filtrados = lista.filter(p => {
+    // Aplicar filtro por serviço
+    const servicoSelecionado = tipos.find(t => t.id === tipoId);
+    const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+    const idServico = tipoId;
+
+    const filtrados = todosPacientes.filter(p => {
       const tipoIdPaciente = p.tipoId || "";
       const tipoIdLower = tipoIdPaciente.toLowerCase().trim();
+      // Compara por ID, nome completo ou nome em lowercase
       return (
         tipoIdPaciente === idServico ||
         tipoIdLower === nomeServico ||
         tipoIdLower === servicoSelecionado?.nome?.toLowerCase().trim()
       );
     });
-    setFila(filtrados);
-  };
 
-  // Quando mudar o select, aplica o filtro
-  useEffect(() => {
-    aplicarFiltro(filaCompleta, tipoId);
-  }, [tipoId, filaCompleta]);
+    setFilaExibida(filtrados);
+    // Atualizar seleções apenas para os filtrados
+    const novasSelecoes: Record<string, any> = {};
+    for (const p of filtrados) {
+      novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
+    }
+    setSelecoes(novasSelecoes);
+  }, [tipoId, todosPacientes, tipos]);
 
-  // Carregar horários (mesmo de antes)
+  // Carregar horários (igual ao anterior)
   useEffect(() => {
     const carregarHorarios = async () => {
       const hoje = new Date().toISOString().split("T")[0];
@@ -161,9 +171,9 @@ export default function SaudeFila() {
       await updateDoc(horarioRef, { alunoId, status: "ocupado" });
       alert("Paciente vinculado ao horário.");
     }
-    const filaDoc = fila.find(f => f.alunoId === alunoId);
+    const filaDoc = filaExibida.find(f => f.alunoId === alunoId);
     if (filaDoc) await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "atendido" });
-    // Recarregar a lista
+    // Recarregar todos
     const q = query(collection(db, "filaEspera"), where("status", "in", ["aguardando", "vinculado"]));
     const snap = await getDocs(q);
     const lista = [];
@@ -185,16 +195,12 @@ export default function SaudeFila() {
       const numB = parseInt(b.matricula.replace("IJP-", ""));
       return numA - numB;
     });
-    setFilaCompleta(lista);
-    aplicarFiltro(lista, tipoId);
-    const novasSelecoes: Record<string, any> = {};
-    for (const p of lista) novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
-    setSelecoes(novasSelecoes);
+    setTodosPacientes(lista);
   };
 
   const removerDaFila = async (alunoId: string, nome: string) => {
     if (window.confirm(`Remover ${nome} da fila de espera?`)) {
-      const filaDoc = fila.find(f => f.alunoId === alunoId);
+      const filaDoc = filaExibida.find(f => f.alunoId === alunoId);
       if (filaDoc) {
         await updateDoc(doc(db, "filaEspera", filaDoc.id), { status: "cancelado" });
         alert("Paciente removido da fila.");
@@ -219,11 +225,7 @@ export default function SaudeFila() {
           const numB = parseInt(b.matricula.replace("IJP-", ""));
           return numA - numB;
         });
-        setFilaCompleta(lista);
-        aplicarFiltro(lista, tipoId);
-        const novasSelecoes: Record<string, any> = {};
-        for (const p of lista) novasSelecoes[p.alunoId] = { profissionalId: "", horarioId: "" };
-        setSelecoes(novasSelecoes);
+        setTodosPacientes(lista);
       }
     }
   };
@@ -246,8 +248,8 @@ export default function SaudeFila() {
         <option value="">Todos os serviços</option>
         {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
       </select>
-      {fila.length === 0 && <p>Nenhum paciente aguardando ou vinculado para este serviço.</p>}
-      {fila.map(paciente => (
+      {filaExibida.length === 0 && <p>Nenhum paciente aguardando ou vinculado.</p>}
+      {filaExibida.map(paciente => (
         <div key={paciente.alunoId} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <div style={{ flex: "1 1 180px" }}>
