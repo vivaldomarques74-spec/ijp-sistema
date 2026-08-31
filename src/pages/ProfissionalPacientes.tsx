@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { collection, getDocs, doc, getDoc, query, where, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where, updateDoc, addDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 interface Paciente {
@@ -42,6 +42,14 @@ export default function ProfissionalPacientes() {
 
   // Estado para vincular (apenas profissional, sem horário)
   const [vinculando, setVinculando] = useState<{ paciente: Paciente; profissionalId: string } | null>(null);
+
+  // 🔥 NOVO: estado para vinculação com data/horário
+  const [modalData, setModalData] = useState<{
+    paciente: Paciente;
+    profissionalId: string;
+    data: string;
+    horario: string;
+  } | null>(null);
 
   useEffect(() => {
     const carregarProfissional = async () => {
@@ -91,7 +99,7 @@ export default function ProfissionalPacientes() {
 
       const lista: Paciente[] = [];
 
-      // 1. Agendamentos (pacientes já com horário marcado)
+      // 1. Agendamentos
       const snapAgend = await getDocs(collection(db, "agendamentos"));
       for (const docSnap of snapAgend.docs) {
         const data = docSnap.data();
@@ -119,42 +127,33 @@ export default function ProfissionalPacientes() {
         }
       }
 
-      // 2. Fila de espera - mostra todos os pacientes da fila (aguardando ou vinculados)
+      // 2. Fila de espera
       const snapFila = await getDocs(collection(db, "filaEspera"));
       for (const docSnap of snapFila.docs) {
         const data = docSnap.data();
-        if (data.alunoId) {
-          // Mostra apenas pacientes com status "aguardando" ou "vinculado"
-          if (data.status === "aguardando" || data.status === "vinculado") {
-            const profId = data.profissionalId || "";
-            // Se for "vinculado" e tiver profissionalId, deve estar na lista de supervisionados ou ser o próprio
-            if (data.status === "vinculado" && profId && !idsParaFiltrar.includes(profId)) {
-              continue; // Não é deste supervisor
-            }
-            // Se for "aguardando", mostra independente de ter profissionalId (desde que não tenha ou seja da supervisora)
-            if (data.status === "aguardando" && profId && !idsParaFiltrar.includes(profId)) {
-              continue;
-            }
-            const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-            if (alunoSnap.exists()) {
-              const aluno = alunoSnap.data();
-              lista.push({
-                id: docSnap.id,
-                alunoId: data.alunoId,
-                nome: aluno.nomeCompleto,
-                matricula: aluno.matricula || "",
-                telefone: aluno.telefone || "",
-                servicoNome: servMap[data.tipoId] || data.tipoId,
-                tipoId: data.tipoId,
-                data: "",
-                horario: "",
-                profissionalId: profId,
-                profissionalNome: profId ? profMap[profId] || "Desconhecido" : "Aguardando",
-                agendamentoId: docSnap.id,
-                status: data.status,
-                origem: "fila",
-              });
-            }
+        if (data.alunoId && (data.status === "aguardando" || data.status === "vinculado")) {
+          const profId = data.profissionalId || "";
+          if (data.status === "vinculado" && profId && !idsParaFiltrar.includes(profId)) continue;
+          if (data.status === "aguardando" && profId && !idsParaFiltrar.includes(profId)) continue;
+          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+          if (alunoSnap.exists()) {
+            const aluno = alunoSnap.data();
+            lista.push({
+              id: docSnap.id,
+              alunoId: data.alunoId,
+              nome: aluno.nomeCompleto,
+              matricula: aluno.matricula || "",
+              telefone: aluno.telefone || "",
+              servicoNome: servMap[data.tipoId] || data.tipoId,
+              tipoId: data.tipoId,
+              data: "",
+              horario: "",
+              profissionalId: profId,
+              profissionalNome: profId ? profMap[profId] || "Desconhecido" : "Aguardando",
+              agendamentoId: docSnap.id,
+              status: data.status,
+              origem: "fila",
+            });
           }
         }
       }
@@ -162,17 +161,7 @@ export default function ProfissionalPacientes() {
       // Aplicar filtros
       let filtrados = lista;
       if (filtroEstagiarioId) {
-        filtrados = filtrados.filter(p => {
-          // Se o filtro for por estagiário, mostrar pacientes que têm profissionalId igual ao estagiário
-          // ou que estão na fila (aguardando) e pertencem à supervisora (não têm profissionalId ou têm o da supervisora)
-          // Mas para simplificar, vamos mostrar apenas os que têm profissionalId igual ao estagiário
-          // ou se for "aguardando" e não tiver profissionalId, não mostrar (pois não está vinculado a ninguém)
-          if (p.profissionalId === filtroEstagiarioId) {
-            return true;
-          }
-          // Se o paciente está "aguardando" e não tem profissionalId, não pertence a nenhum estagiário
-          return false;
-        });
+        filtrados = filtrados.filter(p => p.profissionalId === filtroEstagiarioId);
       }
       if (filtroServico) {
         filtrados = filtrados.filter(p => p.tipoId === filtroServico);
@@ -202,19 +191,17 @@ export default function ProfissionalPacientes() {
     carregarPacientes();
   }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
 
-  // VINCULAR PACIENTE DA FILA A UM PROFISSIONAL (sem horário)
+  // VINCULAR PACIENTE DA FILA (sem horário)
   const vincularPaciente = async (paciente: Paciente, profissionalId: string) => {
     if (!profissionalId) return alert("Selecione um profissional.");
     const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
-    if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome}? O paciente sairá da fila e ficará aguardando agendamento de horário.`)) return;
+    if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome}? O paciente sairá da fila.`)) return;
 
     try {
-      // Atualizar a fila: marcar como "vinculado" e guardar o profissionalId
       await updateDoc(doc(db, "filaEspera", paciente.id), {
         profissionalId: profissionalId,
         status: "vinculado"
       });
-      
       alert(`Paciente vinculado a ${profissionalNome}! Ele saiu da fila e aguarda agendamento de horário.`);
       setVinculando(null);
       carregarPacientes();
@@ -223,7 +210,42 @@ export default function ProfissionalPacientes() {
     }
   };
 
-  // REAGENDAR: trocar paciente de profissional (para pacientes já com horário)
+  // 🔥 VINCULAR COM DATA E HORÁRIO (cria agendamento diretamente)
+  const vincularComData = async (paciente: Paciente, profissionalId: string, data: string, horario: string) => {
+    if (!profissionalId) return alert("Selecione um profissional.");
+    if (!data || !horario) return alert("Preencha data e horário.");
+    const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
+    if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome} na data ${data} ${horario}?`)) return;
+
+    try {
+      // Criar agendamento
+      await addDoc(collection(db, "agendamentos"), {
+        alunoId: paciente.alunoId,
+        profissionalId: profissionalId,
+        tipoId: paciente.tipoId,
+        data: data,
+        horario: horario,
+        status: "ocupado", // ou "realizado" se a data for passada? Vamos deixar "ocupado"
+        tipoPaciente: "social",
+        createdAt: new Date(),
+      });
+
+      // Remover da fila
+      await updateDoc(doc(db, "filaEspera", paciente.id), {
+        status: "atendido",
+        profissionalId: profissionalId,
+        dataVinculo: new Date()
+      });
+
+      alert(`Paciente vinculado com agendamento em ${data} ${horario}!`);
+      setModalData(null);
+      carregarPacientes();
+    } catch (error: any) {
+      alert(`Erro ao vincular: ${error.message}`);
+    }
+  };
+
+  // REAGENDAR (trocar profissional)
   const reagendarPaciente = async (paciente: Paciente, novoProfissionalId: string) => {
     if (!novoProfissionalId) return alert("Selecione um profissional.");
     if (novoProfissionalId === paciente.profissionalId) return alert("O paciente já está com este profissional.");
@@ -241,9 +263,9 @@ export default function ProfissionalPacientes() {
     }
   };
 
-  // REMOVER DA FILA (caso queira cancelar)
+  // REMOVER DA FILA
   const removerDaFila = async (paciente: Paciente) => {
-    if (!confirm(`Remover ${paciente.nome} da fila de espera?`)) return;
+    if (!confirm(`Remover ${paciente.nome} da fila?`)) return;
     try {
       await updateDoc(doc(db, "filaEspera", paciente.id), { status: "cancelado" });
       alert("Paciente removido da fila.");
@@ -378,22 +400,38 @@ export default function ProfissionalPacientes() {
                             ))}
                         </select>
                         {vinculando?.paciente.id === p.id && vinculando?.profissionalId && (
-                          <button
-                            onClick={() => vincularPaciente(p, vinculando.profissionalId)}
-                            style={styleButton("#28a745")}
-                          >
-                            Confirmar
-                          </button>
+                          <>
+                            <button
+                              onClick={() => vincularPaciente(p, vinculando.profissionalId)}
+                              style={styleButton("#28a745")}
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              onClick={() => {
+                                setModalData({
+                                  paciente: p,
+                                  profissionalId: vinculando.profissionalId,
+                                  data: "",
+                                  horario: "",
+                                });
+                                setVinculando(null);
+                              }}
+                              style={styleButton("#17a2b8")}
+                            >
+                              + Data
+                            </button>
+                          </>
                         )}
                       </>
                     )}
 
-                    {/* Se for da fila mas já vinculado (aguardando horário), mostrar que já foi vinculado */}
+                    {/* Se for da fila mas já vinculado (aguardando horário) */}
                     {p.origem === "fila" && p.status === "vinculado" && (
                       <span style={{ color: "#28a745", fontSize: 13 }}>✓ Vinculado</span>
                     )}
 
-                    {/* Se for agendamento, mostrar opção de reagendar (trocar profissional) */}
+                    {/* Se for agendamento, reagendar */}
                     {p.origem === "agendamento" && (
                       <select
                         onChange={async (e) => {
@@ -415,7 +453,7 @@ export default function ProfissionalPacientes() {
                       </select>
                     )}
 
-                    {/* Remover da fila (para pacientes em fila) */}
+                    {/* Remover da fila */}
                     {p.origem === "fila" && (
                       <button
                         onClick={() => removerDaFila(p)}
@@ -429,6 +467,51 @@ export default function ProfissionalPacientes() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 🔥 MODAL PARA VINCULAR COM DATA/HORÁRIO */}
+      {modalData && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+        }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
+            <h3>Vincular com data e horário</h3>
+            <p><strong>{modalData.paciente.nome}</strong> - {modalData.paciente.servicoNome}</p>
+            <div style={{ marginBottom: 12 }}>
+              <label>Data: </label>
+              <input
+                type="date"
+                value={modalData.data}
+                onChange={e => setModalData({ ...modalData, data: e.target.value })}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label>Horário: </label>
+              <input
+                type="time"
+                value={modalData.horario}
+                onChange={e => setModalData({ ...modalData, horario: e.target.value })}
+                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => vincularComData(modalData.paciente, modalData.profissionalId, modalData.data, modalData.horario)}
+                style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+              >
+                Vincular
+              </button>
+              <button
+                onClick={() => setModalData(null)}
+                style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
