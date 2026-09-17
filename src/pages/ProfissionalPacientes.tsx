@@ -199,23 +199,19 @@ export default function ProfissionalPacientes() {
     } catch (e: any) { alert(e.message); }
   };
 
-  // 🔥 TROCAR PROFISSIONAL + HORÁRIO
   const trocarProfissional = async (paciente: any, novoProfId: string, novoHorarioId: string | null) => {
     if (!novoProfId) return alert("Escolha o novo profissional.");
 
     const novoNome = profissionais.find(p => p.id === novoProfId)?.nome || "profissional";
 
     try {
-      // Se escolheu novo horário, move o paciente para ele
       if (novoHorarioId) {
         const slotSnap = await getDoc(doc(db, "agendamentos", novoHorarioId));
         if (!slotSnap.exists()) return alert("Horário não encontrado.");
         const slot: any = slotSnap.data();
 
-        // Libera o horário antigo (se existir e for agendamento)
         if (paciente.origem === "agendamento") {
           if (paciente.groupId) {
-            // Libera todas as ocorrências antigas do grupo (exceto a nova)
             const grupoQuery = query(collection(db, "agendamentos"), where("groupId", "==", paciente.groupId));
             const grupoSnap = await getDocs(grupoQuery);
             for (const d of grupoSnap.docs) {
@@ -228,7 +224,6 @@ export default function ProfissionalPacientes() {
           }
         }
 
-        // Ocupa o novo horário
         if (slot.groupId) {
           const novoGrupoQuery = query(collection(db, "agendamentos"), where("groupId", "==", slot.groupId));
           const novoGrupoSnap = await getDocs(novoGrupoQuery);
@@ -241,7 +236,6 @@ export default function ProfissionalPacientes() {
           alert(`Alterado! ${paciente.nome} agora está com ${novoNome}.`);
         }
       } else {
-        // Sem novo horário: só troca o profissional nos agendamentos atuais
         if (paciente.origem === "agendamento") {
           if (paciente.groupId) {
             const grupoQuery = query(collection(db, "agendamentos"), where("groupId", "==", paciente.groupId));
@@ -275,18 +269,16 @@ export default function ProfissionalPacientes() {
 
   const sBtn = (bg: string, color = "#fff") => ({ padding: "4px 10px", border: "none", borderRadius: 4, background: bg, color, cursor: "pointer", marginRight: 4 });
 
-  // 🔥 Agrupa agendamentos por aluno para não aparecer 12x
+  // 🔥 Agrupa agendamentos por aluno (para não mostrar 12x o mesmo)
   const agruparPorAluno = (arr: any[]) => {
     const grupos = new Map<string, any[]>();
     for (const p of arr) {
-      const chave = `${p.alunoId}_${p.origem}`;
-      if (!grupos.has(chave)) grupos.set(chave, []);
-      grupos.get(chave)!.push(p);
+      const k = `${p.alunoId}_${p.origem}`;
+      if (!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k)!.push(p);
     }
-    return Array.from(grupos.entries()).map(([chave, items]) => {
-      // Se for fila, é só 1 item
+    return Array.from(grupos.values()).map((items) => {
       if (items[0].origem === "fila") return { ...items[0], _qtd: 1 };
-      // Se for agendamento, pega o primeiro + conta
       const ordenados = items.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
       return { ...ordenados[0], _qtd: items.length, _todosIds: items.map(i => i.id) };
     });
@@ -408,7 +400,7 @@ export default function ProfissionalPacientes() {
   );
 }
 
-// =========== MODAL VINCULAR (da fila) ===========
+// =========== MODAL VINCULAR ===========
 function ModalVincular({
   paciente,
   profissionais,
