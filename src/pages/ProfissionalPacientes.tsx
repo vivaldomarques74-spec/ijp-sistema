@@ -3,92 +3,55 @@ import { useParams } from "react-router-dom";
 import { collection, getDocs, doc, getDoc, query, where, updateDoc, addDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
-interface Paciente {
-  id: string;
-  alunoId: string;
-  nome: string;
-  matricula: string;
-  telefone: string;
-  servicoNome: string;
-  tipoId: string;
-  data: string;
-  horario: string;
-  profissionalId: string;
-  profissionalNome: string;
-  agendamentoId: string;
-  status: string;
-  origem: "agendamento" | "fila";
-}
-
-interface Estagiario {
-  id: string;
-  nome: string;
-  codigo: string;
-  tipo?: string;
-}
-
 export default function ProfissionalPacientes() {
   const { codigo } = useParams();
-  const [pacientes, setPacientes] = useState<Paciente[]>([]);
-  const [todosPacientes, setTodosPacientes] = useState<Paciente[]>([]);
+  const [pacientes, setPacientes] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [profissionalId, setProfissionalId] = useState("");
-  const [supervisionadosIds, setSupervisionadosIds] = useState<string[]>([]);
-  const [estagiarios, setEstagiarios] = useState<Estagiario[]>([]);
-  const [filtroEstagiarioId, setFiltroEstagiarioId] = useState("");
-  const [filtroServico, setFiltroServico] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
   const [tipoLogado, setTipoLogado] = useState("");
+  const [supervisionadosIds, setSupervisionadosIds] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
+  const [filtroProfId, setFiltroProfId] = useState("");
+  const [filtroServico, setFiltroServico] = useState("");
 
-  const [vinculando, setVinculando] = useState<{ paciente: Paciente; profissionalId: string } | null>(null);
-  const [modalData, setModalData] = useState<{
-    paciente: Paciente;
-    profissionalId: string;
-    data: string;
-    horario: string;
-  } | null>(null);
+  const [modalVincular, setModalVincular] = useState<any>(null);
 
   const ehDiretor = tipoLogado === "diretor";
 
-  // 1. Carrega dados do profissional logado
+  // 1. Carrega quem está logado
   useEffect(() => {
-    const carregarProfissional = async () => {
+    const carregar = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
       const snap = await getDocs(q);
       if (!snap.empty) {
-        const docProf = snap.docs[0];
-        const profData = { id: docProf.id, ...docProf.data() } as any;
-        setProfissionalId(docProf.id);
-        setProfissionalNome(profData.nome || "");
-        setTipoLogado(profData.tipo || "");
+        const d = snap.docs[0];
+        const data: any = d.data();
+        setProfissionalId(d.id);
+        setProfissionalNome(data.nome || "");
+        setTipoLogado(data.tipo || "");
 
-        if (profData.tipo === "supervisor") {
-          const estQuery = query(collection(db, "profissionais"), where("supervisorId", "==", docProf.id));
-          const estSnap = await getDocs(estQuery);
-          const ids = estSnap.docs.map(d => d.id);
-          setSupervisionadosIds(ids);
-          setEstagiarios(estSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, codigo: d.data().codigo, tipo: d.data().tipo })));
-        } else if (profData.tipo === "diretor") {
-          const todosSnap = await getDocs(collection(db, "profissionais"));
-          const todos = todosSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, codigo: d.data().codigo, tipo: d.data().tipo }));
-          setSupervisionadosIds(todos.map(p => p.id));
-          setEstagiarios(todos);
+        if (data.tipo === "supervisor") {
+          const est = await getDocs(query(collection(db, "profissionais"), where("supervisorId", "==", d.id)));
+          setSupervisionadosIds(est.docs.map(x => x.id));
+        } else if (data.tipo === "diretor") {
+          const todos = await getDocs(collection(db, "profissionais"));
+          setSupervisionadosIds(todos.docs.map(x => x.id));
         }
       }
     };
-    carregarProfissional();
+    carregar();
   }, [codigo]);
 
-  // 2. Carrega lista completa de profissionais e serviços
+  // 2. Carrega auxiliares
   useEffect(() => {
     const carregarAux = async () => {
-      const profSnap = await getDocs(collection(db, "profissionais"));
-      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
-      const servSnap = await getDocs(collection(db, "tiposAtendimento"));
-      setServicos(servSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
+      const p = await getDocs(collection(db, "profissionais"));
+      setProfissionais(p.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
+      const s = await getDocs(collection(db, "tiposAtendimento"));
+      setServicos(s.docs.map(d => ({ id: d.id, nome: d.data().nome })));
     };
     carregarAux();
   }, []);
@@ -98,14 +61,11 @@ export default function ProfissionalPacientes() {
     if (!profissionalId) return;
     setCarregando(true);
     try {
-      let idsParaFiltrar: string[] = [];
+      let idsFiltro: string[] = [];
       if (ehDiretor) {
-        idsParaFiltrar = profissionais.map(p => p.id);
+        idsFiltro = profissionais.map(p => p.id);
       } else {
-        idsParaFiltrar = [profissionalId];
-        if (supervisionadosIds.length > 0) {
-          idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
-        }
+        idsFiltro = [profissionalId, ...supervisionadosIds];
       }
 
       const profMap: Record<string, string> = {};
@@ -113,84 +73,63 @@ export default function ProfissionalPacientes() {
       const servMap: Record<string, string> = {};
       servicos.forEach(s => { servMap[s.id] = s.nome; });
 
-      const lista: Paciente[] = [];
+      const lista: any[] = [];
 
       // Agendamentos
-      const snapAgend = await getDocs(collection(db, "agendamentos"));
-      for (const docSnap of snapAgend.docs) {
-        const data = docSnap.data();
-        if (data.alunoId && (ehDiretor || idsParaFiltrar.includes(data.profissionalId))) {
-          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-          if (alunoSnap.exists()) {
-            const aluno = alunoSnap.data();
-            lista.push({
-              id: docSnap.id,
-              alunoId: data.alunoId,
-              nome: aluno.nomeCompleto,
-              matricula: aluno.matricula || "",
-              telefone: aluno.telefone || "",
-              servicoNome: servMap[data.tipoId] || data.tipoId,
-              tipoId: data.tipoId,
-              data: data.data || "",
-              horario: data.horario || "",
-              profissionalId: data.profissionalId,
-              profissionalNome: profMap[data.profissionalId] || "Desconhecido",
-              agendamentoId: docSnap.id,
-              status: data.status || "",
-              origem: "agendamento",
-            });
-          }
-        }
-      }
-
-      // Fila
-      const snapFila = await getDocs(collection(db, "filaEspera"));
-      for (const docSnap of snapFila.docs) {
-        const data = docSnap.data();
-        if (data.alunoId && (data.status === "aguardando" || data.status === "vinculado")) {
-          const profId = data.profissionalId || "";
-          if (!ehDiretor) {
-            if (data.status === "vinculado" && profId && !idsParaFiltrar.includes(profId)) continue;
-            if (data.status === "aguardando" && profId && !idsParaFiltrar.includes(profId)) continue;
-          }
-          const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
-          if (alunoSnap.exists()) {
-            const aluno = alunoSnap.data();
-            lista.push({
-              id: docSnap.id,
-              alunoId: data.alunoId,
-              nome: aluno.nomeCompleto,
-              matricula: aluno.matricula || "",
-              telefone: aluno.telefone || "",
-              servicoNome: servMap[data.tipoId] || data.tipoId || "Serviço",
-              tipoId: data.tipoId,
-              data: "",
-              horario: "",
-              profissionalId: profId,
-              profissionalNome: profId ? profMap[profId] || "Desconhecido" : "Aguardando",
-              agendamentoId: docSnap.id,
-              status: data.status,
-              origem: "fila",
-            });
-          }
-        }
-      }
-
-      let filtrados = lista;
-      if (filtroEstagiarioId) {
-        filtrados = filtrados.filter(p => p.profissionalId === filtroEstagiarioId);
-      }
-      if (filtroServico) {
-        const servicoSelecionado = servicos.find(s => s.id === filtroServico);
-        const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
-        const idServico = filtroServico;
-        filtrados = filtrados.filter(p => {
-          const tipoIdLower = (p.tipoId || "").toLowerCase().trim();
-          return p.tipoId === idServico || tipoIdLower === nomeServico;
+      const ag = await getDocs(collection(db, "agendamentos"));
+      for (const d of ag.docs) {
+        const data = d.data();
+        if (!data.alunoId) continue;
+        if (!ehDiretor && !idsFiltro.includes(data.profissionalId)) continue;
+        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+        if (!alunoSnap.exists()) continue;
+        const aluno = alunoSnap.data();
+        lista.push({
+          id: d.id, alunoId: data.alunoId, nome: aluno.nomeCompleto,
+          matricula: aluno.matricula || "", telefone: aluno.telefone || "",
+          servicoNome: servMap[data.tipoId] || data.tipoId,
+          tipoId: data.tipoId, data: data.data || "", horario: data.horario || "",
+          profissionalId: data.profissionalId,
+          profissionalNome: profMap[data.profissionalId] || "Desconhecido",
+          status: data.status || "", origem: "agendamento",
         });
       }
 
-      filtrados.sort((a, b) => {
+      // Fila
+      const fila = await getDocs(collection(db, "filaEspera"));
+      for (const d of fila.docs) {
+        const data = d.data();
+        if (!data.alunoId) continue;
+        if (data.status !== "aguardando" && data.status !== "vinculado") continue;
+        const profId = data.profissionalId || "";
+        if (!ehDiretor && profId && !idsFiltro.includes(profId)) continue;
+        const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
+        if (!alunoSnap.exists()) continue;
+        const aluno = alunoSnap.data();
+        lista.push({
+          id: d.id, alunoId: data.alunoId, nome: aluno.nomeCompleto,
+          matricula: aluno.matricula || "", telefone: aluno.telefone || "",
+          servicoNome: servMap[data.tipoId] || data.tipoId || "—",
+          tipoId: data.tipoId, data: "", horario: "",
+          profissionalId: profId,
+          profissionalNome: profId ? profMap[profId] || "—" : "Aguardando",
+          status: data.status, origem: "fila",
+        });
+      }
+
+      // Filtros
+      let f = lista;
+      if (filtroProfId) f = f.filter(p => p.profissionalId === filtroProfId);
+      if (filtroServico) {
+        const serv = servicos.find(s => s.id === filtroServico);
+        const nomeServ = serv?.nome?.toLowerCase().trim() || "";
+        f = f.filter(p => {
+          const t = (p.tipoId || "").toLowerCase().trim();
+          return p.tipoId === filtroServico || t === nomeServ;
+        });
+      }
+
+      f.sort((a, b) => {
         if (a.origem === "fila" && b.origem !== "fila") return -1;
         if (a.origem !== "fila" && b.origem === "fila") return 1;
         if (a.data && b.data) {
@@ -200,10 +139,9 @@ export default function ProfissionalPacientes() {
         return 0;
       });
 
-      setPacientes(filtrados);
-      setTodosPacientes(filtrados);
-    } catch (error) {
-      console.error("Erro ao carregar pacientes:", error);
+      setPacientes(f);
+    } catch (e) {
+      console.error(e);
       alert("Erro ao carregar pacientes.");
     } finally {
       setCarregando(false);
@@ -211,186 +149,104 @@ export default function ProfissionalPacientes() {
   };
 
   useEffect(() => {
-    carregarPacientes();
-  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico, profissionais, tipoLogado]);
+    if (profissionais.length > 0) carregarPacientes();
+  }, [profissionalId, supervisionadosIds, filtroProfId, filtroServico, profissionais, tipoLogado]);
 
-  // Filtro de busca
-  const pacientesFiltrados = pacientes.filter(p => {
+  // Filtro de busca local
+  const lista = pacientes.filter(p => {
     if (!busca.trim()) return true;
-    const b = busca.toLowerCase().trim();
-    return (
-      (p.nome || "").toLowerCase().includes(b) ||
-      (p.matricula || "").toLowerCase().includes(b)
-    );
+    const b = busca.toLowerCase();
+    return (p.nome || "").toLowerCase().includes(b) || (p.matricula || "").toLowerCase().includes(b);
   });
 
-  const vincularPaciente = async (paciente: Paciente, profissionalId: string) => {
-    if (!profissionalId) return alert("Selecione um profissional.");
-    const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
-    if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome}?`)) return;
+  // Ação de vincular
+  const vincular = async (paciente: any, profId: string) => {
+    if (!profId) return alert("Escolha um profissional.");
+    const prof = profissionais.find(p => p.id === profId)?.nome || "";
+    if (!confirm(`Vincular ${paciente.nome} a ${prof}?`)) return;
     try {
       await updateDoc(doc(db, "filaEspera", paciente.id), {
-        profissionalId: profissionalId,
-        status: "vinculado"
+        profissionalId: profId,
+        status: "vinculado",
       });
-      alert(`Paciente vinculado a ${profissionalNome}!`);
-      setVinculando(null);
+      alert(`Vinculado a ${prof}!`);
+      setModalVincular(null);
       carregarPacientes();
-    } catch (error: any) {
-      alert(`Erro ao vincular: ${error.message}`);
-    }
+    } catch (e: any) { alert(e.message); }
   };
 
-  const vincularComData = async (paciente: Paciente, profissionalId: string, data: string, horario: string) => {
-    if (!profissionalId) return alert("Selecione um profissional.");
-    if (!data || !horario) return alert("Preencha data e horário.");
-    const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
-    if (!confirm(`Vincular ${paciente.nome} a ${profissionalNome} em ${data} ${horario}?`)) return;
+  const vincularComData = async (paciente: any, profId: string, data: string, horario: string) => {
+    if (!profId || !data || !horario) return alert("Preencha tudo.");
     try {
       await addDoc(collection(db, "agendamentos"), {
-        alunoId: paciente.alunoId,
-        profissionalId: profissionalId,
-        tipoId: paciente.tipoId,
-        data: data,
-        horario: horario,
-        status: "ocupado",
-        tipoPaciente: "social",
-        createdAt: new Date(),
+        alunoId: paciente.alunoId, profissionalId: profId,
+        tipoId: paciente.tipoId, data, horario,
+        status: "ocupado", tipoPaciente: "social", createdAt: new Date(),
       });
-      await updateDoc(doc(db, "filaEspera", paciente.id), {
-        status: "atendido",
-        profissionalId: profissionalId,
-        dataVinculo: new Date()
-      });
-      alert(`Paciente vinculado!`);
-      setModalData(null);
+      await updateDoc(doc(db, "filaEspera", paciente.id), { status: "atendido", profissionalId: profId });
+      alert("Vinculado com data!");
+      setModalVincular(null);
       carregarPacientes();
-    } catch (error: any) {
-      alert(`Erro: ${error.message}`);
-    }
+    } catch (e: any) { alert(e.message); }
   };
 
-  const reagendarPaciente = async (paciente: Paciente, novoProfissionalId: string) => {
-    if (!novoProfissionalId) return alert("Selecione um profissional.");
-    if (novoProfissionalId === paciente.profissionalId) return alert("Já está com este profissional.");
-    const profissionalNome = profissionais.find(p => p.id === novoProfissionalId)?.nome || "profissional";
-    if (!confirm(`Reagendar ${paciente.nome} para ${profissionalNome}?`)) return;
-    try {
-      await updateDoc(doc(db, "agendamentos", paciente.id), { profissionalId: novoProfissionalId });
-      alert(`Reagendado para ${profissionalNome}!`);
-      carregarPacientes();
-    } catch (error: any) {
-      alert(`Erro: ${error.message}`);
-    }
+  const remover = async (p: any) => {
+    if (!confirm(`Remover ${p.nome} da fila?`)) return;
+    await updateDoc(doc(db, "filaEspera", p.id), { status: "cancelado" });
+    carregarPacientes();
   };
 
-  const removerDaFila = async (paciente: Paciente) => {
-    if (!confirm(`Remover ${paciente.nome} da fila?`)) return;
-    try {
-      await updateDoc(doc(db, "filaEspera", paciente.id), { status: "cancelado" });
-      alert("Paciente removido.");
-      carregarPacientes();
-    } catch (error: any) {
-      alert(`Erro: ${error.message}`);
-    }
-  };
-
-  const styleSelect = { padding: 8, border: "1px solid #ccc", borderRadius: 8, background: "#fff" };
-  const styleButton = (bg: string, color = "#fff") => ({
-    padding: "4px 12px",
-    border: "none",
-    borderRadius: 4,
-    background: bg,
-    color,
-    cursor: "pointer",
-    marginRight: 4,
-  });
-
-  const contarPacientesPorEstagiario = (estagiarioId: string) => {
-    return todosPacientes.filter(p => p.profissionalId === estagiarioId).length;
-  };
+  const sBtn = (bg: string, color = "#fff") => ({ padding: "4px 10px", border: "none", borderRadius: 4, background: bg, color, cursor: "pointer", marginRight: 4 });
 
   return (
     <div>
       <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>
-        Pacientes em atendimento
-        {profissionalNome && (
-          <span style={{ fontSize: 14, fontWeight: "normal", color: "#6b7a8f", marginLeft: 8 }}>
-            ({profissionalNome} - {tipoLogado})
-          </span>
-        )}
+        Pacientes em atendimento{" "}
+        <span style={{ fontSize: 14, fontWeight: 400, color: "#6b7a8f" }}>
+          ({profissionalNome} - <strong>{tipoLogado || "..."}</strong>)
+        </span>
       </h3>
 
       {ehDiretor && (
-        <p style={{ color: "#0070f3", fontWeight: 600, fontSize: 14 }}>
-          👑 Você está vendo TODOS os pacientes e profissionais
+        <p style={{ color: "#0070f3", fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
+          👑 Vendo TODOS os profissionais e pacientes
         </p>
       )}
 
-      {/* 🔍 BARRA DE BUSCA */}
-      <div style={{ marginBottom: 16 }}>
-        <input
-          type="text"
-          placeholder="🔍 Buscar por nome ou matrícula..."
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          style={{
-            width: "100%",
-            maxWidth: 400,
-            padding: 10,
-            border: "1px solid #ccc",
-            borderRadius: 8,
-            fontSize: 14,
-          }}
-        />
-      </div>
+      {/* BUSCA */}
+      <input
+        type="text"
+        placeholder="🔍 Buscar por nome ou matrícula..."
+        value={busca}
+        onChange={e => setBusca(e.target.value)}
+        style={{ width: "100%", maxWidth: 400, padding: 10, border: "1px solid #ccc", borderRadius: 8, marginBottom: 12 }}
+      />
 
-      {estagiarios.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              onClick={() => setFiltroEstagiarioId("")}
-              style={{
-                ...styleButton(filtroEstagiarioId === "" ? "#0070f3" : "#e9ecef", filtroEstagiarioId === "" ? "#fff" : "#000"),
-                fontWeight: filtroEstagiarioId === "" ? 600 : 400,
-              }}
-            >
-              Todos ({todosPacientes.length})
-            </button>
-            {estagiarios.map(est => (
-              <button
-                key={est.id}
-                onClick={() => setFiltroEstagiarioId(est.id)}
-                style={{
-                  ...styleButton(filtroEstagiarioId === est.id ? "#0070f3" : "#e9ecef", filtroEstagiarioId === est.id ? "#fff" : "#000"),
-                  fontWeight: filtroEstagiarioId === est.id ? 600 : 400,
-                }}
-              >
-                {est.nome} ({contarPacientesPorEstagiario(est.id)})
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <select value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={styleSelect}>
+      {/* FILTROS */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={filtroProfId} onChange={e => setFiltroProfId(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
+          <option value="">Todos os profissionais</option>
+          {profissionais
+            .filter(p => ehDiretor || p.id === profissionalId || supervisionadosIds.includes(p.id))
+            .map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
+        </select>
+        <select value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
           <option value="">Todos os serviços</option>
           {servicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
         </select>
-        <button onClick={carregarPacientes} style={styleButton("#0070f3")}>Buscar</button>
+        <button onClick={carregarPacientes} style={sBtn("#0070f3")}>Recarregar</button>
       </div>
 
       {carregando && <p>Carregando...</p>}
-      {!carregando && pacientesFiltrados.length === 0 && <p>Nenhum paciente encontrado.</p>}
-      {pacientesFiltrados.length > 0 && (
+      {!carregando && lista.length === 0 && <p>Nenhum paciente encontrado.</p>}
+
+      {lista.length > 0 && (
         <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid #e0e4e8" }}>
+              <tr style={{ background: "#f8f9fa" }}>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Nome</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Matrícula</th>
-                <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Telefone</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Serviço</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Data/Horário</th>
                 <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Profissional</th>
@@ -399,110 +255,29 @@ export default function ProfissionalPacientes() {
               </tr>
             </thead>
             <tbody>
-              {pacientesFiltrados.map(p => (
+              {lista.map(p => (
                 <tr key={p.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
                   <td style={{ padding: 12 }}>{p.nome}</td>
                   <td style={{ padding: 12 }}>{p.matricula}</td>
-                  <td style={{ padding: 12 }}>{p.telefone}</td>
                   <td style={{ padding: 12 }}>{p.servicoNome}</td>
                   <td style={{ padding: 12 }}>
-                    {p.origem === "fila"
-                      ? (p.status === "vinculado" ? "Aguardando horário" : "Aguardando")
-                      : `${p.data} ${p.horario}`}
+                    {p.origem === "fila" ? (p.status === "vinculado" ? "Aguardando horário" : "Aguardando") : `${p.data} ${p.horario}`}
                   </td>
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
+                  <td style={{ padding: 12 }}>{p.status}</td>
                   <td style={{ padding: 12 }}>
-                    {p.status === "realizado" && "Atendido"}
-                    {p.status === "faltaJustificada" && "Falta justificada"}
-                    {p.status === "faltaInjustificada" && "Falta injustificada"}
-                    {p.status === "ocupado" && "Agendado"}
-                    {p.status === "aguardando" && "Aguardando"}
-                    {p.status === "vinculado" && "Aguardando horário"}
-                    {!p.status && "-"}
-                  </td>
-                  <td style={{ padding: 12 }}>
-                    <button
-                      onClick={() => window.open(`/profissional/${codigo}/paciente/${p.alunoId}`, "_blank")}
-                      style={styleButton("#0070f3")}
-                    >
-                      Ficha
-                    </button>
-
                     {p.origem === "fila" && p.status === "aguardando" && (
                       <>
-                        <select
-                          onChange={(e) => {
-                            const profId = e.target.value;
-                            if (profId) setVinculando({ paciente: p, profissionalId: profId });
-                          }}
-                          style={{ ...styleSelect, width: "auto", marginRight: 4 }}
-                        >
-                          <option value="">Vincular a</option>
-                          {profissionais
-                            .filter(prof => ehDiretor || supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
-                            .map(prof => (
-                              <option key={prof.id} value={prof.id}>{prof.nome} ({prof.codigo})</option>
-                            ))}
-                        </select>
-                        {vinculando?.paciente.id === p.id && vinculando?.profissionalId && (
-                          <>
-                            <button
-                              onClick={() => vincularPaciente(p, vinculando.profissionalId)}
-                              style={styleButton("#28a745")}
-                            >
-                              Confirmar
-                            </button>
-                            <button
-                              onClick={() => {
-                                setModalData({
-                                  paciente: p,
-                                  profissionalId: vinculando.profissionalId,
-                                  data: "",
-                                  horario: "",
-                                });
-                                setVinculando(null);
-                              }}
-                              style={styleButton("#17a2b8")}
-                            >
-                              + Data
-                            </button>
-                          </>
-                        )}
+                        <button onClick={() => setModalVincular(p)} style={sBtn("#28a745")}>
+                          Vincular
+                        </button>
+                        <button onClick={() => remover(p)} style={sBtn("#dc3545")}>
+                          Remover
+                        </button>
                       </>
                     )}
-
                     {p.origem === "fila" && p.status === "vinculado" && (
                       <span style={{ color: "#28a745", fontSize: 13 }}>✓ Vinculado</span>
-                    )}
-
-                    {p.origem === "agendamento" && (
-                      <select
-                        onChange={async (e) => {
-                          const novoProfId = e.target.value;
-                          if (novoProfId) {
-                            await reagendarPaciente(p, novoProfId);
-                            e.target.value = "";
-                          }
-                        }}
-                        style={{ ...styleSelect, width: "auto", marginRight: 4 }}
-                      >
-                        <option value="">Reagendar</option>
-                        {profissionais
-                          .filter(prof => ehDiretor || supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
-                          .filter(prof => prof.id !== p.profissionalId)
-                          .map(prof => (
-                            <option key={prof.id} value={prof.id}>{prof.nome} ({prof.codigo})</option>
-                          ))}
-                      </select>
-                    )}
-
-                    {p.origem === "fila" && (
-                      <button
-                        onClick={() => removerDaFila(p)}
-                        style={styleButton("#dc3545")}
-                      >
-                        Remover
-                      </button>
                     )}
                   </td>
                 </tr>
@@ -512,49 +287,81 @@ export default function ProfissionalPacientes() {
         </div>
       )}
 
-      {modalData && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
-        }}>
-          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
-            <h3>Vincular com data e horário</h3>
-            <p><strong>{modalData.paciente.nome}</strong> - {modalData.paciente.servicoNome}</p>
-            <div style={{ marginBottom: 12 }}>
-              <label>Data: </label>
-              <input
-                type="date"
-                value={modalData.data}
-                onChange={e => setModalData({ ...modalData, data: e.target.value })}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-              />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label>Horário: </label>
-              <input
-                type="time"
-                value={modalData.horario}
-                onChange={e => setModalData({ ...modalData, horario: e.target.value })}
-                style={{ width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8 }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => vincularComData(modalData.paciente, modalData.profissionalId, modalData.data, modalData.horario)}
-                style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-              >
-                Vincular
-              </button>
-              <button
-                onClick={() => setModalData(null)}
-                style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* MODAL VINCULAR */}
+      {modalVincular && (
+        <ModalVincular
+          paciente={modalVincular}
+          profissionais={profissionais.filter(prof => ehDiretor || prof.id === profissionalId || supervisionadosIds.includes(prof.id))}
+          onFechar={() => setModalVincular(null)}
+          onVincular={(profId: string) => vincular(modalVincular, profId)}
+          onVincularComData={(profId: string, data: string, horario: string) => vincularComData(modalVincular, profId, data, horario)}
+        />
       )}
+    </div>
+  );
+}
+
+// =========== MODAL ===========
+function ModalVincular({
+  paciente,
+  profissionais,
+  onFechar,
+  onVincular,
+  onVincularComData,
+}: {
+  paciente: any;
+  profissionais: any[];
+  onFechar: () => void;
+  onVincular: (profId: string) => void;
+  onVincularComData: (profId: string, data: string, horario: string) => void;
+}) {
+  const [profId, setProfId] = useState("");
+  const [modo, setModo] = useState<"simples" | "comData">("simples");
+  const [data, setData] = useState("");
+  const [horario, setHorario] = useState("");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
+        <h3 style={{ marginTop: 0 }}>Vincular {paciente.nome}</h3>
+        <p style={{ color: "#6b7a8f" }}>{paciente.servicoNome}</p>
+
+        <label>Profissional:</label>
+        <select value={profId} onChange={e => setProfId(e.target.value)}
+          style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }}>
+          <option value="">Selecione um profissional</option>
+          {profissionais.map((p: any) => (
+            <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) - {p.tipo}</option>
+          ))}
+        </select>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button onClick={() => setModo("simples")} style={{ flex: 1, padding: 8, border: modo === "simples" ? "2px solid #0070f3" : "1px solid #ccc", background: modo === "simples" ? "#e6f0ff" : "#fff", borderRadius: 8, cursor: "pointer" }}>Só vincular</button>
+          <button onClick={() => setModo("comData")} style={{ flex: 1, padding: 8, border: modo === "comData" ? "2px solid #0070f3" : "1px solid #ccc", background: modo === "comData" ? "#e6f0ff" : "#fff", borderRadius: 8, cursor: "pointer" }}>Vincular com data</button>
+        </div>
+
+        {modo === "comData" && (
+          <>
+            <label>Data:</label>
+            <input type="date" value={data} onChange={e => setData(e.target.value)}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }} />
+            <label>Horário:</label>
+            <input type="time" value={horario} onChange={e => setHorario(e.target.value)}
+              style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }} />
+          </>
+        )}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => modo === "simples" ? onVincular(profId) : onVincularComData(profId, data, horario)}
+            style={{ flex: 1, padding: 10, background: "#28a745", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+            Confirmar
+          </button>
+          <button onClick={onFechar} style={{ flex: 1, padding: 10, background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
+            Cancelar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
