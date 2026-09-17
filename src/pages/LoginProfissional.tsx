@@ -1,68 +1,71 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function LoginProfissional() {
+  const navigate = useNavigate();
   const [codigo, setCodigo] = useState("");
   const [senha, setSenha] = useState("");
-  const [etapa, setEtapa] = useState<"codigo" | "senha">("codigo");
-  const [profissionalDoc, setProfissionalDoc] = useState<any>(null);
-  const navigate = useNavigate();
+  const [carregando, setCarregando] = useState(false);
 
-  const verificarCodigo = async () => {
-    if (!codigo.trim()) return alert("Digite o código");
-    const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
-    const snap = await getDocs(q);
-    if (snap.empty) return alert("Código inválido");
-    const docProf = snap.docs[0];
-    const data = docProf.data();
-    if (!data.senha) {
-      // Primeiro acesso: cadastrar senha
-      navigate("/cadastrar-senha", { state: { profissionalId: docProf.id, codigo } });
-    } else {
-      setProfissionalDoc({ id: docProf.id, ...data });
-      setEtapa("senha");
-    }
-  };
+  const entrar = async () => {
+    if (!codigo.trim() || !senha.trim()) return alert("Informe código e senha");
+    setCarregando(true);
+    try {
+      const q = query(collection(db, "profissionais"), where("codigo", "==", codigo.trim()));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        alert("Código não encontrado");
+        return;
+      }
+      const docProf = snap.docs[0];
+      const profData = docProf.data();
 
-  const verificarSenha = async () => {
-    if (profissionalDoc.senha !== senha) {
-      alert("Senha incorreta");
-      return;
+      // Verifica senha
+      if (profData.senha !== senha) {
+        alert("Senha incorreta");
+        return;
+      }
+
+      // ✅ Armazena dados de sessão (incluindo tipo)
+      localStorage.setItem("profissionalAutenticado", "true");
+      localStorage.setItem("profissionalId", docProf.id);
+      localStorage.setItem("profissionalCodigo", profData.codigo || "");
+      localStorage.setItem("profissionalNome", profData.nome || "");
+      localStorage.setItem("profissionalTipo", profData.tipo || "profissional");
+
+      navigate(`/profissional/${profData.codigo}/agenda`);
+    } catch (error: any) {
+      alert(`Erro ao entrar: ${error.message}`);
+    } finally {
+      setCarregando(false);
     }
-    localStorage.setItem("profissionalId", profissionalDoc.id);
-    localStorage.setItem("profissionalCodigo", codigo);
-    localStorage.setItem("profissionalAutenticado", "true");
-    navigate(`/profissional/${codigo}/agenda`);
   };
 
   return (
-    <div style={{ maxWidth: 400, margin: "100px auto", textAlign: "center" }}>
-      <h2>Acesso Profissional</h2>
-      {etapa === "codigo" && (
-        <>
-          <input
-            placeholder="Digite seu código (ex: PRO001)"
-            value={codigo}
-            onChange={e => setCodigo(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 16 }}
-          />
-          <button onClick={verificarCodigo}>Continuar</button>
-        </>
-      )}
-      {etapa === "senha" && (
-        <>
-          <input
-            type="password"
-            placeholder="Digite sua senha"
-            value={senha}
-            onChange={e => setSenha(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 16 }}
-          />
-          <button onClick={verificarSenha}>Entrar</button>
-        </>
-      )}
+    <div style={{ maxWidth: 400, margin: "80px auto", padding: 20 }}>
+      <h1>Acesso Profissional</h1>
+      <input
+        placeholder="Código (ex: PRO001)"
+        value={codigo}
+        onChange={e => setCodigo(e.target.value)}
+        style={{ width: "100%", padding: 8, marginBottom: 8, border: "1px solid #ccc", borderRadius: 8 }}
+      />
+      <input
+        type="password"
+        placeholder="Senha"
+        value={senha}
+        onChange={e => setSenha(e.target.value)}
+        style={{ width: "100%", padding: 8, marginBottom: 16, border: "1px solid #ccc", borderRadius: 8 }}
+      />
+      <button
+        onClick={entrar}
+        disabled={carregando}
+        style={{ width: "100%", padding: "10px 20px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+      >
+        {carregando ? "Entrando..." : "Entrar"}
+      </button>
     </div>
   );
 }

@@ -46,7 +46,7 @@ export default function SaudePacientes() {
   useEffect(() => {
     const carregarAux = async () => {
       const profSnap = await getDocs(collection(db, "profissionais"));
-      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo })));
+      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       setServicos(servSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
     };
@@ -71,10 +71,7 @@ export default function SaudePacientes() {
           if (filtroPeriodo === "hoje" && data.data !== hoje) incluir = false;
           if (filtroPeriodo === "semana" && data.data < semanaAtrasStr) incluir = false;
           if (incluir) {
-            agendamentos.push({
-              id: docSnap.id,
-              ...data,
-            } as Agendamento);
+            agendamentos.push({ id: docSnap.id, ...data } as Agendamento);
           }
         }
       }
@@ -84,7 +81,13 @@ export default function SaudePacientes() {
         filtrados = filtrados.filter(a => a.profissionalId === filtroProfissional);
       }
       if (filtroServico) {
-        filtrados = filtrados.filter(a => a.tipoId === filtroServico);
+        const servicoSelecionado = servicos.find(s => s.id === filtroServico);
+        const nomeServico = servicoSelecionado?.nome?.toLowerCase().trim() || "";
+        const idServico = filtroServico.toLowerCase().trim();
+        filtrados = filtrados.filter(a => {
+          const tipoIdLower = (a.tipoId || "").toLowerCase().trim();
+          return tipoIdLower === idServico || tipoIdLower === nomeServico;
+        });
       }
 
       filtrados.sort((a, b) => {
@@ -126,8 +129,8 @@ export default function SaudePacientes() {
     carregarPacientes();
   }, [filtroProfissional, filtroServico, filtroPeriodo]);
 
-  const abrirModalReagendar = async (paciente: Paciente, profissionalLogado: any) => {
-    setModalReagendar({ paciente, profissionalLogado });
+  const abrirModalReagendar = async (paciente: Paciente) => {
+    setModalReagendar({ paciente });
     setNovoProfissionalId(paciente.profissionalId);
     setNovoHorarioId("");
     setHorariosLivres([]);
@@ -145,10 +148,7 @@ export default function SaudePacientes() {
         if (data.profissionalId === novoProfissionalId && data.data >= hoje &&
             (data.status === "livre" || data.status === "aguardandoVinculo") &&
             !data.alunoId && !data.pacienteInfo) {
-          horarios.push({
-            id: docSnap.id,
-            ...data,
-          } as Agendamento);
+          horarios.push({ id: docSnap.id, ...data } as Agendamento);
         }
       }
       horarios.sort((a, b) => {
@@ -168,9 +168,14 @@ export default function SaudePacientes() {
     if (!novoHorarioId) return alert("Selecione um horário.");
     if (!modalReagendar) return;
 
-    const { paciente, profissionalLogado } = modalReagendar;
-    if (profissionalLogado?.tipo !== "supervisor" && novoProfissionalId !== paciente.profissionalId) {
-      alert("Apenas supervisores podem reagendar para outro profissional.");
+    const { paciente } = modalReagendar;
+
+    // ✅ VERIFICAÇÃO CORRETA: supervisor e diretor SEMPRE podem mudar
+    const tipoLogado = localStorage.getItem("profissionalTipo") || "";
+    const podeMudarProfissional = tipoLogado === "supervisor" || tipoLogado === "diretor";
+
+    if (!podeMudarProfissional && novoProfissionalId !== paciente.profissionalId) {
+      alert("Apenas supervisores/diretores podem reagendar para outro profissional.");
       return;
     }
 
@@ -251,12 +256,8 @@ export default function SaudePacientes() {
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
                   <td style={{ padding: 12 }}>{p.status}</td>
                   <td style={{ padding: 12 }}>
-                    {/* 🔥 APENAS REAGENDAR - SEM BOTÃO FICHA */}
                     <button
-                      onClick={() => {
-                        const profLogado = profissionais.find(prof => prof.id === p.profissionalId) || profissionais[0] || { tipo: "profissional" };
-                        abrirModalReagendar(p, profLogado);
-                      }}
+                      onClick={() => abrirModalReagendar(p)}
                       style={{ ...styleButton("#ffc107"), color: "#000" }}
                     >
                       Reagendar
@@ -269,7 +270,6 @@ export default function SaudePacientes() {
         </div>
       )}
 
-      {/* Modal de reagendamento */}
       {modalReagendar && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -292,7 +292,7 @@ export default function SaudePacientes() {
                 <option value="">Selecione</option>
                 {profissionais.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.nome} {p.tipo === "supervisor" ? "👑" : p.tipo === "estagiario" ? "📚" : ""}
+                    {p.nome} {p.tipo === "supervisor" ? "👑" : p.tipo === "estagiario" ? "📚" : p.tipo === "diretor" ? "🎯" : ""}
                   </option>
                 ))}
               </select>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { collection, getDocs, doc, updateDoc, getDoc, query, where, addDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, getDoc, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 interface Agendamento {
@@ -14,8 +14,11 @@ interface Agendamento {
   alunoId?: string;
   pacienteInfo?: { nome: string; telefone: string };
   nomeAluno?: string;
+  telefoneAluno?: string;
+  idadeAluno?: number;
   groupId?: string;
   nomeProfissional?: string;
+  recorrenteTipo?: string;
 }
 
 interface Profissional {
@@ -35,6 +38,17 @@ function getLocalDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+function calcularIdade(dataNascimento: string): number | null {
+  if (!dataNascimento) return null;
+  const nasc = new Date(dataNascimento);
+  if (isNaN(nasc.getTime())) return null;
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
+  return idade;
+}
+
 export default function ProfissionalAgenda() {
   const { codigo } = useParams();
   const [profissional, setProfissional] = useState<Profissional | null>(null);
@@ -43,8 +57,14 @@ export default function ProfissionalAgenda() {
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [supervisionadosIds, setSupervisionadosIds] = useState<string[]>([]);
+  const [todosProfissionais, setTodosProfissionais] = useState<any[]>([]);
+  const [modalTrocarProf, setModalTrocarProf] = useState<Agendamento | null>(null);
+  const [novoProfId, setNovoProfId] = useState("");
 
-  // Verificar autenticação
+  const tipoLogado = localStorage.getItem("profissionalTipo") || "";
+  const podeMudarProfissional = tipoLogado === "supervisor" || tipoLogado === "diretor";
+  const ehDiretor = tipoLogado === "diretor";
+
   useEffect(() => {
     if (localStorage.getItem("profissionalAutenticado") !== "true") {
       alert("Sessão expirada. Faça login novamente.");
@@ -52,7 +72,6 @@ export default function ProfissionalAgenda() {
     }
   }, []);
 
-  // Carregar profissional e supervisionados (se for supervisor)
   useEffect(() => {
     const carregarProfissional = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
@@ -63,36 +82,38 @@ export default function ProfissionalAgenda() {
         setProfissional(profData);
         setProfissionalId(docProf.id);
 
-        // Se for supervisor, buscar IDs dos estagiários supervisionados
         if (profData.tipo === "supervisor") {
-          const estagiariosQuery = query(
-            collection(db, "profissionais"),
-            where("supervisorId", "==", docProf.id)
-          );
-          const estSnap = await getDocs(estagiariosQuery);
-          const ids = estSnap.docs.map(d => d.id);
-          setSupervisionadosIds(ids);
+          const estQuery = query(collection(db, "profissionais"), where("supervisorId", "==", docProf.id));
+          const estSnap = await getDocs(estQuery);
+          setSupervisionadosIds(estSnap.docs.map(d => d.id));
+        } else if (profData.tipo === "diretor") {
+          const todosSnap = await getDocs(collection(db, "profissionais"));
+          setSupervisionadosIds(todosSnap.docs.map(d => d.id));
         } else {
           setSupervisionadosIds([]);
         }
       }
     };
     carregarProfissional();
+
+    const carregarTodosProf = async () => {
+      const snap = await getDocs(collection(db, "profissionais"));
+      setTodosProfissionais(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
+    };
+    carregarTodosProf();
   }, [codigo]);
 
-  // Carregar agenda
   const carregarAgenda = async () => {
     if (!profissionalId) return;
     setCarregando(true);
     try {
-      // Lista de profissionais para filtrar: o próprio + supervisionados (se houver)
       let idsParaFiltrar = [profissionalId];
       if (supervisionadosIds.length > 0) {
         idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
       }
 
       const snap = await getDocs(collection(db, "agendamentos"));
-      let horarios = snap.docs
+      const horarios: Agendamento[] = snap.docs
         .filter(d => {
           const data = d.data();
           return idsParaFiltrar.includes(data.profissionalId) && data.data === dataSelecionada;
@@ -110,28 +131,32 @@ export default function ProfissionalAgenda() {
             alunoId: data.alunoId,
             pacienteInfo: data.pacienteInfo,
             groupId: data.groupId,
+            recorrenteTipo: data.recorrenteTipo,
             nomeProfissional: "",
           } as Agendamento;
         });
 
-      // Buscar nomes dos profissionais e dos alunos
-      const todosProfissionais = await getDocs(collection(db, "profissionais"));
+      const todosProfSnap = await getDocs(collection(db, "profissionais"));
       const profMap: Record<string, string> = {};
-      todosProfissionais.docs.forEach(d => {
-        profMap[d.id] = d.data().nome;
-      });
+      todosProfSnap.docs.forEach(d => { profMap[d.id] = d.data().nome; });
+
       for (const h of horarios) {
         h.nomeProfissional = profMap[h.profissionalId] || "Desconhecido";
         if (h.alunoId) {
           const alunoSnap = await getDoc(doc(db, "alunos", h.alunoId));
-          if (alunoSnap.exists()) h.nomeAluno = alunoSnap.data().nomeCompleto;
+          if (alunoSnap.exists()) {
+            const aluno = alunoSnap.data();
+            h.nomeAluno = aluno.nomeCompleto;
+            h.telefoneAluno = aluno.telefone || "";
+            h.idadeAluno = calcularIdade(aluno.nascimento) ?? undefined;
+          }
         }
       }
       horarios.sort((a, b) => a.horario.localeCompare(b.horario));
       setAgenda(horarios);
     } catch (error) {
       console.error("Erro ao carregar agenda:", error);
-      alert("Erro ao carregar agenda. Tente recarregar a página.");
+      alert("Erro ao carregar agenda.");
     } finally {
       setCarregando(false);
     }
@@ -142,14 +167,7 @@ export default function ProfissionalAgenda() {
   }, [profissionalId, dataSelecionada, supervisionadosIds]);
 
   const registrarPresenca = async (ag: Agendamento, tipo: string) => {
-    if (localStorage.getItem("profissionalAutenticado") !== "true") {
-      alert("Sessão expirada. Faça login novamente.");
-      window.location.href = "/acesso-profissional";
-      return;
-    }
-
     if (!ag.alunoId) return alert("Este horário não tem paciente vinculado.");
-
     let novoStatus = "";
     if (tipo === "presente") novoStatus = "realizado";
     else if (tipo === "faltaJustificada") novoStatus = "faltaJustificada";
@@ -158,63 +176,47 @@ export default function ProfissionalAgenda() {
     try {
       await updateDoc(doc(db, "agendamentos", ag.id), { status: novoStatus });
       alert(`Registrado como ${tipo === "presente" ? "Compareceu" : tipo === "faltaJustificada" ? "Falta justificada" : "Falta injustificada"}`);
-
-      if (tipo === "faltaInjustificada") {
-        const faltasQuery = query(
-          collection(db, "agendamentos"),
-          where("alunoId", "==", ag.alunoId),
-          where("profissionalId", "==", ag.profissionalId),
-          where("tipoId", "==", ag.tipoId),
-          where("status", "==", "faltaInjustificada")
-        );
-        const faltasSnap = await getDocs(faltasQuery);
-        const faltasCount = faltasSnap.size;
-        if (faltasCount >= 2) {
-          if (ag.groupId) {
-            const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", ag.groupId));
-            const groupSnap = await getDocs(groupQuery);
-            for (const docHor of groupSnap.docs) {
-              await updateDoc(docHor.ref, { alunoId: null, status: "livre" });
-            }
-          } else {
-            await updateDoc(doc(db, "agendamentos", ag.id), { alunoId: null, status: "livre" });
-          }
-          const filaQuery = query(
-            collection(db, "filaEspera"),
-            where("alunoId", "==", ag.alunoId),
-            where("tipoId", "==", ag.tipoId),
-            where("status", "==", "aguardando")
-          );
-          const filaSnap = await getDocs(filaQuery);
-          if (filaSnap.empty) {
-            await addDoc(collection(db, "filaEspera"), {
-              alunoId: ag.alunoId,
-              tipoId: ag.tipoId,
-              dataSolicitacao: new Date(),
-              status: "aguardando",
-              modalidade: "presencial",
-            });
-          }
-          let nomePaciente = "Paciente";
-          if (ag.alunoId) {
-            const alunoSnap = await getDoc(doc(db, "alunos", ag.alunoId));
-            if (alunoSnap.exists()) nomePaciente = alunoSnap.data().nomeCompleto;
-          }
-          await addDoc(collection(db, "notificacoes"), {
-            mensagem: `Paciente ${nomePaciente} retornou à fila por 2 faltas injustificadas. Horário disponível: ${ag.data} ${ag.horario}.`,
-            lida: false,
-            createdAt: new Date(),
-            tipo: "falta",
-            alunoId: ag.alunoId,
-          });
-          alert("Paciente removido do horário (2 faltas injustificadas) e voltou à fila. Notificação enviada.");
-        }
-      }
       await carregarAgenda();
     } catch (error: any) {
-      console.error("Erro ao registrar presença:", error);
       alert(`Erro: ${error.message}`);
     }
+  };
+
+  const abrirTrocarProfissional = (ag: Agendamento) => {
+    setModalTrocarProf(ag);
+    setNovoProfId(ag.profissionalId);
+  };
+
+  const confirmarTrocarProfissional = async () => {
+    if (!modalTrocarProf) return;
+    if (novoProfId === modalTrocarProf.profissionalId) return alert("Já está com este profissional.");
+    const novoNome = todosProfissionais.find(p => p.id === novoProfId)?.nome || "profissional";
+    if (!confirm(`Trocar o profissional deste horário para ${novoNome}?`)) return;
+
+    try {
+      if (modalTrocarProf.groupId) {
+        const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", modalTrocarProf.groupId));
+        const groupSnap = await getDocs(groupQuery);
+        for (const docHor of groupSnap.docs) {
+          await updateDoc(docHor.ref, { profissionalId: novoProfId });
+        }
+        alert(`Profissional alterado em ${groupSnap.size} horários do grupo.`);
+      } else {
+        await updateDoc(doc(db, "agendamentos", modalTrocarProf.id), { profissionalId: novoProfId });
+        alert("Profissional alterado.");
+      }
+      setModalTrocarProf(null);
+      carregarAgenda();
+    } catch (error: any) {
+      alert(`Erro: ${error.message}`);
+    }
+  };
+
+  const enviarWhatsApp = (ag: Agendamento, mensagem: string) => {
+    if (!ag.telefoneAluno) return alert("Paciente sem telefone cadastrado.");
+    const fone = ag.telefoneAluno.replace(/\D/g, "");
+    const url = `https://wa.me/55${fone}?text=${encodeURIComponent(mensagem)}`;
+    window.open(url, "_blank");
   };
 
   return (
@@ -222,128 +224,119 @@ export default function ProfissionalAgenda() {
       <div style={{ marginBottom: 20 }}>
         <h2>Agenda do Profissional</h2>
         <p>
-          <strong>Código:</strong> {codigo} | <strong>Nome:</strong>{" "}
-          {profissional?.nome || "Carregando..."}
+          <strong>Código:</strong> {codigo} | <strong>Nome:</strong> {profissional?.nome || "Carregando..."}
+          {tipoLogado && <span style={{ marginLeft: 8, color: "#6b7a8f" }}>({tipoLogado})</span>}
         </p>
         {supervisionadosIds.length > 0 && (
-          <p>
-            <strong>Supervisionando:</strong> {supervisionadosIds.length} estagiário(s)
-          </p>
+          <p><strong>Vendo:</strong> {supervisionadosIds.length} profissional(is)</p>
         )}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <label>Data: </label>
-          <input
-            type="date"
-            value={dataSelecionada}
-            onChange={(e) => setDataSelecionada(e.target.value)}
-            style={{ padding: 4 }}
-          />
-          <button onClick={carregarAgenda} style={{ padding: "4px 8px" }}>
-            Recarregar
-          </button>
+          <input type="date" value={dataSelecionada} onChange={e => setDataSelecionada(e.target.value)} style={{ padding: 4 }} />
+          <button onClick={carregarAgenda} style={{ padding: "4px 8px" }}>Recarregar</button>
         </div>
       </div>
-      {carregando && <p>Carregando horários...</p>}
+
+      {carregando && <p>Carregando...</p>}
       {!carregando && (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "500px" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
             <thead>
-              <tr>
+              <tr style={{ background: "#f8f9fa" }}>
                 <th style={{ textAlign: "left", padding: 8 }}>Horário</th>
                 <th style={{ textAlign: "left", padding: 8 }}>Profissional</th>
                 <th style={{ textAlign: "left", padding: 8 }}>Paciente</th>
+                <th style={{ textAlign: "left", padding: 8 }}>Telefone</th>
+                <th style={{ textAlign: "left", padding: 8 }}>Idade</th>
                 <th style={{ textAlign: "left", padding: 8 }}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {agenda.map((ag) => (
-                <tr key={ag.id}>
+              {agenda.map(ag => (
+                <tr key={ag.id} style={{ borderBottom: "1px solid #e0e4e8" }}>
                   <td style={{ padding: 8 }}>{ag.horario}</td>
                   <td style={{ padding: 8 }}>{ag.nomeProfissional}</td>
                   <td style={{ padding: 8 }}>
-                    {ag.nomeAluno ||
-                      (ag.tipoPaciente === "particular"
-                        ? ag.pacienteInfo?.nome
-                        : "Livre")}
+                    {ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}
                   </td>
+                  <td style={{ padding: 8 }}>{ag.telefoneAluno || "-"}</td>
+                  <td style={{ padding: 8 }}>{ag.idadeAluno !== undefined ? `${ag.idadeAluno} anos` : "-"}</td>
                   <td style={{ padding: 8 }}>
-                    {ag.alunoId &&
-                      (ag.status === "agendado" || ag.status === "ocupado") && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          <button
-                            onClick={() => registrarPresenca(ag, "presente")}
-                            style={{
-                              background: "#28a745",
-                              color: "#fff",
-                              border: "none",
-                              padding: "6px 10px",
-                              borderRadius: 4,
-                            }}
-                          >
-                            Compareceu
-                          </button>
-                          <button
-                            onClick={() => registrarPresenca(ag, "faltaJustificada")}
-                            style={{
-                              background: "#ffc107",
-                              color: "#000",
-                              border: "none",
-                              padding: "6px 10px",
-                              borderRadius: 4,
-                            }}
-                          >
-                            Falta justificada
-                          </button>
-                          <button
-                            onClick={() => registrarPresenca(ag, "faltaInjustificada")}
-                            style={{
-                              background: "#dc3545",
-                              color: "#fff",
-                              border: "none",
-                              padding: "6px 10px",
-                              borderRadius: 4,
-                            }}
-                          >
-                            Falta injustificada
-                          </button>
-                        </div>
-                      )}
-                    {ag.status === "realizado" && "Atendido"}
-                    {ag.status === "faltaJustificada" && "Falta justificada"}
-                    {ag.status === "faltaInjustificada" && "Falta injustificada"}
-                    {!ag.alunoId && "Livre"}
+                    {ag.alunoId && (ag.status === "agendado" || ag.status === "ocupado") && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        <button onClick={() => registrarPresenca(ag, "presente")} style={{ background: "#28a745", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>Compareceu</button>
+                        <button onClick={() => registrarPresenca(ag, "faltaJustificada")} style={{ background: "#ffc107", color: "#000", border: "none", padding: "6px 10px", borderRadius: 4 }}>F. Just.</button>
+                        <button onClick={() => registrarPresenca(ag, "faltaInjustificada")} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}>F. Injust.</button>
+                      </div>
+                    )}
+                    {ag.status === "realizado" && <span style={{ color: "#28a745" }}>Atendido</span>}
+                    {ag.status === "faltaJustificada" && <span style={{ color: "#ffc107" }}>Falta justificada</span>}
+                    {ag.status === "faltaInjustificada" && <span style={{ color: "#dc3545" }}>Falta injustificada</span>}
+
                     {ag.alunoId && (
-                      <button
-                        onClick={() =>
-                          window.open(
-                            `/profissional/${codigo}/paciente/${ag.alunoId}`,
-                            "_blank"
-                          )
-                        }
-                        style={{
-                          marginLeft: 8,
-                          background: "#0070f3",
-                          color: "#fff",
-                          border: "none",
-                          padding: "6px 10px",
-                          borderRadius: 4,
-                        }}
-                      >
-                        Ficha
-                      </button>
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                        {/* ✅ DIRETOR NÃO VÊ FICHA */}
+                        {!ehDiretor && (
+                          <button
+                            onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")}
+                            style={{ background: "#0070f3", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
+                          >
+                            Ficha
+                          </button>
+                        )}
+                        {ag.telefoneAluno && (
+                          <>
+                            <button
+                              onClick={() => enviarWhatsApp(ag, `Olá ${ag.nomeAluno}, você tem atendimento marcado hoje às ${ag.horario}. Podemos confirmar?`)}
+                              style={{ background: "#25D366", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              onClick={() => enviarWhatsApp(ag, `Olá ${ag.nomeAluno}, sentimos sua falta hoje. Podemos reagendar?`)}
+                              style={{ background: "#25D366", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
+                            >
+                              Falta
+                            </button>
+                          </>
+                        )}
+                        {podeMudarProfissional && (
+                          <button
+                            onClick={() => abrirTrocarProfissional(ag)}
+                            style={{ background: "#6f42c1", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
+                          >
+                            Trocar Prof.
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
               ))}
               {agenda.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ padding: 8, textAlign: "center" }}>
-                    Nenhum horário para esta data.
-                  </td>
-                </tr>
+                <tr><td colSpan={6} style={{ padding: 8, textAlign: "center" }}>Nenhum horário para esta data.</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {modalTrocarProf && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
+            <h3>Trocar Profissional</h3>
+            <p><strong>{modalTrocarProf.nomeAluno}</strong> - {modalTrocarProf.horario}</p>
+            <select value={novoProfId} onChange={e => setNovoProfId(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #ccc", marginBottom: 12 }}>
+              <option value="">Selecione</option>
+              {todosProfissionais.map(p => (
+                <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) {p.tipo === "supervisor" ? "👑" : p.tipo === "diretor" ? "🎯" : p.tipo === "estagiario" ? "📚" : ""}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={confirmarTrocarProfissional} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Confirmar</button>
+              <button onClick={() => setModalTrocarProf(null)} style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Cancelar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -37,14 +37,12 @@ export default function AdminUnificacao() {
 
         for (const sec of secundarios) {
           adicionarLog(`  Unificando ${sec.id} (${sec.nomeCompleto})`);
-          // Presenças
           const presencasSnap = await getDocs(collection(db, "presencas"));
           for (const pDoc of presencasSnap.docs) {
             if (pDoc.data().alunoId === sec.id) {
               await updateDoc(pDoc.ref, { alunoId: principal.id });
             }
           }
-          // Turmas
           const turmasSnap = await getDocs(collection(db, "turmas"));
           for (const tDoc of turmasSnap.docs) {
             const data = tDoc.data();
@@ -54,7 +52,6 @@ export default function AdminUnificacao() {
               await updateDoc(tDoc.ref, { alunos: newAlunos });
             }
           }
-          // Fila
           const filaSnap = await getDocs(collection(db, "filaEspera"));
           for (const fDoc of filaSnap.docs) {
             if (fDoc.data().alunoId === sec.id) {
@@ -127,14 +124,13 @@ export default function AdminUnificacao() {
     }
   };
 
-  // 4. PADRONIZAR TUDO (FORÇADO)
+  // 4. PADRONIZAR TUDO
   const handlePadronizarTudo = async () => {
     if (!confirm("Isso vai FORÇAR a correção de todos os tipoId textuais para IDs. Continuar?")) return;
     setCarregando(true);
     setLogs([]);
 
     try {
-      // 1. Mapear todos os serviços (nome -> ID)
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       const mapa: Record<string, string> = {};
       servSnap.forEach(d => {
@@ -145,7 +141,7 @@ export default function AdminUnificacao() {
 
       let total = 0;
 
-      // 2. Corrigir FILA DE ESPERA (FORÇADAMENTE)
+      // Fila
       const filaSnap = await getDocs(collection(db, "filaEspera"));
       let countFila = 0;
       for (const docSnap of filaSnap.docs) {
@@ -165,7 +161,7 @@ export default function AdminUnificacao() {
       adicionarLog(`🎉 Fila: ${countFila} corrigidos.`);
       total += countFila;
 
-      // 3. Corrigir AGENDAMENTOS
+      // Agendamentos
       const agendSnap = await getDocs(collection(db, "agendamentos"));
       let countAgend = 0;
       for (const docSnap of agendSnap.docs) {
@@ -183,7 +179,7 @@ export default function AdminUnificacao() {
       adicionarLog(`🎉 Agendamentos: ${countAgend} corrigidos.`);
       total += countAgend;
 
-      // 4. Corrigir PROFISSIONAIS (especialidade)
+      // Profissionais
       const profSnap = await getDocs(collection(db, "profissionais"));
       let countProf = 0;
       for (const docSnap of profSnap.docs) {
@@ -201,7 +197,7 @@ export default function AdminUnificacao() {
       adicionarLog(`🎉 Profissionais: ${countProf} corrigidos.`);
       total += countProf;
 
-      // 5. Corrigir ALUNOS (servicosAtivos)
+      // Alunos
       const alunosSnap = await getDocs(collection(db, "alunos"));
       let countAlunos = 0;
       for (const docSnap of alunosSnap.docs) {
@@ -238,6 +234,58 @@ export default function AdminUnificacao() {
     }
   };
 
+  // 🔥 5. CORRIGIR GRUPOS (aplicar aluno em TODAS as semanas do grupo recorrente)
+  const handleCorrigirGrupos = async () => {
+    if (!confirm("Isso vai verificar todos os grupos recorrentes e aplicar o aluno em todas as semanas. Continuar?")) return;
+    setCarregando(true);
+    setLogs([]);
+
+    try {
+      const snap = await getDocs(collection(db, "agendamentos"));
+      const todos = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+      // Agrupar por groupId
+      const grupos = new Map<string, any[]>();
+      for (const ag of todos) {
+        if (!ag.groupId) continue;
+        if (!grupos.has(ag.groupId)) grupos.set(ag.groupId, []);
+        grupos.get(ag.groupId)!.push(ag);
+      }
+
+      adicionarLog(`📌 Total de grupos encontrados: ${grupos.size}`);
+      let totalCorrigidos = 0;
+      let gruposCorrigidos = 0;
+
+      for (const [groupId, registros] of grupos.entries()) {
+        const comAluno = registros.filter((r: any) => r.alunoId);
+        if (comAluno.length === 0) continue;
+        if (comAluno.length === registros.length) continue;
+
+        const { alunoId, status } = comAluno[0];
+        const novoStatus = (status === "livre" || status === "aguardandoVinculo") ? "ocupado" : status;
+
+        adicionarLog(`🔍 Grupo ${groupId}: ${comAluno.length}/${registros.length} com aluno. Corrigindo...`);
+        gruposCorrigidos++;
+
+        for (const reg of registros) {
+          if (!reg.alunoId) {
+            await updateDoc(doc(db, "agendamentos", reg.id), {
+              alunoId,
+              status: novoStatus,
+            });
+            totalCorrigidos++;
+          }
+        }
+      }
+
+      adicionarLog(`🎉 ${gruposCorrigidos} grupos processados. ${totalCorrigidos} agendamentos corrigidos.`);
+    } catch (error: any) {
+      adicionarLog(`❌ Erro: ${error.message}`);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>
       <h1 style={{ color: "#1a2a4f" }}>Administração – Correção e Unificação</h1>
@@ -254,6 +302,9 @@ export default function AdminUnificacao() {
         </button>
         <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
           {carregando ? "Padronizando..." : "🔧 PADRONIZAR TUDO"}
+        </button>
+        <button onClick={handleCorrigirGrupos} disabled={carregando} style={{ padding: "10px 20px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
+          {carregando ? "Corrigindo..." : "🔗 CORRIGIR GRUPOS"}
         </button>
       </div>
       <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 400, overflow: "auto", border: "1px solid #dee2e6" }}>
