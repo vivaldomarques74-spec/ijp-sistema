@@ -24,6 +24,7 @@ interface Estagiario {
   id: string;
   nome: string;
   codigo: string;
+  tipo?: string;
 }
 
 export default function ProfissionalPacientes() {
@@ -39,6 +40,8 @@ export default function ProfissionalPacientes() {
   const [filtroEstagiarioId, setFiltroEstagiarioId] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
+  const [tipoLogado, setTipoLogado] = useState("");
+  const [busca, setBusca] = useState("");
 
   const [vinculando, setVinculando] = useState<{ paciente: Paciente; profissionalId: string } | null>(null);
   const [modalData, setModalData] = useState<{
@@ -48,6 +51,9 @@ export default function ProfissionalPacientes() {
     horario: string;
   } | null>(null);
 
+  const ehDiretor = tipoLogado === "diretor";
+
+  // 1. Carrega dados do profissional logado
   useEffect(() => {
     const carregarProfissional = async () => {
       const q = query(collection(db, "profissionais"), where("codigo", "==", codigo));
@@ -57,35 +63,49 @@ export default function ProfissionalPacientes() {
         const profData = { id: docProf.id, ...docProf.data() } as any;
         setProfissionalId(docProf.id);
         setProfissionalNome(profData.nome || "");
+        setTipoLogado(profData.tipo || "");
+
         if (profData.tipo === "supervisor") {
           const estQuery = query(collection(db, "profissionais"), where("supervisorId", "==", docProf.id));
           const estSnap = await getDocs(estQuery);
           const ids = estSnap.docs.map(d => d.id);
           setSupervisionadosIds(ids);
-          setEstagiarios(estSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, codigo: d.data().codigo })));
+          setEstagiarios(estSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, codigo: d.data().codigo, tipo: d.data().tipo })));
+        } else if (profData.tipo === "diretor") {
+          const todosSnap = await getDocs(collection(db, "profissionais"));
+          const todos = todosSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, codigo: d.data().codigo, tipo: d.data().tipo }));
+          setSupervisionadosIds(todos.map(p => p.id));
+          setEstagiarios(todos);
         }
       }
     };
     carregarProfissional();
   }, [codigo]);
 
+  // 2. Carrega lista completa de profissionais e serviços
   useEffect(() => {
     const carregarAux = async () => {
       const profSnap = await getDocs(collection(db, "profissionais"));
-      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo })));
+      setProfissionais(profSnap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       setServicos(servSnap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
     };
     carregarAux();
   }, []);
 
+  // 3. Carrega pacientes
   const carregarPacientes = async () => {
     if (!profissionalId) return;
     setCarregando(true);
     try {
-      let idsParaFiltrar = [profissionalId];
-      if (supervisionadosIds.length > 0) {
-        idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
+      let idsParaFiltrar: string[] = [];
+      if (ehDiretor) {
+        idsParaFiltrar = profissionais.map(p => p.id);
+      } else {
+        idsParaFiltrar = [profissionalId];
+        if (supervisionadosIds.length > 0) {
+          idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
+        }
       }
 
       const profMap: Record<string, string> = {};
@@ -99,7 +119,7 @@ export default function ProfissionalPacientes() {
       const snapAgend = await getDocs(collection(db, "agendamentos"));
       for (const docSnap of snapAgend.docs) {
         const data = docSnap.data();
-        if (data.alunoId && idsParaFiltrar.includes(data.profissionalId)) {
+        if (data.alunoId && (ehDiretor || idsParaFiltrar.includes(data.profissionalId))) {
           const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
           if (alunoSnap.exists()) {
             const aluno = alunoSnap.data();
@@ -123,14 +143,16 @@ export default function ProfissionalPacientes() {
         }
       }
 
-      // Fila de espera (status aguardando ou vinculado)
+      // Fila
       const snapFila = await getDocs(collection(db, "filaEspera"));
       for (const docSnap of snapFila.docs) {
         const data = docSnap.data();
         if (data.alunoId && (data.status === "aguardando" || data.status === "vinculado")) {
           const profId = data.profissionalId || "";
-          if (data.status === "vinculado" && profId && !idsParaFiltrar.includes(profId)) continue;
-          if (data.status === "aguardando" && profId && !idsParaFiltrar.includes(profId)) continue;
+          if (!ehDiretor) {
+            if (data.status === "vinculado" && profId && !idsParaFiltrar.includes(profId)) continue;
+            if (data.status === "aguardando" && profId && !idsParaFiltrar.includes(profId)) continue;
+          }
           const alunoSnap = await getDoc(doc(db, "alunos", data.alunoId));
           if (alunoSnap.exists()) {
             const aluno = alunoSnap.data();
@@ -154,7 +176,6 @@ export default function ProfissionalPacientes() {
         }
       }
 
-      // Aplicar filtros
       let filtrados = lista;
       if (filtroEstagiarioId) {
         filtrados = filtrados.filter(p => p.profissionalId === filtroEstagiarioId);
@@ -191,9 +212,18 @@ export default function ProfissionalPacientes() {
 
   useEffect(() => {
     carregarPacientes();
-  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico]);
+  }, [profissionalId, supervisionadosIds, filtroEstagiarioId, filtroServico, profissionais, tipoLogado]);
 
-  // VINCULAR PACIENTE (sem horário)
+  // Filtro de busca
+  const pacientesFiltrados = pacientes.filter(p => {
+    if (!busca.trim()) return true;
+    const b = busca.toLowerCase().trim();
+    return (
+      (p.nome || "").toLowerCase().includes(b) ||
+      (p.matricula || "").toLowerCase().includes(b)
+    );
+  });
+
   const vincularPaciente = async (paciente: Paciente, profissionalId: string) => {
     if (!profissionalId) return alert("Selecione um profissional.");
     const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
@@ -203,7 +233,7 @@ export default function ProfissionalPacientes() {
         profissionalId: profissionalId,
         status: "vinculado"
       });
-      alert(`Paciente vinculado a ${profissionalNome}! Ele saiu da fila e aguarda agendamento de horário.`);
+      alert(`Paciente vinculado a ${profissionalNome}!`);
       setVinculando(null);
       carregarPacientes();
     } catch (error: any) {
@@ -211,12 +241,11 @@ export default function ProfissionalPacientes() {
     }
   };
 
-  // VINCULAR COM DATA E HORÁRIO
   const vincularComData = async (paciente: Paciente, profissionalId: string, data: string, horario: string) => {
     if (!profissionalId) return alert("Selecione um profissional.");
     if (!data || !horario) return alert("Preencha data e horário.");
     const profissionalNome = profissionais.find(p => p.id === profissionalId)?.nome || "profissional";
-    if (!confirm(`Vincular ${paciente.nome} ao profissional ${profissionalNome} na data ${data} ${horario}?`)) return;
+    if (!confirm(`Vincular ${paciente.nome} a ${profissionalNome} em ${data} ${horario}?`)) return;
     try {
       await addDoc(collection(db, "agendamentos"), {
         alunoId: paciente.alunoId,
@@ -233,38 +262,36 @@ export default function ProfissionalPacientes() {
         profissionalId: profissionalId,
         dataVinculo: new Date()
       });
-      alert(`Paciente vinculado com agendamento em ${data} ${horario}!`);
+      alert(`Paciente vinculado!`);
       setModalData(null);
       carregarPacientes();
     } catch (error: any) {
-      alert(`Erro ao vincular: ${error.message}`);
+      alert(`Erro: ${error.message}`);
     }
   };
 
-  // REAGENDAR (trocar profissional)
   const reagendarPaciente = async (paciente: Paciente, novoProfissionalId: string) => {
     if (!novoProfissionalId) return alert("Selecione um profissional.");
-    if (novoProfissionalId === paciente.profissionalId) return alert("O paciente já está com este profissional.");
+    if (novoProfissionalId === paciente.profissionalId) return alert("Já está com este profissional.");
     const profissionalNome = profissionais.find(p => p.id === novoProfissionalId)?.nome || "profissional";
     if (!confirm(`Reagendar ${paciente.nome} para ${profissionalNome}?`)) return;
     try {
       await updateDoc(doc(db, "agendamentos", paciente.id), { profissionalId: novoProfissionalId });
-      alert(`Paciente reagendado para ${profissionalNome}!`);
+      alert(`Reagendado para ${profissionalNome}!`);
       carregarPacientes();
     } catch (error: any) {
-      alert(`Erro ao reagendar: ${error.message}`);
+      alert(`Erro: ${error.message}`);
     }
   };
 
-  // REMOVER DA FILA
   const removerDaFila = async (paciente: Paciente) => {
     if (!confirm(`Remover ${paciente.nome} da fila?`)) return;
     try {
       await updateDoc(doc(db, "filaEspera", paciente.id), { status: "cancelado" });
-      alert("Paciente removido da fila.");
+      alert("Paciente removido.");
       carregarPacientes();
     } catch (error: any) {
-      alert(`Erro ao remover: ${error.message}`);
+      alert(`Erro: ${error.message}`);
     }
   };
 
@@ -287,8 +314,36 @@ export default function ProfissionalPacientes() {
     <div>
       <h3 style={{ fontSize: 16, margin: "0 0 12px" }}>
         Pacientes em atendimento
-        {profissionalNome && <span style={{ fontSize: 14, fontWeight: "normal", color: "#6b7a8f", marginLeft: 8 }}>({profissionalNome})</span>}
+        {profissionalNome && (
+          <span style={{ fontSize: 14, fontWeight: "normal", color: "#6b7a8f", marginLeft: 8 }}>
+            ({profissionalNome} - {tipoLogado})
+          </span>
+        )}
       </h3>
+
+      {ehDiretor && (
+        <p style={{ color: "#0070f3", fontWeight: 600, fontSize: 14 }}>
+          👑 Você está vendo TODOS os pacientes e profissionais
+        </p>
+      )}
+
+      {/* 🔍 BARRA DE BUSCA */}
+      <div style={{ marginBottom: 16 }}>
+        <input
+          type="text"
+          placeholder="🔍 Buscar por nome ou matrícula..."
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          style={{
+            width: "100%",
+            maxWidth: 400,
+            padding: 10,
+            border: "1px solid #ccc",
+            borderRadius: 8,
+            fontSize: 14,
+          }}
+        />
+      </div>
 
       {estagiarios.length > 0 && (
         <div style={{ marginBottom: 16 }}>
@@ -327,8 +382,8 @@ export default function ProfissionalPacientes() {
       </div>
 
       {carregando && <p>Carregando...</p>}
-      {!carregando && pacientes.length === 0 && <p>Nenhum paciente encontrado.</p>}
-      {pacientes.length > 0 && (
+      {!carregando && pacientesFiltrados.length === 0 && <p>Nenhum paciente encontrado.</p>}
+      {pacientesFiltrados.length > 0 && (
         <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -344,15 +399,15 @@ export default function ProfissionalPacientes() {
               </tr>
             </thead>
             <tbody>
-              {pacientes.map(p => (
+              {pacientesFiltrados.map(p => (
                 <tr key={p.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
                   <td style={{ padding: 12 }}>{p.nome}</td>
                   <td style={{ padding: 12 }}>{p.matricula}</td>
                   <td style={{ padding: 12 }}>{p.telefone}</td>
                   <td style={{ padding: 12 }}>{p.servicoNome}</td>
                   <td style={{ padding: 12 }}>
-                    {p.origem === "fila" 
-                      ? (p.status === "vinculado" ? "Aguardando horário" : "Aguardando") 
+                    {p.origem === "fila"
+                      ? (p.status === "vinculado" ? "Aguardando horário" : "Aguardando")
                       : `${p.data} ${p.horario}`}
                   </td>
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
@@ -384,9 +439,9 @@ export default function ProfissionalPacientes() {
                         >
                           <option value="">Vincular a</option>
                           {profissionais
-                            .filter(prof => supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
+                            .filter(prof => ehDiretor || supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
                             .map(prof => (
-                              <option key={prof.id} value={prof.id}>{prof.nome}</option>
+                              <option key={prof.id} value={prof.id}>{prof.nome} ({prof.codigo})</option>
                             ))}
                         </select>
                         {vinculando?.paciente.id === p.id && vinculando?.profissionalId && (
@@ -433,10 +488,10 @@ export default function ProfissionalPacientes() {
                       >
                         <option value="">Reagendar</option>
                         {profissionais
-                          .filter(prof => supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
+                          .filter(prof => ehDiretor || supervisionadosIds.includes(prof.id) || prof.id === profissionalId)
                           .filter(prof => prof.id !== p.profissionalId)
                           .map(prof => (
-                            <option key={prof.id} value={prof.id}>{prof.nome}</option>
+                            <option key={prof.id} value={prof.id}>{prof.nome} ({prof.codigo})</option>
                           ))}
                       </select>
                     )}
