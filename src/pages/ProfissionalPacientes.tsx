@@ -12,6 +12,7 @@ export default function ProfissionalPacientes() {
   const [profissionalId, setProfissionalId] = useState("");
   const [profissionalNome, setProfissionalNome] = useState("");
   const [tipoLogado, setTipoLogado] = useState("");
+  const [minhaEspecialidade, setMinhaEspecialidade] = useState("");
   const [supervisionadosIds, setSupervisionadosIds] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroProfId, setFiltroProfId] = useState("");
@@ -21,6 +22,7 @@ export default function ProfissionalPacientes() {
   const [modalTrocarProf, setModalTrocarProf] = useState<any>(null);
 
   const ehDiretor = tipoLogado === "diretor";
+  const ehSupervisor = tipoLogado === "supervisor";
 
   useEffect(() => {
     const carregar = async () => {
@@ -32,10 +34,21 @@ export default function ProfissionalPacientes() {
         setProfissionalId(d.id);
         setProfissionalNome(data.nome || "");
         setTipoLogado(data.tipo || "");
+        setMinhaEspecialidade(data.especialidade || "");
 
         if (data.tipo === "supervisor") {
-          const est = await getDocs(query(collection(db, "profissionais"), where("supervisorId", "==", d.id)));
-          setSupervisionadosIds(est.docs.map(x => x.id));
+          const estSnap = await getDocs(collection(db, "profissionais"));
+          const ids: string[] = [];
+          estSnap.forEach(est => {
+            const estData = est.data();
+            if (
+              estData.supervisorId === d.id &&
+              (!data.especialidade || estData.especialidade === data.especialidade)
+            ) {
+              ids.push(est.id);
+            }
+          });
+          setSupervisionadosIds(ids);
         } else if (data.tipo === "diretor") {
           const todos = await getDocs(collection(db, "profissionais"));
           setSupervisionadosIds(todos.docs.map(x => x.id));
@@ -48,7 +61,7 @@ export default function ProfissionalPacientes() {
   useEffect(() => {
     const carregarAux = async () => {
       const p = await getDocs(collection(db, "profissionais"));
-      setProfissionais(p.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
+      setProfissionais(p.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo, especialidade: d.data().especialidade })));
       const s = await getDocs(collection(db, "tiposAtendimento"));
       setServicos(s.docs.map(d => ({ id: d.id, nome: d.data().nome })));
     };
@@ -126,6 +139,18 @@ export default function ProfissionalPacientes() {
         });
       }
 
+      // 🔥 Filtro por especialidade do supervisor
+      if (ehSupervisor && minhaEspecialidade) {
+        const profsMesmaEspecialidade = profissionais
+          .filter(p => p.especialidade === minhaEspecialidade)
+          .map(p => p.id);
+        f = f.filter(p =>
+          p.origem === "fila"
+            ? !p.profissionalId || profsMesmaEspecialidade.includes(p.profissionalId)
+            : profsMesmaEspecialidade.includes(p.profissionalId)
+        );
+      }
+
       f.sort((a, b) => {
         if (a.origem === "fila" && b.origem !== "fila") return -1;
         if (a.origem !== "fila" && b.origem === "fila") return 1;
@@ -140,14 +165,12 @@ export default function ProfissionalPacientes() {
     } catch (e) {
       console.error(e);
       alert("Erro ao carregar pacientes.");
-    } finally {
-      setCarregando(false);
-    }
+    } finally { setCarregando(false); }
   };
 
   useEffect(() => {
     if (profissionais.length > 0) carregarPacientes();
-  }, [profissionalId, supervisionadosIds, filtroProfId, filtroServico, profissionais, tipoLogado]);
+  }, [profissionalId, supervisionadosIds, filtroProfId, filtroServico, profissionais, tipoLogado, minhaEspecialidade]);
 
   const lista = pacientes.filter(p => {
     if (!busca.trim()) return true;
@@ -160,10 +183,7 @@ export default function ProfissionalPacientes() {
     const prof = profissionais.find(p => p.id === profId)?.nome || "";
     if (!confirm(`Vincular ${paciente.nome} a ${prof}?`)) return;
     try {
-      await updateDoc(doc(db, "filaEspera", paciente.id), {
-        profissionalId: profId,
-        status: "vinculado",
-      });
+      await updateDoc(doc(db, "filaEspera", paciente.id), { profissionalId: profId, status: "vinculado" });
       alert(`Vinculado a ${prof}!`);
       setModalVincular(null);
       carregarPacientes();
@@ -176,24 +196,15 @@ export default function ProfissionalPacientes() {
       const slotSnap = await getDoc(doc(db, "agendamentos", horarioId));
       if (!slotSnap.exists()) return alert("Horário não encontrado.");
       const slot: any = slotSnap.data();
-
       if (slot.groupId) {
-        const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", slot.groupId));
-        const groupSnap = await getDocs(groupQuery);
-        for (const docHor of groupSnap.docs) {
-          await updateDoc(docHor.ref, { alunoId: paciente.alunoId, status: "ocupado" });
-        }
-        alert(`Paciente vinculado em ${groupSnap.size} horários do grupo!`);
+        const gSnap = await getDocs(query(collection(db, "agendamentos"), where("groupId", "==", slot.groupId)));
+        for (const d of gSnap.docs) await updateDoc(d.ref, { alunoId: paciente.alunoId, status: "ocupado" });
+        alert(`Vinculado em ${gSnap.size} horários!`);
       } else {
         await updateDoc(doc(db, "agendamentos", horarioId), { alunoId: paciente.alunoId, status: "ocupado" });
-        alert("Paciente vinculado ao horário.");
+        alert("Vinculado.");
       }
-
-      await updateDoc(doc(db, "filaEspera", paciente.id), {
-        status: "atendido",
-        profissionalId: slot.profissionalId,
-      });
-
+      await updateDoc(doc(db, "filaEspera", paciente.id), { status: "atendido", profissionalId: slot.profissionalId });
       setModalVincular(null);
       carregarPacientes();
     } catch (e: any) { alert(e.message); }
@@ -201,64 +212,43 @@ export default function ProfissionalPacientes() {
 
   const trocarProfissional = async (paciente: any, novoProfId: string, novoHorarioId: string | null) => {
     if (!novoProfId) return alert("Escolha o novo profissional.");
-
     const novoNome = profissionais.find(p => p.id === novoProfId)?.nome || "profissional";
-
     try {
       if (novoHorarioId) {
         const slotSnap = await getDoc(doc(db, "agendamentos", novoHorarioId));
         if (!slotSnap.exists()) return alert("Horário não encontrado.");
         const slot: any = slotSnap.data();
-
         if (paciente.origem === "agendamento") {
           if (paciente.groupId) {
-            const grupoQuery = query(collection(db, "agendamentos"), where("groupId", "==", paciente.groupId));
-            const grupoSnap = await getDocs(grupoQuery);
-            for (const d of grupoSnap.docs) {
-              if (d.id !== novoHorarioId) {
-                await updateDoc(d.ref, { alunoId: null, status: "livre" });
-              }
-            }
+            const gSnap = await getDocs(query(collection(db, "agendamentos"), where("groupId", "==", paciente.groupId)));
+            for (const d of gSnap.docs) if (d.id !== novoHorarioId) await updateDoc(d.ref, { alunoId: null, status: "livre" });
           } else {
             await updateDoc(doc(db, "agendamentos", paciente.id), { alunoId: null, status: "livre" });
           }
         }
-
         if (slot.groupId) {
-          const novoGrupoQuery = query(collection(db, "agendamentos"), where("groupId", "==", slot.groupId));
-          const novoGrupoSnap = await getDocs(novoGrupoQuery);
-          for (const d of novoGrupoSnap.docs) {
-            await updateDoc(d.ref, { alunoId: paciente.alunoId, status: "ocupado" });
-          }
-          alert(`Alterado! ${paciente.nome} agora está com ${novoNome} em ${novoGrupoSnap.size} horários.`);
+          const gSnap = await getDocs(query(collection(db, "agendamentos"), where("groupId", "==", slot.groupId)));
+          for (const d of gSnap.docs) await updateDoc(d.ref, { alunoId: paciente.alunoId, status: "ocupado" });
         } else {
           await updateDoc(doc(db, "agendamentos", novoHorarioId), { alunoId: paciente.alunoId, status: "ocupado" });
-          alert(`Alterado! ${paciente.nome} agora está com ${novoNome}.`);
         }
+        alert(`Alterado para ${novoNome}!`);
       } else {
         if (paciente.origem === "agendamento") {
           if (paciente.groupId) {
-            const grupoQuery = query(collection(db, "agendamentos"), where("groupId", "==", paciente.groupId));
-            const grupoSnap = await getDocs(grupoQuery);
-            for (const d of grupoSnap.docs) {
-              await updateDoc(d.ref, { profissionalId: novoProfId });
-            }
-            alert(`Profissional alterado em ${grupoSnap.size} horários do grupo.`);
+            const gSnap = await getDocs(query(collection(db, "agendamentos"), where("groupId", "==", paciente.groupId)));
+            for (const d of gSnap.docs) await updateDoc(d.ref, { profissionalId: novoProfId });
           } else {
             await updateDoc(doc(db, "agendamentos", paciente.id), { profissionalId: novoProfId });
-            alert(`Profissional alterado para ${novoNome}.`);
           }
-        } else if (paciente.origem === "fila") {
+        } else {
           await updateDoc(doc(db, "filaEspera", paciente.id), { profissionalId: novoProfId, status: "vinculado" });
-          alert(`Paciente vinculado a ${novoNome}.`);
         }
+        alert(`Profissional alterado para ${novoNome}.`);
       }
-
       setModalTrocarProf(null);
       carregarPacientes();
-    } catch (e: any) {
-      alert(`Erro: ${e.message}`);
-    }
+    } catch (e: any) { alert(`Erro: ${e.message}`); }
   };
 
   const remover = async (p: any) => {
@@ -269,7 +259,6 @@ export default function ProfissionalPacientes() {
 
   const sBtn = (bg: string, color = "#fff") => ({ padding: "4px 10px", border: "none", borderRadius: 4, background: bg, color, cursor: "pointer", marginRight: 4 });
 
-  // 🔥 Agrupa agendamentos por aluno (para não mostrar 12x o mesmo)
   const agruparPorAluno = (arr: any[]) => {
     const grupos = new Map<string, any[]>();
     for (const p of arr) {
@@ -277,14 +266,22 @@ export default function ProfissionalPacientes() {
       if (!grupos.has(k)) grupos.set(k, []);
       grupos.get(k)!.push(p);
     }
-    return Array.from(grupos.values()).map((items) => {
+    return Array.from(grupos.values()).map(items => {
       if (items[0].origem === "fila") return { ...items[0], _qtd: 1 };
-      const ordenados = items.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
-      return { ...ordenados[0], _qtd: items.length, _todosIds: items.map(i => i.id) };
+      const ord = items.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
+      return { ...ord[0], _qtd: items.length };
     });
   };
 
   const listaAgrupada = agruparPorAluno(lista);
+
+  const profissionaisDisponiveis = profissionais.filter(p => {
+    if (ehDiretor) return true;
+    if (ehSupervisor) {
+      return p.id === profissionalId || supervisionadosIds.includes(p.id);
+    }
+    return p.id === profissionalId;
+  });
 
   return (
     <div>
@@ -295,11 +292,8 @@ export default function ProfissionalPacientes() {
         </span>
       </h3>
 
-      {ehDiretor && (
-        <p style={{ color: "#0070f3", fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
-          👑 Vendo TODOS os profissionais e pacientes
-        </p>
-      )}
+      {ehDiretor && <p style={{ color: "#0070f3", fontWeight: 600, fontSize: 14 }}>👑 Vendo TODOS os profissionais</p>}
+      {ehSupervisor && <p style={{ color: "#0070f3", fontWeight: 600, fontSize: 14 }}>👨‍🏫 Vendo apenas sua especialidade</p>}
 
       <input
         type="text"
@@ -310,12 +304,12 @@ export default function ProfissionalPacientes() {
       />
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        <select value={filtroProfId} onChange={e => setFiltroProfId(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
-          <option value="">Todos os profissionais</option>
-          {profissionais
-            .filter(p => ehDiretor || p.id === profissionalId || supervisionadosIds.includes(p.id))
-            .map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
-        </select>
+        {(ehDiretor || ehSupervisor) && (
+          <select value={filtroProfId} onChange={e => setFiltroProfId(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
+            <option value="">Todos os profissionais</option>
+            {profissionaisDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>)}
+          </select>
+        )}
         <select value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8 }}>
           <option value="">Todos os serviços</option>
           {servicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
@@ -355,6 +349,12 @@ export default function ProfissionalPacientes() {
                   <td style={{ padding: 12 }}>{p.profissionalNome}</td>
                   <td style={{ padding: 12 }}>{p.status}</td>
                   <td style={{ padding: 12 }}>
+                    {/* Ficha para todos menos diretor */}
+                    {!ehDiretor && (
+                      <button onClick={() => window.open(`/profissional/${codigo}/paciente/${p.alunoId}`, "_blank")} style={sBtn("#0070f3")}>
+                        Ficha
+                      </button>
+                    )}
                     {p.origem === "fila" && p.status === "aguardando" && (
                       <>
                         <button onClick={() => setModalVincular(p)} style={sBtn("#28a745")}>Vincular</button>
@@ -363,7 +363,7 @@ export default function ProfissionalPacientes() {
                     )}
                     {p.origem === "fila" && p.status === "vinculado" && (
                       <>
-                        <span style={{ color: "#28a745", fontSize: 13, marginRight: 8 }}>✓ Vinculado</span>
+                        <span style={{ color: "#28a745", fontSize: 13, marginRight: 8 }}>✓</span>
                         <button onClick={() => setModalTrocarProf(p)} style={sBtn("#6f42c1")}>Trocar Prof.</button>
                       </>
                     )}
@@ -381,7 +381,7 @@ export default function ProfissionalPacientes() {
       {modalVincular && (
         <ModalVincular
           paciente={modalVincular}
-          profissionais={profissionais.filter(prof => ehDiretor || prof.id === profissionalId || supervisionadosIds.includes(prof.id))}
+          profissionais={profissionaisDisponiveis}
           onFechar={() => setModalVincular(null)}
           onVincular={(profId: string) => vincular(modalVincular, profId)}
           onVincularComHorario={(horarioId: string) => vincularComHorario(modalVincular, horarioId)}
@@ -391,7 +391,7 @@ export default function ProfissionalPacientes() {
       {modalTrocarProf && (
         <ModalTrocarProfissional
           paciente={modalTrocarProf}
-          profissionais={profissionais.filter(prof => ehDiretor || prof.id === profissionalId || supervisionadosIds.includes(prof.id))}
+          profissionais={profissionaisDisponiveis}
           onFechar={() => setModalTrocarProf(null)}
           onConfirmar={(profId: string, horarioId: string | null) => trocarProfissional(modalTrocarProf, profId, horarioId)}
         />
@@ -401,19 +401,7 @@ export default function ProfissionalPacientes() {
 }
 
 // =========== MODAL VINCULAR ===========
-function ModalVincular({
-  paciente,
-  profissionais,
-  onFechar,
-  onVincular,
-  onVincularComHorario,
-}: {
-  paciente: any;
-  profissionais: any[];
-  onFechar: () => void;
-  onVincular: (profId: string) => void;
-  onVincularComHorario: (horarioId: string) => void;
-}) {
+function ModalVincular({ paciente, profissionais, onFechar, onVincular, onVincularComHorario }: any) {
   const [profId, setProfId] = useState("");
   const [modo, setModo] = useState<"simples" | "comHorario">("simples");
   const [horarios, setHorarios] = useState<any[]>([]);
@@ -430,30 +418,21 @@ function ModalVincular({
         const livres = snap.docs
           .filter(d => {
             const data: any = d.data();
-            return (
-              data.profissionalId === profId &&
-              data.data >= hoje &&
+            return data.profissionalId === profId && data.data >= hoje &&
               (data.status === "livre" || data.status === "aguardandoVinculo") &&
-              !data.alunoId && !data.pacienteInfo
-            );
+              !data.alunoId && !data.pacienteInfo;
           })
           .map(d => ({ id: d.id, ...d.data() } as any));
-
         const grupos = new Map<string, any>();
         const avulsos: any[] = [];
         for (const h of livres) {
           if (h.groupId) {
-            const existing = grupos.get(h.groupId);
-            if (!existing || h.data < existing.data) grupos.set(h.groupId, h);
-          } else {
-            avulsos.push(h);
-          }
+            const ex = grupos.get(h.groupId);
+            if (!ex || h.data < ex.data) grupos.set(h.groupId, h);
+          } else avulsos.push(h);
         }
         const agrupados = [...Array.from(grupos.values()).map(g => ({ ...g, _isGrupo: true })), ...avulsos];
-        agrupados.sort((a, b) => {
-          if (a.data === b.data) return a.horario.localeCompare(b.horario);
-          return a.data.localeCompare(b.data);
-        });
+        agrupados.sort((a, b) => a.data === b.data ? a.horario.localeCompare(b.horario) : a.data.localeCompare(b.data));
         setHorarios(agrupados);
       } catch (e) { console.error(e); }
       finally { setBuscandoHorarios(false); }
@@ -461,24 +440,19 @@ function ModalVincular({
     buscarHorarios();
   }, [profId]);
 
-  const formatarData = (dataISO: string) => {
-    const [ano, mes, dia] = dataISO.split("-");
-    return `${dia}/${mes}/${ano}`;
-  };
+  const fmtData = (d: string) => { const [a, m, di] = d.split("-"); return `${di}/${m}/${a}`; };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
-        <h3 style={{ marginTop: 0 }}>Vincular {paciente.nome}</h3>
+        <h3>Vincular {paciente.nome}</h3>
         <p style={{ color: "#6b7a8f", fontSize: 13 }}>Matrícula: {paciente.matricula}</p>
 
         <label style={{ fontWeight: 600 }}>Profissional:</label>
         <select value={profId} onChange={e => { setProfId(e.target.value); setHorarioId(""); }}
           style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }}>
-          <option value="">Selecione um profissional</option>
-          {profissionais.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) - {p.tipo}</option>
-          ))}
+          <option value="">Selecione</option>
+          {profissionais.map((p: any) => <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) - {p.tipo}</option>)}
         </select>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -489,36 +463,24 @@ function ModalVincular({
         {modo === "comHorario" && (
           <>
             <label style={{ fontWeight: 600 }}>Horários disponíveis:</label>
-            {buscandoHorarios && <p style={{ color: "#6b7a8f", fontSize: 13 }}>Buscando horários...</p>}
-            {!buscandoHorarios && profId && horarios.length === 0 && (
-              <p style={{ color: "#dc3545", fontSize: 13 }}>Nenhum horário disponível.</p>
-            )}
+            {buscandoHorarios && <p style={{ color: "#6b7a8f", fontSize: 13 }}>Buscando...</p>}
+            {!buscandoHorarios && profId && horarios.length === 0 && <p style={{ color: "#dc3545", fontSize: 13 }}>Nenhum horário disponível.</p>}
             {!buscandoHorarios && horarios.length > 0 && (
               <select value={horarioId} onChange={e => setHorarioId(e.target.value)}
                 style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }}>
-                <option value="">Selecione um horário</option>
-                {horarios.map((h: any) => (
-                  <option key={h.id} value={h.id}>
-                    {formatarData(h.data)} às {h.horario} {h._isGrupo ? "🔗 (recorrente)" : ""}
-                  </option>
-                ))}
+                <option value="">Selecione</option>
+                {horarios.map((h: any) => <option key={h.id} value={h.id}>{fmtData(h.data)} às {h.horario} {h._isGrupo ? "🔗" : ""}</option>)}
               </select>
-            )}
-            {!profId && (
-              <p style={{ color: "#6b7a8f", fontSize: 13, marginBottom: 14 }}>Escolha um profissional acima.</p>
             )}
           </>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => modo === "simples" ? onVincular(profId) : onVincularComHorario(horarioId)}
+          <button onClick={() => modo === "simples" ? onVincular(profId) : onVincularComHorario(horarioId)}
             style={{ flex: 1, padding: 10, background: "#28a745", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
             Confirmar
           </button>
-          <button onClick={onFechar} style={{ flex: 1, padding: 10, background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-            Cancelar
-          </button>
+          <button onClick={onFechar} style={{ flex: 1, padding: 10, background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>Cancelar</button>
         </div>
       </div>
     </div>
@@ -526,17 +488,7 @@ function ModalVincular({
 }
 
 // =========== MODAL TROCAR PROFISSIONAL ===========
-function ModalTrocarProfissional({
-  paciente,
-  profissionais,
-  onFechar,
-  onConfirmar,
-}: {
-  paciente: any;
-  profissionais: any[];
-  onFechar: () => void;
-  onConfirmar: (profId: string, horarioId: string | null) => void;
-}) {
+function ModalTrocarProfissional({ paciente, profissionais, onFechar, onConfirmar }: any) {
   const [profId, setProfId] = useState(paciente.profissionalId || "");
   const [modo, setModo] = useState<"soProf" | "comHorario">("soProf");
   const [horarios, setHorarios] = useState<any[]>([]);
@@ -553,30 +505,21 @@ function ModalTrocarProfissional({
         const livres = snap.docs
           .filter(d => {
             const data: any = d.data();
-            return (
-              data.profissionalId === profId &&
-              data.data >= hoje &&
+            return data.profissionalId === profId && data.data >= hoje &&
               (data.status === "livre" || data.status === "aguardandoVinculo") &&
-              !data.alunoId && !data.pacienteInfo
-            );
+              !data.alunoId && !data.pacienteInfo;
           })
           .map(d => ({ id: d.id, ...d.data() } as any));
-
         const grupos = new Map<string, any>();
         const avulsos: any[] = [];
         for (const h of livres) {
           if (h.groupId) {
-            const existing = grupos.get(h.groupId);
-            if (!existing || h.data < existing.data) grupos.set(h.groupId, h);
-          } else {
-            avulsos.push(h);
-          }
+            const ex = grupos.get(h.groupId);
+            if (!ex || h.data < ex.data) grupos.set(h.groupId, h);
+          } else avulsos.push(h);
         }
         const agrupados = [...Array.from(grupos.values()).map(g => ({ ...g, _isGrupo: true })), ...avulsos];
-        agrupados.sort((a, b) => {
-          if (a.data === b.data) return a.horario.localeCompare(b.horario);
-          return a.data.localeCompare(b.data);
-        });
+        agrupados.sort((a, b) => a.data === b.data ? a.horario.localeCompare(b.horario) : a.data.localeCompare(b.data));
         setHorarios(agrupados);
       } catch (e) { console.error(e); }
       finally { setBuscandoHorarios(false); }
@@ -584,17 +527,14 @@ function ModalTrocarProfissional({
     buscarHorarios();
   }, [profId]);
 
-  const formatarData = (dataISO: string) => {
-    const [ano, mes, dia] = dataISO.split("-");
-    return `${dia}/${mes}/${ano}`;
-  };
+  const fmtData = (d: string) => { const [a, m, di] = d.split("-"); return `${di}/${m}/${a}`; };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 520, width: "90%" }}>
-        <h3 style={{ marginTop: 0 }}>Trocar Profissional</h3>
+        <h3>Trocar Profissional</h3>
         <p style={{ color: "#6b7a8f", fontSize: 13 }}>
-          <strong>{paciente.nome}</strong> - {paciente.servicoNome}
+          <strong>{paciente.nome}</strong>
           {paciente.origem === "agendamento" && <> · Atual: {paciente.data} {paciente.horario} com {paciente.profissionalNome}</>}
         </p>
 
@@ -602,53 +542,35 @@ function ModalTrocarProfissional({
         <select value={profId} onChange={e => { setProfId(e.target.value); setHorarioId(""); }}
           style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }}>
           <option value="">Selecione</option>
-          {profissionais.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) - {p.tipo}</option>
-          ))}
+          {profissionais.map((p: any) => <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) - {p.tipo}</option>)}
         </select>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <button onClick={() => setModo("soProf")} style={{ flex: 1, padding: 8, border: modo === "soProf" ? "2px solid #0070f3" : "1px solid #ccc", background: modo === "soProf" ? "#e6f0ff" : "#fff", borderRadius: 8, cursor: "pointer" }}>
-            Só trocar profissional
-          </button>
-          <button onClick={() => setModo("comHorario")} style={{ flex: 1, padding: 8, border: modo === "comHorario" ? "2px solid #0070f3" : "1px solid #ccc", background: modo === "comHorario" ? "#e6f0ff" : "#fff", borderRadius: 8, cursor: "pointer" }}>
-            Trocar + escolher novo horário
-          </button>
+          <button onClick={() => setModo("soProf")} style={{ flex: 1, padding: 8, border: modo === "soProf" ? "2px solid #0070f3" : "1px solid #ccc", background: modo === "soProf" ? "#e6f0ff" : "#fff", borderRadius: 8, cursor: "pointer" }}>Só trocar profissional</button>
+          <button onClick={() => setModo("comHorario")} style={{ flex: 1, padding: 8, border: modo === "comHorario" ? "2px solid #0070f3" : "1px solid #ccc", background: modo === "comHorario" ? "#e6f0ff" : "#fff", borderRadius: 8, cursor: "pointer" }}>Trocar + novo horário</button>
         </div>
 
         {modo === "comHorario" && (
           <>
-            <label style={{ fontWeight: 600 }}>Novo horário disponível:</label>
-            {buscandoHorarios && <p style={{ color: "#6b7a8f", fontSize: 13 }}>Buscando horários...</p>}
-            {!buscandoHorarios && profId && horarios.length === 0 && (
-              <p style={{ color: "#dc3545", fontSize: 13 }}>Nenhum horário disponível para este profissional.</p>
-            )}
+            <label style={{ fontWeight: 600 }}>Novo horário:</label>
+            {buscandoHorarios && <p style={{ color: "#6b7a8f", fontSize: 13 }}>Buscando...</p>}
+            {!buscandoHorarios && profId && horarios.length === 0 && <p style={{ color: "#dc3545", fontSize: 13 }}>Nenhum horário disponível.</p>}
             {!buscandoHorarios && horarios.length > 0 && (
               <select value={horarioId} onChange={e => setHorarioId(e.target.value)}
                 style={{ width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, margin: "6px 0 14px" }}>
-                <option value="">Selecione um horário</option>
-                {horarios.map((h: any) => (
-                  <option key={h.id} value={h.id}>
-                    {formatarData(h.data)} às {h.horario} {h._isGrupo ? "🔗 (recorrente)" : ""}
-                  </option>
-                ))}
+                <option value="">Selecione</option>
+                {horarios.map((h: any) => <option key={h.id} value={h.id}>{fmtData(h.data)} às {h.horario} {h._isGrupo ? "🔗" : ""}</option>)}
               </select>
-            )}
-            {!profId && (
-              <p style={{ color: "#6b7a8f", fontSize: 13, marginBottom: 14 }}>Escolha um profissional acima.</p>
             )}
           </>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => onConfirmar(profId, modo === "comHorario" ? horarioId : null)}
+          <button onClick={() => onConfirmar(profId, modo === "comHorario" ? horarioId : null)}
             style={{ flex: 1, padding: 10, background: "#6f42c1", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
             Confirmar
           </button>
-          <button onClick={onFechar} style={{ flex: 1, padding: 10, background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-            Cancelar
-          </button>
+          <button onClick={onFechar} style={{ flex: 1, padding: 10, background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>Cancelar</button>
         </div>
       </div>
     </div>

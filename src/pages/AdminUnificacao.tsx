@@ -10,306 +10,256 @@ export default function AdminUnificacao() {
 
   // 1. Unificar duplicatas
   const handleUnificar = async () => {
-    if (!confirm("Tem certeza? Isso vai unificar duplicatas.")) return;
-    setCarregando(true);
-    setLogs([]);
+    if (!confirm("Unificar duplicatas?")) return;
+    setCarregando(true); setLogs([]);
     try {
-      const alunosRef = collection(db, "alunos");
-      const snapshot = await getDocs(alunosRef);
+      const snapshot = await getDocs(collection(db, "alunos"));
       const cpfMap = new Map<string, any[]>();
       snapshot.forEach(doc => {
         const data = doc.data();
-        const cpf = data.cpf;
-        if (!cpf) return;
-        if (!cpfMap.has(cpf)) cpfMap.set(cpf, []);
-        cpfMap.get(cpf)!.push({ id: doc.id, ...data });
+        if (!data.cpf) return;
+        if (!cpfMap.has(data.cpf)) cpfMap.set(data.cpf, []);
+        cpfMap.get(data.cpf)!.push({ id: doc.id, ...data });
       });
-
-      for (const [cpf, docs] of cpfMap.entries()) {
+      // ✅ CORRIGIDO: usa values() para não precisar da chave cpf
+      for (const docs of Array.from(cpfMap.values())) {
         if (docs.length <= 1) continue;
-        adicionarLog(`Processando CPF ${cpf} (${docs.length} registros)`);
-        const principal = docs.reduce((a: any, b: any) => {
-          const countA = Object.keys(a).filter(k => a[k] && a[k] !== "").length;
-          const countB = Object.keys(b).filter(k => b[k] && b[k] !== "").length;
-          return countA >= countB ? a : b;
+        const principal = docs.reduce((a, b) => {
+          const cA = Object.keys(a).filter(k => a[k] && a[k] !== "").length;
+          const cB = Object.keys(b).filter(k => b[k] && b[k] !== "").length;
+          return cA >= cB ? a : b;
         });
-        const secundarios = docs.filter(d => d.id !== principal.id);
-
-        for (const sec of secundarios) {
-          adicionarLog(`  Unificando ${sec.id} (${sec.nomeCompleto})`);
-          const presencasSnap = await getDocs(collection(db, "presencas"));
-          for (const pDoc of presencasSnap.docs) {
-            if (pDoc.data().alunoId === sec.id) {
-              await updateDoc(pDoc.ref, { alunoId: principal.id });
-            }
-          }
-          const turmasSnap = await getDocs(collection(db, "turmas"));
-          for (const tDoc of turmasSnap.docs) {
-            const data = tDoc.data();
-            const alunosArray = data.alunos || [];
-            if (alunosArray.includes(sec.id)) {
-              const newAlunos = alunosArray.map((id: string) => id === sec.id ? principal.id : id);
-              await updateDoc(tDoc.ref, { alunos: newAlunos });
-            }
-          }
-          const filaSnap = await getDocs(collection(db, "filaEspera"));
-          for (const fDoc of filaSnap.docs) {
-            if (fDoc.data().alunoId === sec.id) {
-              await updateDoc(fDoc.ref, { alunoId: principal.id });
-            }
-          }
+        for (const sec of docs.filter(d => d.id !== principal.id)) {
+          const pSnap = await getDocs(collection(db, "presencas"));
+          for (const p of pSnap.docs) if (p.data().alunoId === sec.id) await updateDoc(p.ref, { alunoId: principal.id });
+          const fSnap = await getDocs(collection(db, "filaEspera"));
+          for (const f of fSnap.docs) if (f.data().alunoId === sec.id) await updateDoc(f.ref, { alunoId: principal.id });
           await deleteDoc(doc(db, "alunos", sec.id));
-          adicionarLog(`    Documento ${sec.id} excluído`);
+          adicionarLog(`Unificado ${sec.id}`);
         }
       }
       adicionarLog("Unificação concluída!");
-    } catch (error: any) {
-      adicionarLog(`Erro: ${error.message}`);
-    } finally {
-      setCarregando(false);
-    }
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
   };
 
   // 2. Reordenar matrículas
   const handleReordenar = async () => {
-    if (!confirm("Reordenar matrículas?")) return;
-    setCarregando(true);
-    setLogs([]);
+    if (!confirm("Reordenar?")) return;
+    setCarregando(true); setLogs([]);
     try {
-      const alunosRef = collection(db, "alunos");
-      const snapshot = await getDocs(alunosRef);
-      const alunos = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const snap = await getDocs(collection(db, "alunos"));
+      const alunos = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       alunos.sort((a, b) => (a.matriculaNumero || 0) - (b.matriculaNumero || 0));
       let i = 1;
-      for (const aluno of alunos) {
-        await updateDoc(doc(db, "alunos", aluno.id), {
-          matriculaNumero: i,
-          matricula: `IJP-${String(i).padStart(5, "0")}`,
+      for (const a of alunos) {
+        await updateDoc(doc(db, "alunos", a.id), {
+          matriculaNumero: i, matricula: `IJP-${String(i).padStart(5, "0")}`,
         });
         i++;
       }
-      adicionarLog(`Matrículas reordenadas (${alunos.length} alunos)`);
-    } catch (error: any) {
-      adicionarLog(`Erro: ${error.message}`);
-    } finally {
-      setCarregando(false);
-    }
+      adicionarLog(`${alunos.length} matrículas reordenadas`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
   };
 
   // 3. Corrigir CPFs
   const handleCorrigirCpfs = async () => {
-    if (!confirm("Remover pontos e traços de todos os CPFs?")) return;
-    setCarregando(true);
-    setLogs([]);
+    if (!confirm("Corrigir CPFs?")) return;
+    setCarregando(true); setLogs([]);
     try {
-      const alunosSnap = await getDocs(collection(db, "alunos"));
-      let count = 0;
-      for (const alunoDoc of alunosSnap.docs) {
-        const data = alunoDoc.data();
-        const cpf = data.cpf;
+      const snap = await getDocs(collection(db, "alunos"));
+      let n = 0;
+      for (const a of snap.docs) {
+        const cpf = a.data().cpf;
         if (cpf && (cpf.includes('.') || cpf.includes('-'))) {
-          const cpfLimpo = cpf.replace(/\D/g, '');
-          if (cpfLimpo.length === 11) {
-            await updateDoc(doc(db, "alunos", alunoDoc.id), { cpf: cpfLimpo });
-            count++;
-            adicionarLog(`✅ Atualizado: ${cpf} -> ${cpfLimpo}`);
-          }
+          const limpo = cpf.replace(/\D/g, '');
+          if (limpo.length === 11) { await updateDoc(a.ref, { cpf: limpo }); n++; }
         }
       }
-      adicionarLog(`🎉 ${count} CPFs corrigidos.`);
-    } catch (error: any) {
-      adicionarLog(`❌ Erro: ${error.message}`);
-    } finally {
-      setCarregando(false);
-    }
+      adicionarLog(`${n} CPFs corrigidos`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
   };
 
-  // 4. PADRONIZAR TUDO
+  // 4. Padronizar tudo
   const handlePadronizarTudo = async () => {
-    if (!confirm("Isso vai FORÇAR a correção de todos os tipoId textuais para IDs. Continuar?")) return;
-    setCarregando(true);
-    setLogs([]);
-
+    if (!confirm("Padronizar tipoId textual → ID?")) return;
+    setCarregando(true); setLogs([]);
     try {
       const servSnap = await getDocs(collection(db, "tiposAtendimento"));
       const mapa: Record<string, string> = {};
-      servSnap.forEach(d => {
-        const nome = d.data().nome.toLowerCase().trim();
-        mapa[nome] = d.id;
-      });
-      adicionarLog(`📌 Mapeamento: ${Object.keys(mapa).join(", ")}`);
+      servSnap.forEach(d => { mapa[d.data().nome.toLowerCase().trim()] = d.id; });
+      adicionarLog(`Mapeamento: ${Object.keys(mapa).join(", ")}`);
 
       let total = 0;
-
-      // Fila
-      const filaSnap = await getDocs(collection(db, "filaEspera"));
-      let countFila = 0;
-      for (const docSnap of filaSnap.docs) {
-        const data = docSnap.data();
-        const tipoId = data.tipoId;
-        if (typeof tipoId === "string") {
-          const chave = tipoId.toLowerCase().trim();
-          if (mapa[chave] && tipoId !== mapa[chave]) {
-            await updateDoc(docSnap.ref, { tipoId: mapa[chave] });
-            countFila++;
-            adicionarLog(`✅ Fila ${docSnap.id}: "${tipoId}" -> "${mapa[chave]}"`);
-          } else if (!mapa[chave]) {
-            adicionarLog(`⚠️ Fila ${docSnap.id}: tipoId "${tipoId}" não encontrado no mapeamento.`);
+      for (const col of ["filaEspera", "agendamentos"]) {
+        const snap = await getDocs(collection(db, col));
+        let n = 0;
+        for (const d of snap.docs) {
+          const t = d.data().tipoId;
+          if (typeof t === "string" && mapa[t.toLowerCase().trim()] && t !== mapa[t.toLowerCase().trim()]) {
+            await updateDoc(d.ref, { tipoId: mapa[t.toLowerCase().trim()] });
+            n++;
           }
         }
+        adicionarLog(`${col}: ${n} corrigidos`);
+        total += n;
       }
-      adicionarLog(`🎉 Fila: ${countFila} corrigidos.`);
-      total += countFila;
-
-      // Agendamentos
-      const agendSnap = await getDocs(collection(db, "agendamentos"));
-      let countAgend = 0;
-      for (const docSnap of agendSnap.docs) {
-        const data = docSnap.data();
-        const tipoId = data.tipoId;
-        if (typeof tipoId === "string") {
-          const chave = tipoId.toLowerCase().trim();
-          if (mapa[chave] && tipoId !== mapa[chave]) {
-            await updateDoc(docSnap.ref, { tipoId: mapa[chave] });
-            countAgend++;
-            adicionarLog(`✅ Agendamento ${docSnap.id}: "${tipoId}" -> "${mapa[chave]}"`);
-          }
-        }
-      }
-      adicionarLog(`🎉 Agendamentos: ${countAgend} corrigidos.`);
-      total += countAgend;
-
-      // Profissionais
       const profSnap = await getDocs(collection(db, "profissionais"));
-      let countProf = 0;
-      for (const docSnap of profSnap.docs) {
-        const data = docSnap.data();
-        const especialidade = data.especialidade;
-        if (typeof especialidade === "string") {
-          const chave = especialidade.toLowerCase().trim();
-          if (mapa[chave] && especialidade !== mapa[chave]) {
-            await updateDoc(docSnap.ref, { especialidade: mapa[chave] });
-            countProf++;
-            adicionarLog(`✅ Profissional ${docSnap.id}: "${especialidade}" -> "${mapa[chave]}"`);
-          }
+      let np = 0;
+      for (const d of profSnap.docs) {
+        const e = d.data().especialidade;
+        if (typeof e === "string" && mapa[e.toLowerCase().trim()] && e !== mapa[e.toLowerCase().trim()]) {
+          await updateDoc(d.ref, { especialidade: mapa[e.toLowerCase().trim()] }); np++;
         }
       }
-      adicionarLog(`🎉 Profissionais: ${countProf} corrigidos.`);
-      total += countProf;
-
-      // Alunos
-      const alunosSnap = await getDocs(collection(db, "alunos"));
-      let countAlunos = 0;
-      for (const docSnap of alunosSnap.docs) {
-        const data = docSnap.data();
-        const servicosAtivos = data.servicosAtivos || [];
-        if (servicosAtivos.length > 0) {
-          let modificado = false;
-          const novosServicos = servicosAtivos.map((servico: any) => {
-            const tipoId = servico.tipoId;
-            if (typeof tipoId === "string") {
-              const chave = tipoId.toLowerCase().trim();
-              if (mapa[chave] && tipoId !== mapa[chave]) {
-                modificado = true;
-                return { ...servico, tipoId: mapa[chave] };
-              }
-            }
-            return servico;
-          });
-          if (modificado) {
-            await updateDoc(docSnap.ref, { servicosAtivos: novosServicos });
-            countAlunos++;
-            adicionarLog(`✅ Aluno ${docSnap.id}: servicosAtivos corrigidos`);
-          }
-        }
-      }
-      adicionarLog(`🎉 Alunos: ${countAlunos} corrigidos.`);
-      total += countAlunos;
-
-      adicionarLog(`🎯 TOTAL: ${total} registros corrigidos.`);
-    } catch (error: any) {
-      adicionarLog(`❌ Erro: ${error.message}`);
-    } finally {
-      setCarregando(false);
-    }
+      adicionarLog(`profissionais: ${np} corrigidos`);
+      total += np;
+      adicionarLog(`TOTAL: ${total}`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
   };
 
-  // 🔥 5. CORRIGIR GRUPOS (aplicar aluno em TODAS as semanas do grupo recorrente)
+  // 5. Corrigir grupos
   const handleCorrigirGrupos = async () => {
-    if (!confirm("Isso vai verificar todos os grupos recorrentes e aplicar o aluno em todas as semanas. Continuar?")) return;
-    setCarregando(true);
-    setLogs([]);
-
+    if (!confirm("Aplicar aluno em todas as semanas do grupo?")) return;
+    setCarregando(true); setLogs([]);
     try {
       const snap = await getDocs(collection(db, "agendamentos"));
-      const todos = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-
-      // Agrupar por groupId
       const grupos = new Map<string, any[]>();
-      for (const ag of todos) {
-        if (!ag.groupId) continue;
-        if (!grupos.has(ag.groupId)) grupos.set(ag.groupId, []);
-        grupos.get(ag.groupId)!.push(ag);
+      for (const d of snap.docs) {
+        const g = d.data().groupId;
+        if (!g) continue;
+        if (!grupos.has(g)) grupos.set(g, []);
+        grupos.get(g)!.push({ id: d.id, ...d.data() });
       }
-
-      adicionarLog(`📌 Total de grupos encontrados: ${grupos.size}`);
-      let totalCorrigidos = 0;
-      let gruposCorrigidos = 0;
-
-      for (const [groupId, registros] of grupos.entries()) {
-        const comAluno = registros.filter((r: any) => r.alunoId);
-        if (comAluno.length === 0) continue;
-        if (comAluno.length === registros.length) continue;
-
+      let total = 0;
+      for (const [gid, regs] of grupos.entries()) {
+        const comAluno = regs.filter(r => r.alunoId);
+        if (comAluno.length === 0 || comAluno.length === regs.length) continue;
         const { alunoId, status } = comAluno[0];
         const novoStatus = (status === "livre" || status === "aguardandoVinculo") ? "ocupado" : status;
-
-        adicionarLog(`🔍 Grupo ${groupId}: ${comAluno.length}/${registros.length} com aluno. Corrigindo...`);
-        gruposCorrigidos++;
-
-        for (const reg of registros) {
-          if (!reg.alunoId) {
-            await updateDoc(doc(db, "agendamentos", reg.id), {
-              alunoId,
-              status: novoStatus,
-            });
-            totalCorrigidos++;
+        for (const r of regs) {
+          if (!r.alunoId) {
+            await updateDoc(doc(db, "agendamentos", r.id), { alunoId, status: novoStatus });
+            total++;
           }
+        }
+        adicionarLog(`Grupo ${gid}: ${comAluno.length}/${regs.length} → corrigido`);
+      }
+      adicionarLog(`TOTAL: ${total} agendamentos`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
+  // 6. Corrigir Presenças Duplicadas
+  const handleCorrigirPresencasDuplicadas = async () => {
+    if (!confirm("Remover presenças duplicadas (mesmo aluno, curso, turma e data)?")) return;
+    setCarregando(true); setLogs([]);
+    try {
+      const snap = await getDocs(collection(db, "presencas"));
+      adicionarLog(`Total de presenças: ${snap.size}`);
+
+      const vistos = new Set<string>();
+      const paraRemover: any[] = [];
+
+      for (const d of snap.docs) {
+        const data = d.data();
+        const alunoId = data.alunoId || "";
+        const cursoId = data.cursoId || "";
+        const turmaId = data.turmaId || "";
+        const dataTs = data.data;
+        const dataStr = dataTs?.toDate?.()?.toISOString?.() || String(dataTs || "");
+        const chave = `${alunoId}_${cursoId}_${turmaId}_${dataStr}`;
+
+        if (vistos.has(chave)) {
+          paraRemover.push(d);
+        } else {
+          vistos.add(chave);
         }
       }
 
-      adicionarLog(`🎉 ${gruposCorrigidos} grupos processados. ${totalCorrigidos} agendamentos corrigidos.`);
-    } catch (error: any) {
-      adicionarLog(`❌ Erro: ${error.message}`);
-    } finally {
-      setCarregando(false);
-    }
+      for (const d of paraRemover) {
+        await deleteDoc(d.ref);
+      }
+
+      adicionarLog(`🎉 ${paraRemover.length} presenças duplicadas removidas.`);
+      adicionarLog(`Presenças restantes: ${snap.size - paraRemover.length}`);
+    } catch (e: any) { adicionarLog(`❌ Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
+  // 7. Ajustar presenças de um aluno
+  const handleAjustarPresencasAluno = async () => {
+    const matricula = prompt("Matrícula do aluno (ex: IJP-00275):");
+    if (!matricula) return;
+    const qtdDesejada = prompt("Quantas presenças manter? (números mais recentes)");
+    if (!qtdDesejada) return;
+    const qtd = parseInt(qtdDesejada);
+    if (isNaN(qtd) || qtd < 0) return alert("Quantidade inválida");
+
+    setCarregando(true); setLogs([]);
+    try {
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      const alunoDoc = alunosSnap.docs.find(d => d.data().matricula === matricula);
+      if (!alunoDoc) { adicionarLog(`❌ Aluno ${matricula} não encontrado.`); return; }
+
+      adicionarLog(`Aluno: ${alunoDoc.data().nomeCompleto}`);
+
+      const presSnap = await getDocs(collection(db, "presencas"));
+      const presencas = presSnap.docs
+        .filter(d => d.data().alunoId === alunoDoc.id)
+        .map(d => ({
+          ref: d.ref,
+          data: d.data().data?.toDate?.() || new Date(0),
+        }));
+
+      presencas.sort((a, b) => b.data.getTime() - a.data.getTime());
+
+      adicionarLog(`Presenças atuais: ${presencas.length}`);
+      adicionarLog(`Vou manter as ${qtd} mais recentes`);
+
+      const paraRemover = presencas.slice(qtd);
+      for (const p of paraRemover) {
+        await deleteDoc(p.ref);
+      }
+      adicionarLog(`🎉 ${paraRemover.length} presenças removidas.`);
+      adicionarLog(`Presenças restantes: ${qtd}`);
+    } catch (e: any) { adicionarLog(`❌ Erro: ${e.message}`); }
+    finally { setCarregando(false); }
   };
 
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>
-      <h1 style={{ color: "#1a2a4f" }}>Administração – Correção e Unificação</h1>
-      <p style={{ color: "#6b7a8f" }}>Ferramentas para manutenção de dados.</p>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 20px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Processando..." : "Unificar CPFs Duplicados"}
+      <h1 style={{ color: "#1a2a4f" }}>Administração</h1>
+      <p style={{ color: "#6b7a8f" }}>Ferramentas de manutenção.</p>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 16px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          Unificar CPFs
         </button>
-        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Processando..." : "Reordenar Matrículas"}
+        <button onClick={handleReordenar} disabled={carregando} style={{ padding: "10px 16px", background: "#28a745", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          Reordenar Matrículas
         </button>
-        <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 20px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>
-          {carregando ? "Processando..." : "Corrigir CPFs"}
+        <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 16px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          Corrigir CPFs
         </button>
-        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 20px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
-          {carregando ? "Padronizando..." : "🔧 PADRONIZAR TUDO"}
+        <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 16px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          Padronizar Tudo
         </button>
-        <button onClick={handleCorrigirGrupos} disabled={carregando} style={{ padding: "10px 20px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>
-          {carregando ? "Corrigindo..." : "🔗 CORRIGIR GRUPOS"}
+        <button onClick={handleCorrigirGrupos} disabled={carregando} style={{ padding: "10px 16px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+          Corrigir Grupos
+        </button>
+        <button onClick={handleCorrigirPresencasDuplicadas} disabled={carregando} style={{ padding: "10px 16px", background: "#fd7e14", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+          🗑️ Corrigir Presenças Duplicadas
+        </button>
+        <button onClick={handleAjustarPresencasAluno} disabled={carregando} style={{ padding: "10px 16px", background: "#e83e8c", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+          🎯 Ajustar Presenças de um Aluno
         </button>
       </div>
-      <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 400, overflow: "auto", border: "1px solid #dee2e6" }}>
+      <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 500, overflow: "auto", border: "1px solid #dee2e6" }}>
         {logs.length === 0 && <span style={{ color: "#6b7a8f" }}>Nenhum log ainda.</span>}
-        {logs.map((log, idx) => <div key={idx} style={{ fontFamily: "monospace", fontSize: 14, padding: "2px 0" }}>{log}</div>)}
+        {logs.map((log, i) => <div key={i} style={{ fontFamily: "monospace", fontSize: 13, padding: 2 }}>{log}</div>)}
       </div>
     </div>
   );

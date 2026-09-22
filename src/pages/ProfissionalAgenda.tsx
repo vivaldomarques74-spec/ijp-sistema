@@ -26,6 +26,7 @@ interface Profissional {
   nome: string;
   codigo: string;
   tipo: string;
+  especialidade?: string;
   supervisorId?: string;
   [key: string]: any;
 }
@@ -61,6 +62,10 @@ export default function ProfissionalAgenda() {
   const [modalTrocarProf, setModalTrocarProf] = useState<Agendamento | null>(null);
   const [novoProfId, setNovoProfId] = useState("");
 
+  // 🔥 Filtro do diretor: escolher qual profissional visualizar
+  const [filtroVisualizarProfissionalId, setFiltroVisualizarProfissionalId] = useState("");
+  const [buscaPaciente, setBuscaPaciente] = useState("");
+
   const tipoLogado = localStorage.getItem("profissionalTipo") || "";
   const podeMudarProfissional = tipoLogado === "supervisor" || tipoLogado === "diretor";
   const ehDiretor = tipoLogado === "diretor";
@@ -83,13 +88,25 @@ export default function ProfissionalAgenda() {
         setProfissionalId(docProf.id);
 
         if (profData.tipo === "supervisor") {
-          const estQuery = query(collection(db, "profissionais"), where("supervisorId", "==", docProf.id));
-          const estSnap = await getDocs(estQuery);
-          setSupervisionadosIds(estSnap.docs.map(d => d.id));
+          // 🔥 Supervisor: filtra estagiários/profissionais pela MESMA especialidade
+          const todosSnap = await getDocs(collection(db, "profissionais"));
+          const ids: string[] = [];
+          todosSnap.forEach(est => {
+            const estData = est.data();
+            if (
+              estData.supervisorId === docProf.id &&
+              (!profData.especialidade || estData.especialidade === profData.especialidade)
+            ) {
+              ids.push(est.id);
+            }
+          });
+          setSupervisionadosIds(ids);
         } else if (profData.tipo === "diretor") {
+          // Diretor vê todos
           const todosSnap = await getDocs(collection(db, "profissionais"));
           setSupervisionadosIds(todosSnap.docs.map(d => d.id));
         } else {
+          // Profissional comum: só ele mesmo
           setSupervisionadosIds([]);
         }
       }
@@ -107,9 +124,15 @@ export default function ProfissionalAgenda() {
     if (!profissionalId) return;
     setCarregando(true);
     try {
-      let idsParaFiltrar = [profissionalId];
-      if (supervisionadosIds.length > 0) {
-        idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
+      let idsParaFiltrar: string[] = [];
+      if (ehDiretor) {
+        // Diretor vê todos
+        idsParaFiltrar = todosProfissionais.map(p => p.id);
+      } else {
+        idsParaFiltrar = [profissionalId];
+        if (supervisionadosIds.length > 0) {
+          idsParaFiltrar = [...idsParaFiltrar, ...supervisionadosIds];
+        }
       }
 
       const snap = await getDocs(collection(db, "agendamentos"));
@@ -164,7 +187,7 @@ export default function ProfissionalAgenda() {
 
   useEffect(() => {
     carregarAgenda();
-  }, [profissionalId, dataSelecionada, supervisionadosIds]);
+  }, [profissionalId, dataSelecionada, supervisionadosIds, todosProfissionais]);
 
   const registrarPresenca = async (ag: Agendamento, tipo: string) => {
     if (!ag.alunoId) return alert("Este horário não tem paciente vinculado.");
@@ -219,6 +242,19 @@ export default function ProfissionalAgenda() {
     window.open(url, "_blank");
   };
 
+  // 🔥 Aplica filtros do diretor
+  let agendaFiltrada = agenda;
+  if (ehDiretor && filtroVisualizarProfissionalId) {
+    agendaFiltrada = agendaFiltrada.filter(a => a.profissionalId === filtroVisualizarProfissionalId);
+  }
+  if (buscaPaciente.trim()) {
+    const b = buscaPaciente.toLowerCase().trim();
+    agendaFiltrada = agendaFiltrada.filter(a =>
+      (a.nomeAluno || "").toLowerCase().includes(b) ||
+      (a.pacienteInfo?.nome || "").toLowerCase().includes(b)
+    );
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
@@ -227,8 +263,13 @@ export default function ProfissionalAgenda() {
           <strong>Código:</strong> {codigo} | <strong>Nome:</strong> {profissional?.nome || "Carregando..."}
           {tipoLogado && <span style={{ marginLeft: 8, color: "#6b7a8f" }}>({tipoLogado})</span>}
         </p>
-        {supervisionadosIds.length > 0 && (
-          <p><strong>Vendo:</strong> {supervisionadosIds.length} profissional(is)</p>
+        {ehDiretor && (
+          <p style={{ color: "#0070f3", fontWeight: 600 }}>
+            👑 Você está vendo a agenda de TODOS os profissionais
+          </p>
+        )}
+        {!ehDiretor && tipoLogado === "supervisor" && supervisionadosIds.length > 0 && (
+          <p><strong>Vendo:</strong> {supervisionadosIds.length} profissional(is) da sua especialidade</p>
         )}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <label>Data: </label>
@@ -237,10 +278,48 @@ export default function ProfissionalAgenda() {
         </div>
       </div>
 
+      {/* 🔥 FILTROS DO DIRETOR */}
+      {ehDiretor && (
+        <div style={{ background: "#fff", border: "1px solid #e0e4e8", borderRadius: 12, padding: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <label style={{ fontWeight: 600 }}>Filtrar:</label>
+            <select
+              value={filtroVisualizarProfissionalId}
+              onChange={e => setFiltroVisualizarProfissionalId(e.target.value)}
+              style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, minWidth: 250 }}
+            >
+              <option value="">Todos os profissionais ({agenda.length} horários)</option>
+              {todosProfissionais
+                .filter(p => p.tipo !== "diretor")
+                .map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome} ({p.codigo}) - {p.tipo}
+                  </option>
+                ))}
+            </select>
+            <input
+              type="text"
+              placeholder="🔍 Buscar paciente..."
+              value={buscaPaciente}
+              onChange={e => setBuscaPaciente(e.target.value)}
+              style={{ padding: 8, border: "1px solid #ccc", borderRadius: 8, flex: "1 1 200px", minWidth: 200 }}
+            />
+            {(filtroVisualizarProfissionalId || buscaPaciente) && (
+              <button
+                onClick={() => { setFiltroVisualizarProfissionalId(""); setBuscaPaciente(""); }}
+                style={{ padding: "6px 12px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {carregando && <p>Carregando...</p>}
       {!carregando && (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
             <thead>
               <tr style={{ background: "#f8f9fa" }}>
                 <th style={{ textAlign: "left", padding: 8 }}>Horário</th>
@@ -252,10 +331,10 @@ export default function ProfissionalAgenda() {
               </tr>
             </thead>
             <tbody>
-              {agenda.map(ag => (
+              {agendaFiltrada.map(ag => (
                 <tr key={ag.id} style={{ borderBottom: "1px solid #e0e4e8" }}>
                   <td style={{ padding: 8 }}>{ag.horario}</td>
-                  <td style={{ padding: 8 }}>{ag.nomeProfissional}</td>
+                  <td style={{ padding: 8, fontWeight: ehDiretor ? 600 : 400 }}>{ag.nomeProfissional}</td>
                   <td style={{ padding: 8 }}>
                     {ag.nomeAluno || (ag.tipoPaciente === "particular" ? ag.pacienteInfo?.nome : "Livre")}
                   </td>
@@ -275,7 +354,7 @@ export default function ProfissionalAgenda() {
 
                     {ag.alunoId && (
                       <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                        {/* ✅ DIRETOR NÃO VÊ FICHA */}
+                        {/* Diretor NÃO vê Ficha */}
                         {!ehDiretor && (
                           <button
                             onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")}
@@ -313,7 +392,7 @@ export default function ProfissionalAgenda() {
                   </td>
                 </tr>
               ))}
-              {agenda.length === 0 && (
+              {agendaFiltrada.length === 0 && (
                 <tr><td colSpan={6} style={{ padding: 8, textAlign: "center" }}>Nenhum horário para esta data.</td></tr>
               )}
             </tbody>
