@@ -19,6 +19,9 @@ export default function Saude() {
         <NavLink to="/saude/pacientes" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400, color: isActive ? "#1a2a4f" : "#6b7a8f", textDecoration: "none" })}>
           Pacientes
         </NavLink>
+        <NavLink to="/atestados" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400, color: isActive ? "#1a2a4f" : "#6b7a8f", textDecoration: "none" })}>
+          Atestados
+        </NavLink>
         <NavLink to="/saude/configuracoes" style={({ isActive }) => ({ fontWeight: isActive ? 600 : 400, color: isActive ? "#1a2a4f" : "#6b7a8f", textDecoration: "none" })}>
           Configurações
         </NavLink>

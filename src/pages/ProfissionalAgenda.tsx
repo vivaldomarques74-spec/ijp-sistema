@@ -62,7 +62,11 @@ export default function ProfissionalAgenda() {
   const [modalTrocarProf, setModalTrocarProf] = useState<Agendamento | null>(null);
   const [novoProfId, setNovoProfId] = useState("");
 
-  // 🔥 Filtro do diretor: escolher qual profissional visualizar
+  // 🔥 Remover paciente
+  const [modalRemover, setModalRemover] = useState<Agendamento | null>(null);
+  const [escopo, setEscopo] = useState<"soSemana" | "todasSemanas">("soSemana");
+
+  // 🔥 Filtro do diretor
   const [filtroVisualizarProfissionalId, setFiltroVisualizarProfissionalId] = useState("");
   const [buscaPaciente, setBuscaPaciente] = useState("");
 
@@ -88,7 +92,7 @@ export default function ProfissionalAgenda() {
         setProfissionalId(docProf.id);
 
         if (profData.tipo === "supervisor") {
-          // 🔥 Supervisor: filtra estagiários/profissionais pela MESMA especialidade
+          // Supervisor filtra por mesma especialidade
           const todosSnap = await getDocs(collection(db, "profissionais"));
           const ids: string[] = [];
           todosSnap.forEach(est => {
@@ -102,11 +106,9 @@ export default function ProfissionalAgenda() {
           });
           setSupervisionadosIds(ids);
         } else if (profData.tipo === "diretor") {
-          // Diretor vê todos
           const todosSnap = await getDocs(collection(db, "profissionais"));
           setSupervisionadosIds(todosSnap.docs.map(d => d.id));
         } else {
-          // Profissional comum: só ele mesmo
           setSupervisionadosIds([]);
         }
       }
@@ -115,7 +117,7 @@ export default function ProfissionalAgenda() {
 
     const carregarTodosProf = async () => {
       const snap = await getDocs(collection(db, "profissionais"));
-      setTodosProfissionais(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo })));
+      setTodosProfissionais(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, tipo: d.data().tipo, codigo: d.data().codigo, especialidade: d.data().especialidade })));
     };
     carregarTodosProf();
   }, [codigo]);
@@ -126,7 +128,6 @@ export default function ProfissionalAgenda() {
     try {
       let idsParaFiltrar: string[] = [];
       if (ehDiretor) {
-        // Diretor vê todos
         idsParaFiltrar = todosProfissionais.map(p => p.id);
       } else {
         idsParaFiltrar = [profissionalId];
@@ -235,6 +236,31 @@ export default function ProfissionalAgenda() {
     }
   };
 
+  // 🔥 REMOVER PACIENTE
+  const abrirRemover = (ag: Agendamento) => {
+    setModalRemover(ag);
+    setEscopo("soSemana");
+  };
+
+  const confirmarRemocao = async () => {
+    if (!modalRemover) return;
+    try {
+      if (escopo === "todasSemanas" && modalRemover.groupId) {
+        const gQ = query(collection(db, "agendamentos"), where("groupId", "==", modalRemover.groupId));
+        const gS = await getDocs(gQ);
+        for (const d of gS.docs) {
+          await updateDoc(d.ref, { alunoId: null, status: "livre" });
+        }
+        alert(`Paciente removido de ${gS.size} horários do grupo.`);
+      } else {
+        await updateDoc(doc(db, "agendamentos", modalRemover.id), { alunoId: null, status: "livre" });
+        alert("Paciente removido deste horário.");
+      }
+      setModalRemover(null);
+      carregarAgenda();
+    } catch (e: any) { alert(e.message); }
+  };
+
   const enviarWhatsApp = (ag: Agendamento, mensagem: string) => {
     if (!ag.telefoneAluno) return alert("Paciente sem telefone cadastrado.");
     const fone = ag.telefoneAluno.replace(/\D/g, "");
@@ -242,7 +268,6 @@ export default function ProfissionalAgenda() {
     window.open(url, "_blank");
   };
 
-  // 🔥 Aplica filtros do diretor
   let agendaFiltrada = agenda;
   if (ehDiretor && filtroVisualizarProfissionalId) {
     agendaFiltrada = agendaFiltrada.filter(a => a.profissionalId === filtroVisualizarProfissionalId);
@@ -278,7 +303,6 @@ export default function ProfissionalAgenda() {
         </div>
       </div>
 
-      {/* 🔥 FILTROS DO DIRETOR */}
       {ehDiretor && (
         <div style={{ background: "#fff", border: "1px solid #e0e4e8", borderRadius: 12, padding: 12, marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -354,7 +378,6 @@ export default function ProfissionalAgenda() {
 
                     {ag.alunoId && (
                       <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                        {/* Diretor NÃO vê Ficha */}
                         {!ehDiretor && (
                           <button
                             onClick={() => window.open(`/profissional/${codigo}/paciente/${ag.alunoId}`, "_blank")}
@@ -387,6 +410,12 @@ export default function ProfissionalAgenda() {
                             Trocar Prof.
                           </button>
                         )}
+                        <button
+                          onClick={() => abrirRemover(ag)}
+                          style={{ background: "#dc3545", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
+                        >
+                          Remover
+                        </button>
                       </div>
                     )}
                   </td>
@@ -400,6 +429,7 @@ export default function ProfissionalAgenda() {
         </div>
       )}
 
+      {/* MODAL TROCAR PROFISSIONAL */}
       {modalTrocarProf && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
@@ -414,6 +444,30 @@ export default function ProfissionalAgenda() {
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={confirmarTrocarProfissional} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Confirmar</button>
               <button onClick={() => setModalTrocarProf(null)} style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REMOVER PACIENTE */}
+      {modalRemover && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 450, width: "90%" }}>
+            <h3>Remover paciente</h3>
+            <p><strong>{modalRemover.nomeAluno}</strong> - {modalRemover.horario}</p>
+            {modalRemover.groupId && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", marginBottom: 8, cursor: "pointer" }}>
+                  <input type="radio" checked={escopo === "soSemana"} onChange={() => setEscopo("soSemana")} /> Só esta semana
+                </label>
+                <label style={{ display: "block", cursor: "pointer" }}>
+                  <input type="radio" checked={escopo === "todasSemanas"} onChange={() => setEscopo("todasSemanas")} /> Todas as semanas do grupo
+                </label>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={confirmarRemocao} style={{ flex: 1, padding: 10, background: "#dc3545", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>Confirmar</button>
+              <button onClick={() => setModalRemover(null)} style={{ flex: 1, padding: 10, background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>Cancelar</button>
             </div>
           </div>
         </div>

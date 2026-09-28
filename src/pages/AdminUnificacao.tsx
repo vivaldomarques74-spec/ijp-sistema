@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { collection, getDocs, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 
 export default function AdminUnificacao() {
@@ -21,7 +21,6 @@ export default function AdminUnificacao() {
         if (!cpfMap.has(data.cpf)) cpfMap.set(data.cpf, []);
         cpfMap.get(data.cpf)!.push({ id: doc.id, ...data });
       });
-      // ✅ CORRIGIDO: usa values() para não precisar da chave cpf
       for (const docs of Array.from(cpfMap.values())) {
         if (docs.length <= 1) continue;
         const principal = docs.reduce((a, b) => {
@@ -230,11 +229,96 @@ export default function AdminUnificacao() {
     finally { setCarregando(false); }
   };
 
+  // 8. Listar prontuários antigos (sem tipoId)
+  const handleListarProntuariosAntigos = async () => {
+    if (!confirm("Listar prontuários SEM tipoId para revisar e migrar?")) return;
+    setCarregando(true); setLogs([]);
+    try {
+      const snap = await getDocs(collection(db, "prontuarios"));
+      const antigos: any[] = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (!data.tipoId) antigos.push({ id: d.id, ...data });
+      });
+
+      adicionarLog(`📋 ${antigos.length} prontuários SEM tipoId (antigos)`);
+      adicionarLog(`---`);
+
+      // Agrupar por aluno
+      const porAluno: Record<string, any[]> = {};
+      antigos.forEach(p => {
+        if (!porAluno[p.alunoId]) porAluno[p.alunoId] = [];
+        porAluno[p.alunoId].push(p);
+      });
+
+      for (const [alunoId, pronts] of Object.entries(porAluno)) {
+        const alunoSnap = await getDoc(doc(db, "alunos", alunoId));
+        const nomeAluno = alunoSnap.exists() ? alunoSnap.data().nomeCompleto : "(aluno não encontrado)";
+        adicionarLog(`👤 ${nomeAluno} (${alunoId}): ${pronts.length} evoluções`);
+        for (const p of pronts) {
+          const dataStr = p.data?.toDate?.()?.toLocaleDateString?.() || "?";
+          const preview = (p.texto || "").substring(0, 60).replace(/\n/g, " ");
+          adicionarLog(`   [${p.id}] ${dataStr} — ${preview}...`);
+        }
+      }
+      adicionarLog(`---`);
+      adicionarLog(`⚠️ Para migrar, copie os IDs acima e use os botões "Migrar para PSI" ou "Migrar para NUTRI".`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
+  // 9. Migrar prontuário específico para PSI ou NUTRI
+  const handleMigrarProntuario = async (tipo: "psicologia" | "nutrição") => {
+    const idsStr = prompt(`Cole os IDs dos prontuários (separados por vírgula) para migrar para ${tipo.toUpperCase()}:`);
+    if (!idsStr) return;
+
+    const servSnap = await getDocs(collection(db, "tiposAtendimento"));
+    const servDoc = servSnap.docs.find(d => d.data().nome.toLowerCase().trim() === tipo.toLowerCase());
+    if (!servDoc) return alert(`Tipo "${tipo}" não encontrado em tiposAtendimento`);
+
+    const ids = idsStr.split(",").map(s => s.trim()).filter(Boolean);
+    setCarregando(true); setLogs([]);
+    try {
+      let n = 0;
+      for (const id of ids) {
+        const ref = doc(db, "prontuarios", id);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) { adicionarLog(`⚠️ ${id} não existe`); continue; }
+        await updateDoc(ref, { tipoId: servDoc.id, migradoEm: new Date() });
+        adicionarLog(`✅ ${id} → ${tipo}`);
+        n++;
+      }
+      adicionarLog(`🎉 ${n} prontuários migrados para ${tipo}`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
+  // 10. Deletar prontuários sem tipoId
+  const handleDeletarAntigos = async () => {
+    if (!confirm("⚠️ DELETAR todos os prontuários SEM tipoId? Isso apaga de vez!")) return;
+    if (!confirm("TEM CERTEZA? Não tem como voltar!")) return;
+    setCarregando(true); setLogs([]);
+    try {
+      const snap = await getDocs(collection(db, "prontuarios"));
+      let n = 0;
+      for (const d of snap.docs) {
+        if (!d.data().tipoId) {
+          await deleteDoc(d.ref);
+          n++;
+        }
+      }
+      adicionarLog(`🗑️ ${n} prontuários antigos deletados.`);
+    } catch (e: any) { adicionarLog(`Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
   return (
-    <div style={{ padding: 20, maxWidth: 800, margin: "0 auto" }}>
+    <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ color: "#1a2a4f" }}>Administração</h1>
       <p style={{ color: "#6b7a8f" }}>Ferramentas de manutenção.</p>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+
+      <h3 style={{ fontSize: 14, color: "#6b7a8f", marginTop: 20 }}>Geral</h3>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <button onClick={handleUnificar} disabled={carregando} style={{ padding: "10px 16px", background: "#dc3545", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
           Unificar CPFs
         </button>
@@ -250,6 +334,10 @@ export default function AdminUnificacao() {
         <button onClick={handleCorrigirGrupos} disabled={carregando} style={{ padding: "10px 16px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
           Corrigir Grupos
         </button>
+      </div>
+
+      <h3 style={{ fontSize: 14, color: "#6b7a8f", marginTop: 20 }}>Presenças</h3>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <button onClick={handleCorrigirPresencasDuplicadas} disabled={carregando} style={{ padding: "10px 16px", background: "#fd7e14", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
           🗑️ Corrigir Presenças Duplicadas
         </button>
@@ -257,9 +345,28 @@ export default function AdminUnificacao() {
           🎯 Ajustar Presenças de um Aluno
         </button>
       </div>
+
+      <h3 style={{ fontSize: 14, color: "#6b7a8f", marginTop: 20 }}>Prontuários Antigos (Migração)</h3>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <button onClick={handleListarProntuariosAntigos} disabled={carregando} style={{ padding: "10px 16px", background: "#20c997", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+          📋 Listar Antigos
+        </button>
+        <button onClick={() => handleMigrarProntuario("psicologia")} disabled={carregando} style={{ padding: "10px 16px", background: "#6610f2", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+          🧠 Migrar para PSI
+        </button>
+        <button onClick={() => handleMigrarProntuario("nutrição")} disabled={carregando} style={{ padding: "10px 16px", background: "#fd7e14", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+          🍎 Migrar para NUTRI
+        </button>
+        <button onClick={handleDeletarAntigos} disabled={carregando} style={{ padding: "10px 16px", background: "#000", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+          🗑️ Deletar Antigos
+        </button>
+      </div>
+
       <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, maxHeight: 500, overflow: "auto", border: "1px solid #dee2e6" }}>
         {logs.length === 0 && <span style={{ color: "#6b7a8f" }}>Nenhum log ainda.</span>}
-        {logs.map((log, i) => <div key={i} style={{ fontFamily: "monospace", fontSize: 13, padding: 2 }}>{log}</div>)}
+        {logs.map((log, i) => (
+          <div key={i} style={{ fontFamily: "monospace", fontSize: 12, padding: 2, wordBreak: "break-all" }}>{log}</div>
+        ))}
       </div>
     </div>
   );

@@ -7,7 +7,8 @@ type Evolucao = {
   id: string;
   texto: string;
   data: any;
-  createdAt: any;
+  tipoId?: string;
+  profissionalId?: string;
 };
 
 export default function ProfissionalProntuario() {
@@ -41,19 +42,33 @@ export default function ProfissionalProntuario() {
 
   useEffect(() => {
     const carregar = async () => {
-      if (!alunoId) return;
+      if (!alunoId || !profissional) return;
       const alunoSnap = await getDoc(doc(db, "alunos", alunoId));
       if (alunoSnap.exists()) setAluno(alunoSnap.data());
 
+      // 🔒 SEGURANÇA: só mostra prontuários da MESMA especialidade do profissional
       const snap = await getDocs(collection(db, "prontuarios"));
+      const minhaEspecialidade = profissional.especialidade || "";
+      
       const lista = snap.docs
-        .filter(d => d.data().alunoId === alunoId)
+        .filter(d => {
+          const data = d.data();
+          if (data.alunoId !== alunoId) return false;
+          // Se o prontuário tem tipoId, só mostra se for da minha especialidade
+          if (data.tipoId) {
+            return data.tipoId === minhaEspecialidade;
+          }
+          // Se não tem tipoId (legado), NÃO mostra (protege contra vazamento)
+          return false;
+        })
         .map(d => ({
           id: d.id,
           texto: d.data().texto,
           data: d.data().data,
-          createdAt: d.data().createdAt || d.data().data,
+          tipoId: d.data().tipoId,
+          profissionalId: d.data().profissionalId,
         }));
+
       lista.sort((a, b) => {
         const dateA = a.data?.toDate?.() || new Date(0);
         const dateB = b.data?.toDate?.() || new Date(0);
@@ -62,18 +77,28 @@ export default function ProfissionalProntuario() {
       setEvolucoes(lista);
     };
     carregar();
-  }, [alunoId]);
+  }, [alunoId, profissional]);
 
   const recarregarEvolucoes = async () => {
+    if (!profissional) return;
     const snap = await getDocs(collection(db, "prontuarios"));
+    const minhaEspecialidade = profissional.especialidade || "";
+    
     const lista = snap.docs
-      .filter(d => d.data().alunoId === alunoId)
+      .filter(d => {
+        const data = d.data();
+        if (data.alunoId !== alunoId) return false;
+        if (data.tipoId) return data.tipoId === minhaEspecialidade;
+        return false;
+      })
       .map(d => ({
         id: d.id,
         texto: d.data().texto,
         data: d.data().data,
-        createdAt: d.data().createdAt || d.data().data,
+        tipoId: d.data().tipoId,
+        profissionalId: d.data().profissionalId,
       }));
+
     lista.sort((a, b) => {
       const dateA = a.data?.toDate?.() || new Date(0);
       const dateB = b.data?.toDate?.() || new Date(0);
@@ -83,22 +108,21 @@ export default function ProfissionalProntuario() {
   };
 
   const salvarEvolucao = async () => {
-    if (localStorage.getItem("profissionalAutenticado") !== "true") {
-      alert("Sessão expirada. Faça login novamente.");
-      window.location.href = "/acesso-profissional";
-      return;
-    }
-
     if (!novaEvolucao.trim()) return alert("Digite a evolução");
     if (!alunoId) return alert("Aluno não identificado");
+    if (!profissional) return alert("Profissional não carregado");
     setCarregando(true);
     try {
       const agora = new Date();
+      // 🔒 Salva com tipoId = especialidade, garantindo separação
       await addDoc(collection(db, "prontuarios"), {
         alunoId,
         texto: novaEvolucao,
         data: agora,
         createdAt: agora,
+        tipoId: profissional.especialidade || "",
+        profissionalId: profissional.id,
+        profissionalNome: profissional.nome || "",
       });
       alert("Evolução salva com sucesso");
       setNovaEvolucao("");
@@ -112,13 +136,13 @@ export default function ProfissionalProntuario() {
 
   const excluirEvolucao = async (id: string) => {
     if (!window.confirm("Tem certeza que deseja excluir esta evolução?")) return;
-    if (profissional?.tipo !== "supervisor") {
-      alert("Apenas supervisores podem excluir evoluções.");
+    if (profissional?.tipo !== "supervisor" && profissional?.tipo !== "diretor") {
+      alert("Apenas supervisores/diretores podem excluir evoluções.");
       return;
     }
     try {
       await deleteDoc(doc(db, "prontuarios", id));
-      alert("Evolução excluída com sucesso!");
+      alert("Evolução excluída!");
       recarregarEvolucoes();
     } catch (error: any) {
       alert(`Erro ao excluir: ${error.message}`);
@@ -151,9 +175,14 @@ export default function ProfissionalProntuario() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Prontuário de {aluno.nomeCompleto || "Carregando..."}</h2>
-      {profissional?.tipo === "supervisor" && (
+      {profissional?.especialidade && (
+        <p style={{ color: "#0070f3", fontSize: 14, fontWeight: 600 }}>
+          🔒 Visualizando apenas prontuários de: <strong>{profissional.especialidade === "psicologia" ? "PSICOLOGIA" : profissional.especialidade}</strong>
+        </p>
+      )}
+      {(profissional?.tipo === "supervisor" || profissional?.tipo === "diretor") && (
         <p style={{ color: "#6b7a8f", fontSize: 14 }}>
-          🔑 Modo supervisor - você pode editar e excluir evoluções
+          🔑 Modo {profissional?.tipo} - você pode editar e excluir evoluções
         </p>
       )}
       <div style={{ marginBottom: 20 }}>
@@ -174,7 +203,7 @@ export default function ProfissionalProntuario() {
       </div>
 
       <h3>Histórico de evoluções ({evolucoes.length})</h3>
-      {evolucoes.length === 0 && <p>Nenhuma evolução registrada.</p>}
+      {evolucoes.length === 0 && <p>Nenhuma evolução registrada para esta especialidade.</p>}
       <ul style={{ listStyle: "none", padding: 0 }}>
         {evolucoes.map(ev => (
           <li key={ev.id} style={{ borderBottom: "1px solid #eee", marginBottom: 12, paddingBottom: 8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>
@@ -183,7 +212,7 @@ export default function ProfissionalProntuario() {
                 {ev.data?.toDate?.()?.toLocaleString() || "Data desconhecida"}
               </small>
               <div>
-                {profissional?.tipo === "supervisor" && (
+                {(profissional?.tipo === "supervisor" || profissional?.tipo === "diretor") && (
                   <>
                     {editandoId === ev.id ? (
                       <>
