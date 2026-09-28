@@ -40,8 +40,9 @@ import MatriculasTurma from "./pages/MatriculasTurma";
 import AdminUnificacao from "./pages/AdminUnificacao";
 import AdminRestaurarAlunos from "./pages/AdminRestaurarAlunos";
 
-// 🔥 NOVO
+// NOVAS
 import Atestados from "./pages/Atestados";
+import AdminMigrarProntuarios from "./pages/AdminMigrarProntuarios";
 
 export default function App() {
   return (
@@ -76,7 +77,10 @@ export default function App() {
           <Route path="pacientes" element={<SaudePacientes />} />
           <Route path="configuracoes" element={<SaudeConfiguracoes />} />
         </Route>
+        {/* NOVO */}
         <Route path="/atestados" element={<Atestados />} />
+        <Route path="/admin/migrar-prontuarios" element={<AdminMigrarProntuarios />} />
+
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
         <Route path="/notificacoes" element={<Notificacoes />} />
         <Route path="/relatorio-alunos" element={<RelatorioAlunosTurma />} />

@@ -25,6 +25,7 @@ export default function Layout() {
     { path: "/cursos", label: "Cursos", icon: "📚" },
     { path: "/presenca", label: "Presença", icon: "✅" },
     { path: "/saude", label: "Saúde", icon: "🏥" },
+    { path: "/atestados", label: "Atestados", icon: "📄" },
     { path: "/certificados", label: "Certificados", icon: "📜" },
     { path: "/pre-inscricoes", label: "Pré-inscrições", icon: "📝" },
     { path: "/matriculas-turma", label: "Matrículas", icon: "📋" },
