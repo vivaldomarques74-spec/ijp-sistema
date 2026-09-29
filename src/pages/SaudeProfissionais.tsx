@@ -31,13 +31,25 @@ export default function SaudeProfissionais() {
     setTiposAtendimento(snap.docs.map(d => ({ id: d.id, nome: d.data().nome })));
   };
 
-  const gerarCodigo = (tipo: string) => {
+  // 🔥 Gera código único baseado no MAIOR número existente do prefixo
+  const gerarCodigoUnico = (tipo: string): string => {
     const prefixo =
       tipo === "estagiario" ? "EST" :
       tipo === "supervisor" ? "SUP" :
       tipo === "diretor" ? "DIR" : "PRO";
-    const count = profissionais.filter(p => p.tipo === tipo).length + 1;
-    return `${prefixo}${String(count).padStart(3, "0")}`;
+
+    // Busca todos os códigos existentes com esse prefixo
+    const numeros = profissionais
+      .map(p => p.codigo)
+      .filter((c: string) => c && c.startsWith(prefixo))
+      .map((c: string) => {
+        const num = parseInt(c.replace(prefixo, ""), 10);
+        return isNaN(num) ? 0 : num;
+      });
+
+    const maiorNumero = numeros.length > 0 ? Math.max(...numeros) : 0;
+    const proximo = maiorNumero + 1;
+    return `${prefixo}${String(proximo).padStart(3, "0")}`;
   };
 
   const salvar = async () => {
@@ -54,7 +66,8 @@ export default function SaudeProfissionais() {
       alert("Profissional atualizado");
       setEditandoId(null);
     } else {
-      const codigo = gerarCodigo(form.tipo);
+      // 🔥 Gera código único
+      const codigo = gerarCodigoUnico(form.tipo);
       await addDoc(collection(db, "profissionais"), {
         ...dadosParaSalvar,
         codigo,
