@@ -21,6 +21,8 @@ export default function AdminMigrarProntuarios() {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [carregando, setCarregando] = useState(false);
   const [filtro, setFiltro] = useState<"todos" | "sem" | "com">("sem");
+  const [busca, setBusca] = useState("");
+  const [modal, setModal] = useState<Prontuario | null>(null);
 
   useEffect(() => { carregar(); }, []);
 
@@ -77,8 +79,14 @@ export default function AdminMigrarProntuarios() {
   };
 
   const prontuariosFiltrados = prontuarios.filter(p => {
-    if (filtro === "sem") return !p.tipoId;
-    if (filtro === "com") return !!p.tipoId;
+    if (filtro === "sem" && p.tipoId) return false;
+    if (filtro === "com" && !p.tipoId) return false;
+    if (busca.trim()) {
+      const b = busca.toLowerCase();
+      const match = (p._alunoNome || "").toLowerCase().includes(b) ||
+                    (p.texto || "").toLowerCase().includes(b);
+      if (!match) return false;
+    }
     return true;
   });
 
@@ -103,32 +111,21 @@ export default function AdminMigrarProntuarios() {
     finally { setCarregando(false); }
   };
 
-  const migrarAutomatico = async () => {
-    const semTipo = prontuarios.filter(p => !p.tipoId && p._profEspecialidade);
-    if (semTipo.length === 0) return alert("Nenhum prontuário para migrar automaticamente");
-    if (!confirm(`Migrar ${semTipo.length} prontuários automaticamente baseado em quem escreveu?`)) return;
-
-    setCarregando(true);
-    let ok = 0, erro = 0;
+  const migrarUm = async (id: string, nomeServico: string) => {
+    const serv = servicos.find(s => s.nome.toLowerCase().trim() === nomeServico.toLowerCase());
+    if (!serv) return alert(`Serviço "${nomeServico}" não encontrado`);
     try {
-      for (const p of semTipo) {
-        const serv = servicos.find(s => s.nome.toLowerCase().trim() === p._profEspecialidade?.toLowerCase().trim());
-        if (serv) {
-          await updateDoc(doc(db, "prontuarios", p.id), { tipoId: serv.id, migradoEm: new Date() });
-          ok++;
-        } else erro++;
-      }
-      alert(`✅ ${ok} migrados | ⚠️ ${erro} sem correspondência`);
+      await updateDoc(doc(db, "prontuarios", id), { tipoId: serv.id, migradoEm: new Date() });
+      alert(`✅ Migrado para ${nomeServico}!`);
+      setModal(null);
       carregar();
     } catch (e: any) { alert(e.message); }
-    finally { setCarregando(false); }
   };
 
   const deletarSelecionados = async () => {
     if (selecionados.size === 0) return alert("Selecione pelo menos um");
     if (!confirm(`⚠️ DELETAR ${selecionados.size} prontuários?`)) return;
     if (!confirm("TEM CERTEZA?")) return;
-
     setCarregando(true);
     try {
       for (const id of Array.from(selecionados)) {
@@ -147,13 +144,20 @@ export default function AdminMigrarProntuarios() {
     <div style={{ padding: 20, maxWidth: 1400, margin: "0 auto" }}>
       <h1 style={{ color: "#1a2a4f" }}>Migrar Prontuários Antigos</h1>
       <p style={{ color: "#6b7a8f" }}>
-        Migre prontuários antigos para PSI ou NUTRI. A coluna "Quem escreveu" mostra a especialidade do autor.
+        Clique em <strong>Ver completo</strong> para ler o prontuário e classificar como PSI ou NUTRI.
       </p>
 
+      {/* Busca */}
+      <input
+        type="text"
+        placeholder="🔍 Buscar por nome do paciente ou conteúdo..."
+        value={busca}
+        onChange={e => setBusca(e.target.value)}
+        style={{ width: "100%", maxWidth: 500, padding: 10, border: "1px solid #ccc", borderRadius: 8, marginBottom: 16 }}
+      />
+
+      {/* Botões de ação */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        <button onClick={migrarAutomatico} disabled={carregando} style={{ padding: "10px 16px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
-          ⚡ Migrar Automaticamente
-        </button>
         <button onClick={() => migrarSelecionados("psicologia")} disabled={carregando || selecionados.size === 0} style={{ padding: "10px 16px", background: "#6610f2", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
           🧠 Migrar {selecionados.size} p/ PSI
         </button>
@@ -165,6 +169,7 @@ export default function AdminMigrarProntuarios() {
         </button>
       </div>
 
+      {/* Filtros */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, color: "#6b7a8f" }}>Filtro:</span>
         <button onClick={() => setFiltro("sem")} style={{ padding: "6px 12px", background: filtro === "sem" ? "#0070f3" : "#e9ecef", color: filtro === "sem" ? "#fff" : "#000", border: "none", borderRadius: 6, cursor: "pointer" }}>
@@ -186,17 +191,17 @@ export default function AdminMigrarProntuarios() {
 
       {carregando && <p>Processando...</p>}
 
+      {/* Tabela */}
       <div style={{ overflowX: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ background: "#f8f9fa", borderBottom: "2px solid #dee2e6" }}>
-              <th style={{ padding: 10 }}>☑</th>
+              <th style={{ padding: 10, width: 40 }}>☑</th>
               <th style={{ padding: 10, textAlign: "left" }}>Paciente</th>
-              <th style={{ padding: 10, textAlign: "left" }}>Quem escreveu</th>
-              <th style={{ padding: 10, textAlign: "left" }}>Especialidade</th>
               <th style={{ padding: 10, textAlign: "left" }}>Data</th>
               <th style={{ padding: 10, textAlign: "left" }}>Preview</th>
-              <th style={{ padding: 10, textAlign: "left" }}>Tipo atual</th>
+              <th style={{ padding: 10, textAlign: "left", width: 120 }}>Ações</th>
+              <th style={{ padding: 10, textAlign: "left", width: 130 }}>Tipo atual</th>
             </tr>
           </thead>
           <tbody>
@@ -208,21 +213,19 @@ export default function AdminMigrarProntuarios() {
                     <input type="checkbox" checked={selecionados.has(p.id)} onChange={() => toggleSelecionado(p.id)} />
                   </td>
                   <td style={{ padding: 10, fontWeight: 600 }}>{p._alunoNome}</td>
-                  <td style={{ padding: 10 }}>{p._profNome}</td>
-                  <td style={{ padding: 10 }}>
-                    {p._profEspecialidade ? (
-                      <span style={{
-                        padding: "2px 8px", borderRadius: 10, fontSize: 11,
-                        background: p._profEspecialidade.toLowerCase().includes("psic") ? "#e0d4ff" : "#ffe0cc",
-                        color: "#333",
-                      }}>
-                        {p._profEspecialidade}
-                      </span>
-                    ) : <span style={{ color: "#dc3545", fontSize: 11 }}>⚠️ sem</span>}
-                  </td>
                   <td style={{ padding: 10 }}>{fmtData(p.data)}</td>
-                  <td style={{ padding: 10, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {p.texto?.substring(0, 80)}...
+                  <td style={{ padding: 10, maxWidth: 400 }}>
+                    <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.texto?.substring(0, 150)}
+                    </div>
+                  </td>
+                  <td style={{ padding: 10 }}>
+                    <button
+                      onClick={() => setModal(p)}
+                      style={{ padding: "4px 10px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                    >
+                      👁️ Ver completo
+                    </button>
                   </td>
                   <td style={{ padding: 10 }}>
                     {servAtual ? (
@@ -237,6 +240,59 @@ export default function AdminMigrarProntuarios() {
           </tbody>
         </table>
       </div>
+
+      {/* MODAL */}
+      {modal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 800, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, color: "#1a2a4f" }}>{modal._alunoNome}</h3>
+                <p style={{ margin: "4px 0 0", color: "#6b7a8f", fontSize: 13 }}>
+                  {fmtData(modal.data)}
+                </p>
+              </div>
+              <button onClick={() => setModal(null)} style={{ padding: "6px 12px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, marginBottom: 20, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.6, maxHeight: 400, overflowY: "auto" }}>
+              {modal.texto}
+            </div>
+
+            <div style={{ borderTop: "1px solid #e0e4e8", paddingTop: 16 }}>
+              <p style={{ margin: "0 0 12px", fontWeight: 600, color: "#1a2a4f" }}>Este prontuário é de:</p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => migrarUm(modal.id, "psicologia")}
+                  style={{ flex: 1, minWidth: 160, padding: "14px 20px", background: "#6610f2", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 15, fontWeight: 600 }}
+                >
+                  🧠 PSICOLOGIA
+                </button>
+                <button
+                  onClick={() => migrarUm(modal.id, "nutrição")}
+                  style={{ flex: 1, minWidth: 160, padding: "14px 20px", background: "#fd7e14", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 15, fontWeight: 600 }}
+                >
+                  🍎 NUTRIÇÃO
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm("Deletar este prontuário?")) return;
+                    await deleteDoc(doc(db, "prontuarios", modal.id));
+                    alert("Deletado!");
+                    setModal(null);
+                    carregar();
+                  }}
+                  style={{ padding: "14px 20px", background: "#000", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 15, fontWeight: 600 }}
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

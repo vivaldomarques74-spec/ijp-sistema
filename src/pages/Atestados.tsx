@@ -76,53 +76,162 @@ export default function Atestados() {
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return alert("Permita pop-ups");
+
     const hoje = new Date().toLocaleDateString("pt-BR");
+    const horaEmissao = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const dataFormatada = new Date(form.dia + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+    const codigoAutenticacao = `IJP-${Date.now().toString(36).toUpperCase()}-${(alunoSelecionado.matricula || "").replace(/\D/g, "").slice(-4)}`;
 
     printWindow.document.write(`
       <html>
         <head>
           <title>Atestado - ${alunoSelecionado.nomeCompleto}</title>
           <style>
-            @page { size: A4 portrait; margin: 20mm; }
-            body { font-family: Arial, sans-serif; color: #1a2a4f; padding: 30px; }
-            .header { text-align: center; border-bottom: 2px solid #c9a96e; padding-bottom: 12px; margin-bottom: 24px; }
-            .logo { width: 100px; }
-            h1 { font-size: 22px; margin: 8px 0 4px; letter-spacing: 2px; }
-            .cnpj { font-size: 10px; color: #666; }
-            h2 { text-align: center; font-size: 24px; margin: 30px 0; letter-spacing: 4px; }
-            .conteudo { font-size: 14px; line-height: 1.9; text-align: justify; margin: 20px 0; }
-            .destaque { font-weight: bold; color: #0a1a3a; }
-            .info { margin: 12px 0; font-size: 13px; }
-            .assinatura { margin-top: 80px; text-align: center; }
-            .linha { border-top: 1px solid #333; width: 300px; margin: 0 auto 4px; }
-            .footer { margin-top: 60px; text-align: center; font-size: 10px; color: #888; }
+            @page { size: A4 portrait; margin: 15mm; }
+            * { box-sizing: border-box; }
+            body {
+              font-family: 'Georgia', 'Times New Roman', serif;
+              color: #1a2a4f;
+              margin: 0;
+              padding: 20px;
+              background: #fff;
+            }
+            .container {
+              border: 2px solid #c9a96e;
+              padding: 40px 50px;
+              min-height: 90vh;
+              position: relative;
+              background: #fefdfb;
+            }
+            .container::before {
+              content: "";
+              position: absolute;
+              top: 12px; left: 12px; right: 12px; bottom: 12px;
+              border: 1px solid #c9a96e;
+              pointer-events: none;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 3px double #c9a96e;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .logo {
+              width: 160px;
+              height: auto;
+              margin-bottom: 12px;
+            }
+            h1 {
+              font-family: 'Georgia', serif;
+              font-size: 26px;
+              margin: 8px 0 6px;
+              letter-spacing: 3px;
+              color: #1a2a4f;
+              font-weight: 700;
+            }
+            .cnpj {
+              font-family: 'Georgia', serif;
+              font-size: 13px;
+              color: #666;
+              font-style: italic;
+            }
+            h2 {
+              text-align: center;
+              font-family: 'Georgia', serif;
+              font-size: 42px;
+              margin: 40px 0 30px;
+              letter-spacing: 8px;
+              color: #1a2a4f;
+              font-weight: 700;
+            }
+            .conteudo {
+              font-size: 18px;
+              line-height: 2;
+              text-align: justify;
+              margin: 30px 0;
+              text-indent: 40px;
+            }
+            .destaque {
+              font-weight: 700;
+              color: #0a1a3a;
+            }
+            .info {
+              margin: 30px 0;
+              font-size: 15px;
+              color: #333;
+              font-style: italic;
+            }
+            .assinatura {
+              margin-top: 120px;
+              text-align: center;
+            }
+            .linha {
+              border-top: 2px solid #1a2a4f;
+              width: 350px;
+              margin: 0 auto 8px;
+            }
+            .assinatura-nome {
+              font-size: 20px;
+              font-weight: 700;
+              color: #1a2a4f;
+              font-family: 'Georgia', serif;
+            }
+            .assinatura-funcao {
+              font-size: 15px;
+              color: #555;
+              font-style: italic;
+              margin-top: 4px;
+            }
+            .footer {
+              position: absolute;
+              bottom: 30px;
+              left: 50px;
+              right: 50px;
+              text-align: center;
+              font-size: 11px;
+              color: #999;
+              line-height: 1.6;
+              border-top: 1px solid #d4c5a0;
+              padding-top: 12px;
+            }
+            .footer strong {
+              color: #666;
+            }
           </style>
         </head>
         <body>
-          <div class="header">
-            <img src="/logo-ijp.png" class="logo" />
-            <h1>INSTITUTO JOVENS PERIFÉRICOS</h1>
-            <div class="cnpj">CNPJ 43.248.302/0001-96 - Salvador/Bahia</div>
-          </div>
-          <h2>ATESTADO</h2>
-          <div class="conteudo">
-            Atestamos para os devidos fins que <span class="destaque">${alunoSelecionado.nomeCompleto}</span>,
-            matrícula <span class="destaque">${alunoSelecionado.matricula || "-"}</span>,
-            compareceu nesta instituição no dia <span class="destaque">${new Date(form.dia + "T00:00:00").toLocaleDateString("pt-BR")}</span>,
-            das <span class="destaque">${form.chegada}</span> às <span class="destaque">${form.saida}</span>,
-            para ${form.tipo === "saude" ? "atendimento" : "participação"} no ${descricaoServico}.
-          </div>
-          <div class="info">
-            <strong>Data de emissão:</strong> ${hoje}
-          </div>
-          <div class="assinatura">
-            <div class="linha"></div>
-            <div><strong>${form.assinanteNome}</strong></div>
-            <div style="font-size: 12px; color: #555;">${form.assinanteFuncao}</div>
-          </div>
-          <div class="footer">
-            Instituto Jovens Periféricos • CNPJ 43.248.302/0001-96<br>
-            Documento emitido eletronicamente
+          <div class="container">
+            <div class="header">
+              <img src="/logo-ijp.png" class="logo" />
+              <h1>INSTITUTO JOVENS PERIFÉRICOS</h1>
+              <div class="cnpj">CNPJ 43.248.302/0001-96 &bull; Salvador/Bahia</div>
+            </div>
+
+            <h2>ATESTADO</h2>
+
+            <div class="conteudo">
+              Atestamos para os devidos fins que <span class="destaque">${alunoSelecionado.nomeCompleto}</span>,
+              matrícula <span class="destaque">${alunoSelecionado.matricula || "-"}</span>,
+              compareceu nesta instituição no dia <span class="destaque">${dataFormatada}</span>,
+              no horário das <span class="destaque">${form.chegada}</span> às <span class="destaque">${form.saida}</span>,
+              para ${form.tipo === "saude" ? "atendimento no" : "participação no"} <span class="destaque">${descricaoServico}</span>.
+            </div>
+
+            <div class="info">
+              <strong>Emitido em:</strong> ${hoje} às ${horaEmissao}
+            </div>
+
+            <div class="assinatura">
+              <div class="linha"></div>
+              <div class="assinatura-nome">${form.assinanteNome}</div>
+              <div class="assinatura-funcao">${form.assinanteFuncao}</div>
+            </div>
+
+            <div class="footer">
+              <strong>Instituto Jovens Periféricos</strong> &bull; CNPJ 43.248.302/0001-96<br>
+              Documento emitido eletronicamente pelo sistema do Instituto Jovens Periféricos<br>
+              em ${hoje} às ${horaEmissao} &bull; Código de autenticação: <strong>${codigoAutenticacao}</strong>
+            </div>
           </div>
         </body>
       </html>
