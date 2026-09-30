@@ -23,9 +23,8 @@ export default function AlunosEditar() {
   const [novoServicoId, setNovoServicoId] = useState("");
   const [novaSenhaId, setNovaSenhaId] = useState("");
 
-  // Validação de CPF
   const [cpfStatus, setCpfStatus] = useState({ mensagem: "", existe: false, verificando: false });
-  const cpfTimeoutRef = useRef<number | null>(null); // Correção: usar number
+  const cpfTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     carregarDados();
@@ -56,7 +55,18 @@ export default function AlunosEditar() {
     if (!novoCursoId) { setTurmas([]); setNovaTurmaId(""); return; }
     const carregarTurmas = async () => {
       const snap = await getDocs(collection(db, "cursos", novoCursoId, "turmas"));
-      setTurmas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // ✅ Calcula vagas em tempo real
+      setTurmas(snap.docs.map(d => {
+        const data = d.data();
+        const alunos = data.alunos || [];
+        const capacidade =
+          data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
+        return {
+          id: d.id,
+          ...data,
+          vagasDisponiveis: Math.max(0, capacidade - alunos.length),
+        };
+      }));
     };
     carregarTurmas();
   }, [novoCursoId]);
@@ -71,7 +81,6 @@ export default function AlunosEditar() {
     carregarSenhas();
   }, [novoServicoId]);
 
-  // Validação de CPF com debounce
   useEffect(() => {
     const cpf = dadosAluno.cpf.replace(/\D/g, "");
     if (cpf.length !== 11) {
@@ -108,11 +117,18 @@ export default function AlunosEditar() {
       await runTransaction(db, async (transaction) => {
         const turmaSnap = await transaction.get(turmaRef);
         if (!turmaSnap.exists()) throw new Error("Turma não existe");
-        const vagas = turmaSnap.data().vagasDisponiveis ?? 0;
+
+        const turmaData = turmaSnap.data();
+        const alunosAtuais = turmaData.alunos || [];
+        const capacidadeTotal =
+          turmaData.vagasTotais || turmaData.totalVagas || turmaData.vagas || turmaData.capacidade || 0;
+        const vagas = Math.max(0, capacidadeTotal - alunosAtuais.length);
         if (vagas <= 0) throw new Error("Sem vagas");
+
+        // ✅ Só adiciona ao array
         transaction.update(turmaRef, {
           alunos: arrayUnion(id),
-          vagasDisponiveis: vagas - 1,
+          vagasTotais: capacidadeTotal,
         });
       });
       const novosCursos = [...dadosAluno.cursos, { cursoId: novoCursoId, turmaId: novaTurmaId, data: new Date() }];
@@ -272,7 +288,7 @@ export default function AlunosEditar() {
           </select>
           <select value={novaTurmaId} onChange={e => setNovaTurmaId(e.target.value)} disabled={!novoCursoId} style={inputStyle}>
             <option value="">Turma</option>
-            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome} (vagas: {t.vagasDisponiveis})</option>)}
           </select>
           <button onClick={adicionarCurso} style={buttonStyle("secondary")}>Adicionar Curso</button>
           <div style={{ marginTop: 8, fontSize: 13, color: "#6b7a8f" }}>

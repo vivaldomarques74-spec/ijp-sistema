@@ -52,22 +52,32 @@ export async function salvarAluno({
     }
   }
 
-  // Vincular à turma do curso (se houver)
+  // Vincula à turma (se houver) — ✅ SÓ adiciona ao array, NÃO mexe em vagasDisponiveis
   if (dadosAluno.cursoAtualId && dadosAluno.turmaAtualId) {
     const turmaRef = doc(db, "cursos", dadosAluno.cursoAtualId, "turmas", dadosAluno.turmaAtualId);
     await runTransaction(db, async (transaction) => {
       const turmaSnap = await transaction.get(turmaRef);
       if (!turmaSnap.exists()) throw new Error("Turma não encontrada");
-      const vagas = turmaSnap.data().vagasDisponiveis ?? 0;
-      if (vagas <= 0) throw new Error("Sem vagas disponíveis");
+
+      const turmaData = turmaSnap.data();
+      const alunosAtuais = turmaData.alunos || [];
+      const capacidadeTotal =
+        turmaData.vagasTotais ||
+        turmaData.totalVagas ||
+        turmaData.vagas ||
+        turmaData.capacidade ||
+        0;
+      const vagasDisponiveis = Math.max(0, capacidadeTotal - alunosAtuais.length);
+      if (vagasDisponiveis <= 0) throw new Error("Sem vagas disponíveis");
+
       transaction.update(turmaRef, {
         alunos: arrayUnion(alunoRef.id),
-        vagasDisponiveis: vagas - 1,
+        vagasTotais: capacidadeTotal, // garante que o campo existe
       });
     });
   }
 
-  // Adicionar aluno à fila de espera para cada serviço marcado
+  // Adicionar à fila de espera (se houver serviços)
   if (dadosAluno.servicosAtivos && dadosAluno.servicosAtivos.length > 0) {
     for (const servico of dadosAluno.servicosAtivos) {
       const filaQuery = query(

@@ -18,9 +18,8 @@ export default function AlunosCadastrar() {
   const [tiposAtendimento, setTiposAtendimento] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
 
-  // Estado para validação de CPF
   const [cpfStatus, setCpfStatus] = useState({ mensagem: "", existe: false, verificando: false });
-  const cpfTimeoutRef = useRef<number | null>(null); // Correção: usar number em vez de NodeJS.Timeout
+  const cpfTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const carregarCursos = async () => {
@@ -40,12 +39,23 @@ export default function AlunosCadastrar() {
     if (!dadosAluno.cursoAtualId) { setTurmas([]); return; }
     const carregarTurmas = async () => {
       const snap = await getDocs(collection(db, "cursos", dadosAluno.cursoAtualId, "turmas"));
-      setTurmas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // ✅ Calcula vagas em tempo real
+      setTurmas(snap.docs.map(d => {
+        const data = d.data();
+        const alunos = data.alunos || [];
+        const capacidadeTotal =
+          data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
+        return {
+          id: d.id,
+          ...data,
+          vagasTotais: capacidadeTotal,
+          vagasDisponiveis: Math.max(0, capacidadeTotal - alunos.length),
+        };
+      }));
     };
     carregarTurmas();
   }, [dadosAluno.cursoAtualId]);
 
-  // Efeito para verificar CPF com debounce
   useEffect(() => {
     const cpf = dadosAluno.cpf.replace(/\D/g, "");
     if (cpf.length !== 11) {
@@ -113,11 +123,12 @@ export default function AlunosCadastrar() {
 
   const inputStyle = { width: "100%", padding: 8, border: "1px solid #ccc", borderRadius: 8, marginBottom: 8 };
 
+  const turmaSelecionada = turmas.find(t => t.id === dadosAluno.turmaAtualId);
+
   return (
     <div style={{ maxWidth: 700, margin: "0 auto" }}>
       <h2 style={{ fontSize: 20, color: "#1a2a4f" }}>Novo Aluno</h2>
 
-      {/* Card principal com campos básicos */}
       <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <input placeholder="Nome completo" name="nomeCompleto" value={dadosAluno.nomeCompleto} onChange={handleChange} style={inputStyle} />
@@ -149,7 +160,6 @@ export default function AlunosCadastrar() {
         </button>
       </div>
 
-      {/* Cards lado a lado: Curso e Serviços */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <h4 style={{ margin: "0 0 12px" }}>Curso (opcional)</h4>
@@ -159,8 +169,17 @@ export default function AlunosCadastrar() {
           </select>
           <select name="turmaAtualId" value={dadosAluno.turmaAtualId} onChange={handleChange} disabled={!dadosAluno.cursoAtualId} style={inputStyle}>
             <option value="">Turma</option>
-            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            {turmas.map(t => (
+              <option key={t.id} value={t.id} disabled={t.vagasDisponiveis <= 0}>
+                {t.nome} (vagas: {t.vagasDisponiveis})
+              </option>
+            ))}
           </select>
+          {turmaSelecionada && turmaSelecionada.vagasDisponiveis <= 0 && (
+            <p style={{ color: "#dc3545", fontSize: 12, margin: "4px 0 0" }}>
+              ⚠️ Esta turma está sem vagas
+            </p>
+          )}
         </div>
 
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>

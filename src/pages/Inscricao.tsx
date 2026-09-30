@@ -6,7 +6,11 @@ import { db } from "../services/firebase";
 interface TurmaData {
   id: string;
   nome: string;
-  vagasDisponiveis: number;
+  alunos?: string[];
+  vagasTotais?: number;
+  totalVagas?: number;
+  vagas?: number;
+  capacidade?: number;
 }
 
 interface CursoData {
@@ -69,7 +73,16 @@ export default function Inscricao() {
 
         setCurso(cursoEncontrado);
         setTurma(turmaEncontrada);
-        setVagasDisponiveis(turmaEncontrada.vagasDisponiveis || 0);
+
+        // ✅ CALCULA VAGAS EM TEMPO REAL
+        const alunos = turmaEncontrada.alunos || [];
+        const capacidade =
+          turmaEncontrada.vagasTotais ||
+          turmaEncontrada.totalVagas ||
+          turmaEncontrada.vagas ||
+          turmaEncontrada.capacidade ||
+          0;
+        setVagasDisponiveis(Math.max(0, capacidade - alunos.length));
       } catch (error) {
         console.error(error);
         setErro("Erro ao carregar dados.");
@@ -121,7 +134,6 @@ export default function Inscricao() {
         createdAt: new Date(),
       });
       setSucesso(true);
-      // ✅ NÃO redireciona mais para "/" — permanece na tela de sucesso
     } catch (error) {
       console.error(error);
       alert("Erro ao realizar inscrição. Tente novamente.");

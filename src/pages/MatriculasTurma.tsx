@@ -22,7 +22,20 @@ export default function MatriculasTurma() {
     if (!cursoId) { setTurmas([]); setTurmaId(""); setAlunos([]); return; }
     const carregarTurmas = async () => {
       const snap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
-      setTurmas(snap.docs.map(d => ({ id: d.id, nome: d.data().nome, alunos: d.data().alunos || [] })));
+      // ✅ Calcula vagas em tempo real
+      setTurmas(snap.docs.map(d => {
+        const data = d.data();
+        const alunosArr = data.alunos || [];
+        const capacidade =
+          data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
+        return {
+          id: d.id,
+          nome: data.nome,
+          alunos: alunosArr,
+          vagasTotais: capacidade,
+          vagasDisponiveis: Math.max(0, capacidade - alunosArr.length),
+        };
+      }));
     };
     carregarTurmas();
   }, [cursoId]);
@@ -32,7 +45,11 @@ export default function MatriculasTurma() {
     const carregarAlunos = async () => {
       setCarregando(true);
       const turma = turmas.find(t => t.id === turmaId);
-      if (!turma || !turma.alunos || turma.alunos.length === 0) { setAlunos([]); setCarregando(false); return; }
+      if (!turma || !turma.alunos || turma.alunos.length === 0) {
+        setAlunos([]);
+        setCarregando(false);
+        return;
+      }
       const alunosSnap = await getDocs(collection(db, "alunos"));
       const lista = alunosSnap.docs
         .filter(d => turma.alunos.includes(d.id))
@@ -40,14 +57,14 @@ export default function MatriculasTurma() {
           id: d.id,
           nome: d.data().nomeCompleto,
           matricula: d.data().matricula,
-          telefone: d.data().telefone || "" // 🔥 ADICIONADO TELEFONE
+          telefone: d.data().telefone || "",
         }));
       lista.sort((a, b) => a.nome.localeCompare(b.nome));
       setAlunos(lista);
       setCarregando(false);
     };
     carregarAlunos();
-  }, [cursoId, turmaId]);
+  }, [cursoId, turmaId, turmas]);
 
   const removerAluno = async (alunoId: string, nome: string) => {
     if (!window.confirm(`Remover ${nome} desta turma?`)) return;
@@ -56,15 +73,15 @@ export default function MatriculasTurma() {
       await runTransaction(db, async (transaction) => {
         const snap = await transaction.get(turmaRef);
         if (!snap.exists()) throw new Error("Turma não existe");
-        const vagas = snap.data().vagasDisponiveis ?? 0;
         const alunosArr = snap.data().alunos || [];
         if (!alunosArr.includes(alunoId)) throw new Error("Aluno não está na turma");
+        // ✅ Só remove do array. Não mexe em vagasDisponiveis.
         transaction.update(turmaRef, {
           alunos: arrayRemove(alunoId),
-          vagasDisponiveis: vagas + 1,
         });
       });
-      // Remover curso do aluno
+
+      // Remove curso do aluno
       const alunoRef = doc(db, "alunos", alunoId);
       const alunoSnap = await getDoc(alunoRef);
       if (alunoSnap.exists()) {
@@ -72,8 +89,24 @@ export default function MatriculasTurma() {
         const novosCursos = cursosAluno.filter((c: any) => c.turmaId !== turmaId);
         await updateDoc(alunoRef, { cursos: novosCursos });
       }
+
       alert("Aluno removido com sucesso!");
       setAlunos(prev => prev.filter(a => a.id !== alunoId));
+      // Recarrega turmas para atualizar contagem
+      const snap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
+      setTurmas(snap.docs.map(d => {
+        const data = d.data();
+        const alunosArr = data.alunos || [];
+        const capacidade =
+          data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
+        return {
+          id: d.id,
+          nome: data.nome,
+          alunos: alunosArr,
+          vagasTotais: capacidade,
+          vagasDisponiveis: Math.max(0, capacidade - alunosArr.length),
+        };
+      }));
     } catch (error: any) {
       alert("Erro ao remover: " + error.message);
     }
@@ -115,7 +148,7 @@ export default function MatriculasTurma() {
               <tr>
                 <th style="width: 40px;">Nº</th>
                 <th>Nome do Aluno</th>
-                <th>Telefone</th> <!-- 🔥 ADICIONADO -->
+                <th>Telefone</th>
                 <th class="assinatura">Assinatura</th>
               </tr>
             </thead>
@@ -124,7 +157,7 @@ export default function MatriculasTurma() {
                 <tr>
                   <td style="text-align: center;">${i + 1}</td>
                   <td>${a.nome}</td>
-                  <td>${a.telefone || ''}</td> <!-- 🔥 ADICIONADO -->
+                  <td>${a.telefone || ''}</td>
                   <td class="assinatura"><div class="assinatura-linha"></div></td>
                 </tr>
               `).join("")}
@@ -145,6 +178,8 @@ export default function MatriculasTurma() {
     printWindow.print();
   };
 
+  const turmaAtual = turmas.find(t => t.id === turmaId);
+
   const selectStyle = { padding: 8, border: "1px solid #ccc", borderRadius: 8, background: "#fff", marginRight: 8 };
   const buttonStyle = { padding: "4px 12px", border: "none", borderRadius: 4, cursor: "pointer", marginRight: 4 };
   const buttonDanger = { ...buttonStyle, background: "#dc3545", color: "#fff" };
@@ -164,10 +199,16 @@ export default function MatriculasTurma() {
         </select>
       </div>
 
-      {turmaId && (
+      {turmaId && turmaAtual && (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p style={{ margin: 0 }}>Total: <strong>{alunos.length}</strong> alunos</p>
+            <p style={{ margin: 0 }}>
+              Total: <strong>{alunos.length}</strong> alunos •
+              Capacidade: <strong>{turmaAtual.vagasTotais}</strong> •
+              Vagas: <strong style={{ color: turmaAtual.vagasDisponiveis > 0 ? "#28a745" : "#dc3545" }}>
+                {turmaAtual.vagasDisponiveis}
+              </strong>
+            </p>
             <div>
               <button onClick={imprimirLista} style={{ ...buttonPrint, marginRight: 8 }}>🖨️ Imprimir lista</button>
             </div>
@@ -180,7 +221,7 @@ export default function MatriculasTurma() {
                 <tr style={{ borderBottom: "1px solid #e0e4e8" }}>
                   <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Nome</th>
                   <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Matrícula</th>
-                  <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Telefone</th> {/* 🔥 ADICIONADO */}
+                  <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Telefone</th>
                   <th style={{ padding: 12, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>Ações</th>
                 </tr>
               </thead>
@@ -189,7 +230,7 @@ export default function MatriculasTurma() {
                   <tr key={a.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
                     <td style={{ padding: 12 }}>{a.nome}</td>
                     <td style={{ padding: 12 }}>{a.matricula}</td>
-                    <td style={{ padding: 12 }}>{a.telefone || "-"}</td> {/* 🔥 ADICIONADO */}
+                    <td style={{ padding: 12 }}>{a.telefone}</td>
                     <td style={{ padding: 12 }}>
                       <button onClick={() => removerAluno(a.id, a.nome)} style={buttonDanger}>Remover</button>
                     </td>

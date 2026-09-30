@@ -269,52 +269,39 @@ export default function AdminUnificacao() {
     finally { setCarregando(false); }
   };
 
-  // 11. 🔥 NOVO: Corrigir códigos de profissionais duplicados
+  // 11. Corrigir códigos de profissionais duplicados
   const handleCorrigirCodigosProfissionais = async () => {
     if (!confirm("Detectar e corrigir códigos duplicados de profissionais?")) return;
     setCarregando(true); setLogs([]);
     try {
       const snap = await getDocs(collection(db, "profissionais"));
       const todos = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-
       const porCodigo = new Map<string, any[]>();
       todos.forEach(p => {
         const c = p.codigo || "(sem código)";
         if (!porCodigo.has(c)) porCodigo.set(c, []);
         porCodigo.get(c)!.push(p);
       });
-
       const duplicados = Array.from(porCodigo.entries()).filter(([_, arr]) => arr.length > 1);
-
       if (duplicados.length === 0) {
         adicionarLog("✅ Nenhum código duplicado encontrado.");
         return;
       }
-
       adicionarLog(`⚠️ ${duplicados.length} código(s) com duplicata:`);
       duplicados.forEach(([codigo, arr]) => {
         adicionarLog(`   ${codigo}: ${arr.length}x`);
         arr.forEach(p => adicionarLog(`      - ${p.nome} (ID: ${p.id})`));
       });
       adicionarLog("---");
-      adicionarLog("🔧 Corrigindo...");
-
-      const calcularProximo = (prefixo: string, todosAtuais: any[]) => {
-        const numeros = todosAtuais
-          .map(p => p.codigo)
-          .filter((c: string) => c && c.startsWith(prefixo))
-          .map((c: string) => parseInt(c.replace(prefixo, ""), 10))
-          .filter(n => !isNaN(n));
-        return numeros.length > 0 ? Math.max(...numeros) + 1 : 1;
+      const calcularProximo = (prefixo: string) => {
+        const nums = todos.map(p => p.codigo).filter((c: string) => c && c.startsWith(prefixo))
+          .map((c: string) => parseInt(c.replace(prefixo, ""), 10)).filter(n => !isNaN(n));
+        return nums.length > 0 ? Math.max(...nums) + 1 : 1;
       };
-
       const contadores: Record<string, number> = {
-        EST: calcularProximo("EST", todos),
-        PRO: calcularProximo("PRO", todos),
-        SUP: calcularProximo("SUP", todos),
-        DIR: calcularProximo("DIR", todos),
+        EST: calcularProximo("EST"), PRO: calcularProximo("PRO"),
+        SUP: calcularProximo("SUP"), DIR: calcularProximo("DIR"),
       };
-
       const getPrefixo = (codigo: string) => {
         if (codigo?.startsWith("EST")) return "EST";
         if (codigo?.startsWith("PRO")) return "PRO";
@@ -322,7 +309,6 @@ export default function AdminUnificacao() {
         if (codigo?.startsWith("DIR")) return "DIR";
         return "PRO";
       };
-
       let corrigidos = 0;
       for (const [codigo, arr] of duplicados) {
         arr.sort((a, b) => {
@@ -330,26 +316,73 @@ export default function AdminUnificacao() {
           const db_ = b.createdAt?.toDate?.() || new Date(0);
           return da - db_;
         });
-
         const manter = arr[0];
-        const renomear = arr.slice(1);
-
         adicionarLog(`✅ ${manter.nome} mantém ${codigo}`);
-
-        for (const p of renomear) {
+        for (const p of arr.slice(1)) {
           const prefixo = getPrefixo(codigo);
-          const novoNumero = contadores[prefixo];
-          const novoCodigo = `${prefixo}${String(novoNumero).padStart(3, "0")}`;
+          const novoCodigo = `${prefixo}${String(contadores[prefixo]).padStart(3, "0")}`;
           contadores[prefixo]++;
-
           await updateDoc(doc(db, "profissionais", p.id), { codigo: novoCodigo });
           adicionarLog(`   🔀 ${p.nome}: ${codigo} → ${novoCodigo}`);
           corrigidos++;
         }
       }
-
-      adicionarLog("---");
       adicionarLog(`🎉 TOTAL: ${corrigidos} profissionais renomeados.`);
+    } catch (e: any) { adicionarLog(`❌ Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
+  // 12. 🔥 CORRIGIR VAGAS DE TURMAS
+  const handleCorrigirVagasTurmas = async () => {
+    if (!confirm("Recalcular as vagas disponíveis de TODAS as turmas baseado no total de alunos matriculados?")) return;
+    setCarregando(true); setLogs([]);
+    try {
+      const cursosSnap = await getDocs(collection(db, "cursos"));
+      let totalCorrigidas = 0;
+      let totalTurmas = 0;
+      let totalCurso = 0;
+
+      for (const cursoDoc of cursosSnap.docs) {
+        const cursoNome = cursoDoc.data().nome || cursoDoc.id;
+        const turmasSnap = await getDocs(collection(db, "cursos", cursoDoc.id, "turmas"));
+        let cursoCorrigidas = 0;
+
+        for (const turmaDoc of turmasSnap.docs) {
+          totalTurmas++;
+          const data = turmaDoc.data();
+          const alunos = data.alunos || [];
+          const totalAlunos = alunos.length;
+
+          // Tenta descobrir a capacidade total (usa vários nomes possíveis)
+          const capacidadeTotal =
+            data.vagasTotais ||
+            data.totalVagas ||
+            data.vagas ||
+            data.capacidade ||
+            (data.vagasDisponiveis || 0) + totalAlunos;
+
+          const vagasCorretas = Math.max(0, capacidadeTotal - totalAlunos);
+          const vagasAtuais = data.vagasDisponiveis || 0;
+
+          if (vagasAtuais !== vagasCorretas) {
+            await updateDoc(doc(db, "cursos", cursoDoc.id, "turmas", turmaDoc.id), {
+              vagasDisponiveis: vagasCorretas,
+              vagasTotais: capacidadeTotal,
+            });
+            adicionarLog(`✅ [${cursoNome}] ${data.nome}: ${vagasAtuais} → ${vagasCorretas} (Total: ${capacidadeTotal}, Alunos: ${totalAlunos})`);
+            totalCorrigidas++;
+            cursoCorrigidas++;
+          }
+        }
+
+        if (cursoCorrigidas > 0) {
+          adicionarLog(`   → ${cursoNome}: ${cursoCorrigidas} turma(s) corrigida(s)`);
+          totalCurso++;
+        }
+      }
+
+      adicionarLog(`---`);
+      adicionarLog(`🎉 ${totalCorrigidas} turmas corrigidas em ${totalCurso} cursos (total geral: ${totalTurmas} turmas).`);
     } catch (e: any) {
       adicionarLog(`❌ Erro: ${e.message}`);
     } finally {
@@ -369,6 +402,7 @@ export default function AdminUnificacao() {
         <button onClick={handleCorrigirCpfs} disabled={carregando} style={{ padding: "10px 16px", background: "#ffc107", color: "#000", border: "none", borderRadius: 8, cursor: "pointer" }}>Corrigir CPFs</button>
         <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 16px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Padronizar Tudo</button>
         <button onClick={handleCorrigirGrupos} disabled={carregando} style={{ padding: "10px 16px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Corrigir Grupos</button>
+        <button onClick={handleCorrigirVagasTurmas} disabled={carregando} style={{ padding: "10px 16px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>🎫 Corrigir Vagas de Turmas</button>
       </div>
 
       <h3 style={{ fontSize: 14, color: "#6b7a8f", marginTop: 20 }}>Profissionais</h3>

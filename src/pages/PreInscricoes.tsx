@@ -33,7 +33,22 @@ export default function PreInscricoes() {
     const map: Record<string, any[]> = {};
     for (const curso of cursosData) {
       const turmasSnap = await getDocs(collection(db, "cursos", curso.id, "turmas"));
-      map[curso.id] = turmasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // ✅ CALCULA VAGAS EM TEMPO REAL
+      map[curso.id] = turmasSnap.docs.map(d => {
+        const data = d.data();
+        const alunos = data.alunos || [];
+        const capacidadeTotal =
+          data.vagasTotais ||
+          data.totalVagas ||
+          data.vagas ||
+          data.capacidade ||
+          0;
+        return {
+          id: d.id,
+          ...data,
+          vagasDisponiveis: Math.max(0, capacidadeTotal - alunos.length),
+        };
+      });
     }
     setTurmasMap(map);
     setCarregando(false);
@@ -47,7 +62,6 @@ export default function PreInscricoes() {
 
     try {
       await runTransaction(db, async (transaction) => {
-        // 1. LER todos os documentos necessários primeiro
         const inscRef = doc(db, "inscricoes", inscricao.id);
         const contadorRef = doc(db, "contadores", "matricula");
         const turmaRef = doc(db, "cursos", inscricao.cursoId, "turmas", turmaId);
@@ -64,14 +78,22 @@ export default function PreInscricoes() {
 
         const novoNumero = (contadorSnap.data()?.valor || 0) + 1;
         const matricula = `IJP-${String(novoNumero).padStart(5, "0")}`;
-        const vagasDisponiveis = turmaSnap.data().vagasDisponiveis || 0;
+
+        // ✅ RECALCULA vagas dentro da transação
+        const turmaData = turmaSnap.data();
+        const alunosAtuais = turmaData.alunos || [];
+        const capacidadeTotal =
+          turmaData.vagasTotais ||
+          turmaData.totalVagas ||
+          turmaData.vagas ||
+          turmaData.capacidade ||
+          0;
+        const vagasDisponiveis = Math.max(0, capacidadeTotal - alunosAtuais.length);
         if (vagasDisponiveis <= 0) throw new Error("Vagas esgotadas");
 
-        // 2. AGORA escrever (atualizações)
         transaction.update(inscRef, { status: "aprovado", aprovadoEm: Timestamp.now(), turmaId });
         transaction.update(contadorRef, { valor: novoNumero });
 
-        // Criar aluno
         const alunoRef = doc(db, "alunos", inscricao.id);
         transaction.set(alunoRef, {
           nomeCompleto: inscricao.nomeCompleto,
@@ -89,11 +111,10 @@ export default function PreInscricoes() {
           cursos: [{ cursoId: inscricao.cursoId, turmaId: turmaId, data: Timestamp.now() }],
         });
 
-        // Atualizar turma (diminuir vagas)
-        const alunosAtuais = turmaSnap.data().alunos || [];
+        // ✅ Só adiciona ao array — NÃO mexe em vagasDisponiveis
         transaction.update(turmaRef, {
-          vagasDisponiveis: vagasDisponiveis - 1,
           alunos: [...alunosAtuais, alunoRef.id],
+          vagasTotais: capacidadeTotal, // garante que o campo existe
         });
       });
       alert("Aluno aprovado e matrícula gerada!");
