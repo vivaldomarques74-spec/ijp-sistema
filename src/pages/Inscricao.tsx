@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
 
@@ -17,7 +17,6 @@ interface CursoData {
 export default function Inscricao() {
   const [searchParams] = useSearchParams();
   const turmaId = searchParams.get("turmaId");
-  const navigate = useNavigate();
 
   const [curso, setCurso] = useState<CursoData | null>(null);
   const [turma, setTurma] = useState<TurmaData | null>(null);
@@ -122,28 +121,44 @@ export default function Inscricao() {
         createdAt: new Date(),
       });
       setSucesso(true);
-      setTimeout(() => navigate("/"), 5000);
+      // ✅ NÃO redireciona mais para "/" — permanece na tela de sucesso
     } catch (error) {
       console.error(error);
       alert("Erro ao realizar inscrição. Tente novamente.");
     }
   };
 
-  if (carregando) return <div style={{ padding: 20 }}>Carregando...</div>;
-  if (erro) return <div style={{ padding: 20, color: "red" }}>{erro}</div>;
+  if (carregando) return <div style={{ padding: 20, textAlign: "center" }}>Carregando...</div>;
+  if (erro) return <div style={{ padding: 20, color: "red", textAlign: "center" }}>{erro}</div>;
+
   if (vagasDisponiveis <= 0) {
     return (
-      <div style={{ padding: 20, textAlign: "center" }}>
-        <h2>Vagas encerradas</h2>
-        <p>As vagas para este curso foram preenchidas.</p>
+      <div style={{ maxWidth: 600, margin: "80px auto", padding: 40, textAlign: "center", background: "#fff", borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+        <div style={{ fontSize: 60, marginBottom: 16 }}>😢</div>
+        <h2 style={{ color: "#1a2a4f" }}>Vagas encerradas</h2>
+        <p style={{ color: "#6b7a8f" }}>As vagas para este curso foram preenchidas.</p>
       </div>
     );
   }
+
   if (sucesso) {
     return (
-      <div style={{ padding: 20, textAlign: "center" }}>
-        <h2>Inscrição realizada com sucesso!</h2>
-        <p>Aguarde a aprovação da coordenação.</p>
+      <div style={{ maxWidth: 600, margin: "80px auto", padding: 40, textAlign: "center", background: "#fff", borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+        <div style={{ fontSize: 60, marginBottom: 16 }}>✅</div>
+        <h2 style={{ color: "#28a745", margin: "0 0 12px" }}>Inscrição realizada!</h2>
+        <p style={{ color: "#4a5a6f", fontSize: 15, lineHeight: 1.6 }}>
+          Sua inscrição foi enviada com sucesso.
+          <br />
+          Aguarde a aprovação da coordenação.
+        </p>
+        <div style={{ background: "#f8f9fa", padding: 16, borderRadius: 8, marginTop: 24, textAlign: "left", fontSize: 13, color: "#6b7a8f" }}>
+          <p style={{ margin: 0 }}><strong>Nome:</strong> {form.nomeCompleto}</p>
+          <p style={{ margin: "4px 0 0" }}><strong>Curso:</strong> {curso?.nome}</p>
+          <p style={{ margin: "4px 0 0" }}><strong>Turma:</strong> {turma?.nome}</p>
+        </div>
+        <p style={{ color: "#6b7a8f", fontSize: 13, marginTop: 24 }}>
+          Você pode fechar esta página.
+        </p>
       </div>
     );
   }

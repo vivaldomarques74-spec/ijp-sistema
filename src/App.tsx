@@ -40,25 +40,30 @@ import MatriculasTurma from "./pages/MatriculasTurma";
 import AdminUnificacao from "./pages/AdminUnificacao";
 import AdminRestaurarAlunos from "./pages/AdminRestaurarAlunos";
 
-// NOVAS
 import Atestados from "./pages/Atestados";
+import ValidarAtestado from "./pages/ValidarAtestado";
 import AdminMigrarProntuarios from "./pages/AdminMigrarProntuarios";
 
 export default function App() {
   return (
     <Routes>
+      {/* ============ ROTAS PÚBLICAS (sem login) ============ */}
       <Route path="/login" element={<Login />} />
       <Route path="/acesso-profissional" element={<LoginProfissional />} />
       <Route path="/cadastrar-senha" element={<CadastrarSenhaProfissional />} />
       <Route path="/presenca-professor" element={<PresencaProfessor />} />
       <Route path="/inscricao" element={<Inscricao />} />
+      <Route path="/validar" element={<ValidarAtestado />} />
+      <Route path="/validar/:codigo" element={<ValidarAtestado />} />
 
+      {/* ============ ÁREA DO PROFISSIONAL ============ */}
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
         <Route path="agenda" element={<ProfissionalAgenda />} />
         <Route path="paciente/:alunoId" element={<ProfissionalProntuario />} />
         <Route path="pacientes" element={<ProfissionalPacientes />} />
       </Route>
 
+      {/* ============ ROTAS ADMINISTRATIVAS (com login) ============ */}
       <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/alunos" element={<AlunosLista />} />
@@ -77,10 +82,8 @@ export default function App() {
           <Route path="pacientes" element={<SaudePacientes />} />
           <Route path="configuracoes" element={<SaudeConfiguracoes />} />
         </Route>
-        {/* NOVO */}
         <Route path="/atestados" element={<Atestados />} />
         <Route path="/admin/migrar-prontuarios" element={<AdminMigrarProntuarios />} />
-
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
         <Route path="/notificacoes" element={<Notificacoes />} />
         <Route path="/relatorio-alunos" element={<RelatorioAlunosTurma />} />

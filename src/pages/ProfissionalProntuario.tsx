@@ -9,6 +9,7 @@ type Evolucao = {
   data: any;
   tipoId?: string;
   profissionalId?: string;
+  profissionalNome?: string;
 };
 
 export default function ProfissionalProntuario() {
@@ -46,19 +47,18 @@ export default function ProfissionalProntuario() {
       const alunoSnap = await getDoc(doc(db, "alunos", alunoId));
       if (alunoSnap.exists()) setAluno(alunoSnap.data());
 
-      // 🔒 SEGURANÇA: só mostra prontuários da MESMA especialidade do profissional
       const snap = await getDocs(collection(db, "prontuarios"));
       const minhaEspecialidade = profissional.especialidade || "";
-      
+      const meuId = profissional.id;
+
       const lista = snap.docs
         .filter(d => {
           const data = d.data();
           if (data.alunoId !== alunoId) return false;
-          // Se o prontuário tem tipoId, só mostra se for da minha especialidade
-          if (data.tipoId) {
-            return data.tipoId === minhaEspecialidade;
-          }
-          // Se não tem tipoId (legado), NÃO mostra (protege contra vazamento)
+          // 🔥 Mostra se for da mesma especialidade OU se foi o próprio profissional quem escreveu
+          if (data.tipoId && data.tipoId === minhaEspecialidade) return true;
+          if (data.profissionalId && data.profissionalId === meuId) return true;
+          // Se não tem tipoId nem profissionalId (legado), não mostra
           return false;
         })
         .map(d => ({
@@ -67,6 +67,7 @@ export default function ProfissionalProntuario() {
           data: d.data().data,
           tipoId: d.data().tipoId,
           profissionalId: d.data().profissionalId,
+          profissionalNome: d.data().profissionalNome,
         }));
 
       lista.sort((a, b) => {
@@ -83,12 +84,14 @@ export default function ProfissionalProntuario() {
     if (!profissional) return;
     const snap = await getDocs(collection(db, "prontuarios"));
     const minhaEspecialidade = profissional.especialidade || "";
-    
+    const meuId = profissional.id;
+
     const lista = snap.docs
       .filter(d => {
         const data = d.data();
         if (data.alunoId !== alunoId) return false;
-        if (data.tipoId) return data.tipoId === minhaEspecialidade;
+        if (data.tipoId && data.tipoId === minhaEspecialidade) return true;
+        if (data.profissionalId && data.profissionalId === meuId) return true;
         return false;
       })
       .map(d => ({
@@ -97,6 +100,7 @@ export default function ProfissionalProntuario() {
         data: d.data().data,
         tipoId: d.data().tipoId,
         profissionalId: d.data().profissionalId,
+        profissionalNome: d.data().profissionalNome,
       }));
 
     lista.sort((a, b) => {
@@ -107,6 +111,13 @@ export default function ProfissionalProntuario() {
     setEvolucoes(lista);
   };
 
+  // 🔥 PERMISSÃO: supervisor, diretor, ou o próprio autor da evolução
+  const podeEditar = (ev: Evolucao) => {
+    if (!profissional) return false;
+    if (profissional.tipo === "supervisor" || profissional.tipo === "diretor") return true;
+    return ev.profissionalId === profissional.id;
+  };
+
   const salvarEvolucao = async () => {
     if (!novaEvolucao.trim()) return alert("Digite a evolução");
     if (!alunoId) return alert("Aluno não identificado");
@@ -114,7 +125,6 @@ export default function ProfissionalProntuario() {
     setCarregando(true);
     try {
       const agora = new Date();
-      // 🔒 Salva com tipoId = especialidade, garantindo separação
       await addDoc(collection(db, "prontuarios"), {
         alunoId,
         texto: novaEvolucao,
@@ -134,14 +144,14 @@ export default function ProfissionalProntuario() {
     }
   };
 
-  const excluirEvolucao = async (id: string) => {
+  const excluirEvolucao = async (ev: Evolucao) => {
     if (!window.confirm("Tem certeza que deseja excluir esta evolução?")) return;
-    if (profissional?.tipo !== "supervisor" && profissional?.tipo !== "diretor") {
-      alert("Apenas supervisores/diretores podem excluir evoluções.");
+    if (!podeEditar(ev)) {
+      alert("Você só pode excluir suas próprias evoluções.");
       return;
     }
     try {
-      await deleteDoc(doc(db, "prontuarios", id));
+      await deleteDoc(doc(db, "prontuarios", ev.id));
       alert("Evolução excluída!");
       recarregarEvolucoes();
     } catch (error: any) {
@@ -150,6 +160,10 @@ export default function ProfissionalProntuario() {
   };
 
   const iniciarEdicao = (ev: Evolucao) => {
+    if (!podeEditar(ev)) {
+      alert("Você só pode editar suas próprias evoluções.");
+      return;
+    }
     setEditandoId(ev.id);
     setTextoEditando(ev.texto);
   };
@@ -159,10 +173,18 @@ export default function ProfissionalProntuario() {
     setTextoEditando("");
   };
 
-  const salvarEdicao = async (id: string) => {
+  const salvarEdicao = async (ev: Evolucao) => {
     if (!textoEditando.trim()) return alert("Digite o texto");
+    if (!podeEditar(ev)) {
+      alert("Você só pode editar suas próprias evoluções.");
+      return;
+    }
     try {
-      await updateDoc(doc(db, "prontuarios", id), { texto: textoEditando });
+      // 🔥 Atualiza só o texto, preservando o resto
+      await updateDoc(doc(db, "prontuarios", ev.id), {
+        texto: textoEditando,
+        editadoEm: new Date(),
+      });
       alert("Evolução atualizada!");
       setEditandoId(null);
       setTextoEditando("");
@@ -177,12 +199,7 @@ export default function ProfissionalProntuario() {
       <h2>Prontuário de {aluno.nomeCompleto || "Carregando..."}</h2>
       {profissional?.especialidade && (
         <p style={{ color: "#0070f3", fontSize: 14, fontWeight: 600 }}>
-          🔒 Visualizando apenas prontuários de: <strong>{profissional.especialidade === "psicologia" ? "PSICOLOGIA" : profissional.especialidade}</strong>
-        </p>
-      )}
-      {(profissional?.tipo === "supervisor" || profissional?.tipo === "diretor") && (
-        <p style={{ color: "#6b7a8f", fontSize: 14 }}>
-          🔑 Modo {profissional?.tipo} - você pode editar e excluir evoluções
+          🔒 Visualizando prontuários de: <strong>{profissional.especialidade}</strong>
         </p>
       )}
       <div style={{ marginBottom: 20 }}>
@@ -203,26 +220,27 @@ export default function ProfissionalProntuario() {
       </div>
 
       <h3>Histórico de evoluções ({evolucoes.length})</h3>
-      {evolucoes.length === 0 && <p>Nenhuma evolução registrada para esta especialidade.</p>}
+      {evolucoes.length === 0 && <p>Nenhuma evolução registrada.</p>}
       <ul style={{ listStyle: "none", padding: 0 }}>
         {evolucoes.map(ev => (
-          <li key={ev.id} style={{ borderBottom: "1px solid #eee", marginBottom: 12, paddingBottom: 8, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>
+          <li key={ev.id} style={{ borderBottom: "1px solid #eee", marginBottom: 12, background: "#f9f9f9", padding: 12, borderRadius: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <small style={{ color: "#888" }}>
                 {ev.data?.toDate?.()?.toLocaleString() || "Data desconhecida"}
+                {ev.profissionalNome && <> • por {ev.profissionalNome}</>}
               </small>
               <div>
-                {(profissional?.tipo === "supervisor" || profissional?.tipo === "diretor") && (
+                {podeEditar(ev) && (
                   <>
                     {editandoId === ev.id ? (
                       <>
-                        <button onClick={() => salvarEdicao(ev.id)} style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer", marginRight: 4 }}>Salvar</button>
+                        <button onClick={() => salvarEdicao(ev)} style={{ background: "#28a745", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer", marginRight: 4 }}>Salvar</button>
                         <button onClick={cancelarEdicao} style={{ background: "#6c757d", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Cancelar</button>
                       </>
                     ) : (
                       <>
                         <button onClick={() => iniciarEdicao(ev)} style={{ background: "#ffc107", color: "#000", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer", marginRight: 4 }}>Editar</button>
-                        <button onClick={() => excluirEvolucao(ev.id)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Excluir</button>
+                        <button onClick={() => excluirEvolucao(ev)} style={{ background: "#dc3545", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 4, cursor: "pointer" }}>Excluir</button>
                       </>
                     )}
                   </>
@@ -233,7 +251,7 @@ export default function ProfissionalProntuario() {
               <textarea
                 value={textoEditando}
                 onChange={e => setTextoEditando(e.target.value)}
-                style={{ width: "100%", padding: 8, marginTop: 8, borderRadius: 4, border: "1px solid #ccc", minHeight: 80 }}
+                style={{ width: "100%", padding: 8, marginTop: 8, borderRadius: 4, border: "1px solid #ccc", minHeight: 120 }}
               />
             ) : (
               <p style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{ev.texto}</p>
