@@ -22,10 +22,11 @@ export default function MatriculasTurma() {
     if (!cursoId) { setTurmas([]); setTurmaId(""); setAlunos([]); return; }
     const carregarTurmas = async () => {
       const snap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
-      // ✅ Calcula vagas em tempo real
       setTurmas(snap.docs.map(d => {
         const data = d.data();
-        const alunosArr = data.alunos || [];
+        const alunosArrBruto = data.alunos || [];
+        // ✅ Conta só IDs únicos
+        const alunosArr = Array.from(new Set(alunosArrBruto));
         const capacidade =
           data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
         return {
@@ -75,13 +76,11 @@ export default function MatriculasTurma() {
         if (!snap.exists()) throw new Error("Turma não existe");
         const alunosArr = snap.data().alunos || [];
         if (!alunosArr.includes(alunoId)) throw new Error("Aluno não está na turma");
-        // ✅ Só remove do array. Não mexe em vagasDisponiveis.
         transaction.update(turmaRef, {
           alunos: arrayRemove(alunoId),
         });
       });
 
-      // Remove curso do aluno
       const alunoRef = doc(db, "alunos", alunoId);
       const alunoSnap = await getDoc(alunoRef);
       if (alunoSnap.exists()) {
@@ -92,11 +91,12 @@ export default function MatriculasTurma() {
 
       alert("Aluno removido com sucesso!");
       setAlunos(prev => prev.filter(a => a.id !== alunoId));
-      // Recarrega turmas para atualizar contagem
+      
       const snap = await getDocs(collection(db, "cursos", cursoId, "turmas"));
       setTurmas(snap.docs.map(d => {
         const data = d.data();
-        const alunosArr = data.alunos || [];
+        const alunosArrBruto = data.alunos || [];
+        const alunosArr = Array.from(new Set(alunosArrBruto));
         const capacidade =
           data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
         return {

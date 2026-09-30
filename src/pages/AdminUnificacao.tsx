@@ -332,7 +332,7 @@ export default function AdminUnificacao() {
     finally { setCarregando(false); }
   };
 
-  // 12. Corrigir vagas de turmas (versão melhorada — NÃO inventa capacidade)
+  // 12. Corrigir vagas de turmas
   const handleCorrigirVagasTurmas = async () => {
     if (!confirm("Recalcular as vagas de turmas?")) return;
     setCarregando(true); setLogs([]);
@@ -349,15 +349,12 @@ export default function AdminUnificacao() {
         for (const turmaDoc of turmasSnap.docs) {
           totalTurmas++;
           const data = turmaDoc.data();
-          const alunos = data.alunos || [];
-          const totalAlunos = alunos.length;
+          const alunosArrBruto = data.alunos || [];
+          const alunosArr = Array.from(new Set(alunosArrBruto));
+          const totalAlunos = alunosArr.length;
 
           const capacidadeExplicita =
-            data.vagasTotais ||
-            data.totalVagas ||
-            data.vagas ||
-            data.capacidade ||
-            0;
+            data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
 
           if (capacidadeExplicita === 0) {
             semCapacidade.push(`[${cursoNome}] ${data.nome} (${totalAlunos} alunos)`);
@@ -391,6 +388,111 @@ export default function AdminUnificacao() {
     }
   };
 
+  // 13. Diagnosticar turmas com problema
+  const handleDiagnosticarTurmas = async () => {
+    setCarregando(true); setLogs([]);
+    try {
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      const alunosExistentes = new Set<string>();
+      alunosSnap.forEach(d => alunosExistentes.add(d.id));
+
+      const cursosSnap = await getDocs(collection(db, "cursos"));
+      let problemas = 0;
+
+      for (const cursoDoc of cursosSnap.docs) {
+        const cursoNome = cursoDoc.data().nome || cursoDoc.id;
+        const turmasSnap = await getDocs(collection(db, "cursos", cursoDoc.id, "turmas"));
+
+        for (const turmaDoc of turmasSnap.docs) {
+          const data = turmaDoc.data();
+          const alunos: string[] = data.alunos || [];
+
+          const contagem: Record<string, number> = {};
+          alunos.forEach((id) => { contagem[id] = (contagem[id] || 0) + 1; });
+          const duplicados = Object.entries(contagem).filter(([_, c]) => c > 1);
+          const orfaos = alunos.filter((id) => !alunosExistentes.has(id));
+
+          if (duplicados.length > 0 || orfaos.length > 0) {
+            problemas++;
+            adicionarLog(`⚠️ [${cursoNome}] ${data.nome}`);
+            adicionarLog(`   Array tem ${alunos.length} IDs`);
+            if (duplicados.length > 0) {
+              adicionarLog(`   🔁 Duplicados: ${duplicados.length}`);
+              duplicados.forEach(([id, count]) => adicionarLog(`      - ${id} aparece ${count}x`));
+            }
+            if (orfaos.length > 0) {
+              adicionarLog(`   👻 Órfãos (alunos apagados): ${orfaos.length}`);
+              orfaos.forEach(id => adicionarLog(`      - ${id}`));
+            }
+          }
+        }
+      }
+
+      adicionarLog(`---`);
+      if (problemas === 0) {
+        adicionarLog(`✅ Nenhum problema encontrado.`);
+      } else {
+        adicionarLog(`🎯 ${problemas} turma(s) com problema. Use "🔧 Limpar Turmas" para corrigir.`);
+      }
+    } catch (e: any) { adicionarLog(`❌ Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
+  // 14. Limpar turmas (remove duplicados e órfãos)
+  const handleLimparTurmas = async () => {
+    if (!confirm("Isso vai remover IDs duplicados e órfãos de todas as turmas. Continuar?")) return;
+    setCarregando(true); setLogs([]);
+    try {
+      const alunosSnap = await getDocs(collection(db, "alunos"));
+      const alunosExistentes = new Set<string>();
+      alunosSnap.forEach(d => alunosExistentes.add(d.id));
+
+      const cursosSnap = await getDocs(collection(db, "cursos"));
+      let totalCorrigidas = 0;
+
+      for (const cursoDoc of cursosSnap.docs) {
+        const cursoNome = cursoDoc.data().nome || cursoDoc.id;
+        const turmasSnap = await getDocs(collection(db, "cursos", cursoDoc.id, "turmas"));
+
+        for (const turmaDoc of turmasSnap.docs) {
+          const data = turmaDoc.data();
+          const alunosArr: string[] = data.alunos || [];
+
+          const limpos: string[] = Array.from(new Set(alunosArr)).filter((id: string) => alunosExistentes.has(id));
+
+          if (limpos.length !== alunosArr.length) {
+            await updateDoc(doc(db, "cursos", cursoDoc.id, "turmas", turmaDoc.id), {
+              alunos: limpos,
+            });
+            const removidos = alunosArr.length - limpos.length;
+            adicionarLog(`✅ [${cursoNome}] ${data.nome}: ${alunosArr.length} → ${limpos.length} (${removidos} removidos)`);
+            totalCorrigidas++;
+          }
+        }
+      }
+
+      adicionarLog(`---`);
+      adicionarLog(`🎉 ${totalCorrigidas} turma(s) limpa(s).`);
+
+      adicionarLog(`🔄 Recalculando vagas...`);
+      for (const cursoDoc of cursosSnap.docs) {
+        const turmasSnap = await getDocs(collection(db, "cursos", cursoDoc.id, "turmas"));
+        for (const turmaDoc of turmasSnap.docs) {
+          const data = turmaDoc.data();
+          const alunos: string[] = data.alunos || [];
+          const capacidade = data.vagasTotais || data.totalVagas || data.vagas || data.capacidade || 0;
+          if (capacidade > 0) {
+            await updateDoc(doc(db, "cursos", cursoDoc.id, "turmas", turmaDoc.id), {
+              vagasDisponiveis: Math.max(0, capacidade - alunos.length),
+            });
+          }
+        }
+      }
+      adicionarLog(`✅ Vagas recalculadas!`);
+    } catch (e: any) { adicionarLog(`❌ Erro: ${e.message}`); }
+    finally { setCarregando(false); }
+  };
+
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ color: "#1a2a4f" }}>Administração</h1>
@@ -404,6 +506,8 @@ export default function AdminUnificacao() {
         <button onClick={handlePadronizarTudo} disabled={carregando} style={{ padding: "10px 16px", background: "#17a2b8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Padronizar Tudo</button>
         <button onClick={handleCorrigirGrupos} disabled={carregando} style={{ padding: "10px 16px", background: "#6f42c1", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Corrigir Grupos</button>
         <button onClick={handleCorrigirVagasTurmas} disabled={carregando} style={{ padding: "10px 16px", background: "#0070f3", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>🎫 Corrigir Vagas de Turmas</button>
+        <button onClick={handleDiagnosticarTurmas} disabled={carregando} style={{ padding: "10px 16px", background: "#20c997", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>🔍 Diagnosticar Turmas</button>
+        <button onClick={handleLimparTurmas} disabled={carregando} style={{ padding: "10px 16px", background: "#ff6b6b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>🔧 Limpar Turmas</button>
       </div>
 
       <h3 style={{ fontSize: 14, color: "#6b7a8f", marginTop: 20 }}>Profissionais</h3>
