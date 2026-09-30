@@ -59,14 +59,23 @@ export default function ProfissionalAgenda() {
   const [carregando, setCarregando] = useState(false);
   const [supervisionadosIds, setSupervisionadosIds] = useState<string[]>([]);
   const [todosProfissionais, setTodosProfissionais] = useState<any[]>([]);
+
+  // Modal trocar profissional/horário
   const [modalTrocarProf, setModalTrocarProf] = useState<Agendamento | null>(null);
   const [novoProfId, setNovoProfId] = useState("");
+  const [novoHorarioId, setNovoHorarioId] = useState("");
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<any[]>([]);
+  const [buscandoHorarios, setBuscandoHorarios] = useState(false);
 
-  // 🔥 Remover paciente
+  // 🔥 NOVO: Modal trocar com outro paciente (swap)
+  const [modalSwap, setModalSwap] = useState<Agendamento | null>(null);
+  const [slotSwapId, setSlotSwapId] = useState("");
+
+  // Modal remover
   const [modalRemover, setModalRemover] = useState<Agendamento | null>(null);
   const [escopo, setEscopo] = useState<"soSemana" | "todasSemanas">("soSemana");
 
-  // 🔥 Filtro do diretor
+  // Filtro diretor
   const [filtroVisualizarProfissionalId, setFiltroVisualizarProfissionalId] = useState("");
   const [buscaPaciente, setBuscaPaciente] = useState("");
 
@@ -92,7 +101,6 @@ export default function ProfissionalAgenda() {
         setProfissionalId(docProf.id);
 
         if (profData.tipo === "supervisor") {
-          // Supervisor filtra por mesma especialidade
           const todosSnap = await getDocs(collection(db, "profissionais"));
           const ids: string[] = [];
           todosSnap.forEach(est => {
@@ -206,37 +214,136 @@ export default function ProfissionalAgenda() {
     }
   };
 
-  const abrirTrocarProfissional = (ag: Agendamento) => {
+  // ============ TROCAR PROFISSIONAL / HORÁRIO ============
+  const abrirTrocarProfissional = async (ag: Agendamento) => {
     setModalTrocarProf(ag);
     setNovoProfId(ag.profissionalId);
+    setNovoHorarioId("");
+    await buscarHorariosDisponiveis(ag.profissionalId, ag.id);
   };
 
-  const confirmarTrocarProfissional = async () => {
-    if (!modalTrocarProf) return;
-    if (novoProfId === modalTrocarProf.profissionalId) return alert("Já está com este profissional.");
-    const novoNome = todosProfissionais.find(p => p.id === novoProfId)?.nome || "profissional";
-    if (!confirm(`Trocar o profissional deste horário para ${novoNome}?`)) return;
-
+  const buscarHorariosDisponiveis = async (profId: string, ignorarId?: string) => {
+    if (!profId) { setHorariosDisponiveis([]); return; }
+    setBuscandoHorarios(true);
     try {
-      if (modalTrocarProf.groupId) {
-        const groupQuery = query(collection(db, "agendamentos"), where("groupId", "==", modalTrocarProf.groupId));
-        const groupSnap = await getDocs(groupQuery);
-        for (const docHor of groupSnap.docs) {
-          await updateDoc(docHor.ref, { profissionalId: novoProfId });
-        }
-        alert(`Profissional alterado em ${groupSnap.size} horários do grupo.`);
-      } else {
-        await updateDoc(doc(db, "agendamentos", modalTrocarProf.id), { profissionalId: novoProfId });
-        alert("Profissional alterado.");
+      const snap = await getDocs(collection(db, "agendamentos"));
+      const livres: any[] = [];
+      for (const d of snap.docs) {
+        const data = d.data();
+        if (d.id === ignorarId) continue;
+        if (data.profissionalId !== profId) continue;
+        if (data.status !== "livre" && data.status !== "aguardandoVinculo") continue;
+        if (data.alunoId || data.pacienteInfo) continue;
+
+        livres.push({
+          id: d.id,
+          data: data.data,
+          horario: data.horario,
+          tipoId: data.tipoId,
+          groupId: data.groupId,
+        });
       }
-      setModalTrocarProf(null);
-      carregarAgenda();
-    } catch (error: any) {
-      alert(`Erro: ${error.message}`);
+      livres.sort((a, b) => {
+        if (a.data === b.data) return a.horario.localeCompare(b.horario);
+        return a.data.localeCompare(b.data);
+      });
+      setHorariosDisponiveis(livres);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBuscandoHorarios(false);
     }
   };
 
-  // 🔥 REMOVER PACIENTE
+  useEffect(() => {
+    if (modalTrocarProf && novoProfId) {
+      buscarHorariosDisponiveis(novoProfId, modalTrocarProf.id);
+    }
+  }, [novoProfId]);
+
+  const confirmarTrocarProfissional = async () => {
+    if (!modalTrocarProf) return;
+    if (!novoProfId) return alert("Escolha o profissional");
+    if (!novoHorarioId) return alert("Escolha o novo horário");
+
+    const novoNome = todosProfissionais.find(p => p.id === novoProfId)?.nome || "profissional";
+    const slot = horariosDisponiveis.find(h => h.id === novoHorarioId);
+    if (!slot) return alert("Horário não encontrado");
+
+    if (!confirm(`Mover ${modalTrocarProf.nomeAluno} para ${novoNome} em ${slot.data} às ${slot.horario}?`)) return;
+
+    try {
+      if (modalTrocarProf.groupId) {
+        const gQ = query(collection(db, "agendamentos"), where("groupId", "==", modalTrocarProf.groupId));
+        const gS = await getDocs(gQ);
+        for (const d of gS.docs) {
+          if (d.id !== novoHorarioId) {
+            await updateDoc(d.ref, { alunoId: null, status: "livre" });
+          }
+        }
+      } else {
+        await updateDoc(doc(db, "agendamentos", modalTrocarProf.id), { alunoId: null, status: "livre" });
+      }
+
+      if (slot.groupId) {
+        const gQ = query(collection(db, "agendamentos"), where("groupId", "==", slot.groupId));
+        const gS = await getDocs(gQ);
+        for (const d of gS.docs) {
+          await updateDoc(d.ref, { alunoId: modalTrocarProf.alunoId, status: "ocupado", profissionalId: novoProfId });
+        }
+        alert(`Paciente movido para ${gS.size} horários do grupo!`);
+      } else {
+        await updateDoc(doc(db, "agendamentos", novoHorarioId), {
+          alunoId: modalTrocarProf.alunoId,
+          status: "ocupado",
+          profissionalId: novoProfId,
+        });
+        alert("Paciente reagendado!");
+      }
+
+      setModalTrocarProf(null);
+      carregarAgenda();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    }
+  };
+
+  // ============ 🔥 NOVO: TROCAR 2 PACIENTES (SWAP) ============
+  const abrirSwap = (ag: Agendamento) => {
+    setModalSwap(ag);
+    setSlotSwapId("");
+  };
+
+  const confirmarSwap = async () => {
+    if (!modalSwap) return;
+    if (!slotSwapId) return alert("Escolha o outro paciente para trocar");
+    
+    const destino = agenda.find(a => a.id === slotSwapId);
+    if (!destino) return alert("Horário destino não encontrado");
+    if (!destino.alunoId) return alert("O horário destino não tem paciente vinculado");
+
+    if (!confirm(`Trocar "${modalSwap.nomeAluno}" (${modalSwap.horario}) com "${destino.nomeAluno}" (${destino.horario})?`)) return;
+
+    try {
+      // Swap: troca os alunoIds entre os dois horários e reseta status para "ocupado"
+      await updateDoc(doc(db, "agendamentos", modalSwap.id), {
+        alunoId: destino.alunoId,
+        status: "ocupado",
+      });
+      await updateDoc(doc(db, "agendamentos", destino.id), {
+        alunoId: modalSwap.alunoId,
+        status: "ocupado",
+      });
+
+      alert("Pacientes trocados com sucesso!");
+      setModalSwap(null);
+      carregarAgenda();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    }
+  };
+
+  // ============ REMOVER ============
   const abrirRemover = (ag: Agendamento) => {
     setModalRemover(ag);
     setEscopo("soSemana");
@@ -279,6 +386,11 @@ export default function ProfissionalAgenda() {
       (a.pacienteInfo?.nome || "").toLowerCase().includes(b)
     );
   }
+
+  const formatarData = (iso: string) => {
+    const [a, m, d] = iso.split("-");
+    return `${d}/${m}/${a}`;
+  };
 
   return (
     <div>
@@ -403,12 +515,21 @@ export default function ProfissionalAgenda() {
                           </>
                         )}
                         {podeMudarProfissional && (
-                          <button
-                            onClick={() => abrirTrocarProfissional(ag)}
-                            style={{ background: "#6f42c1", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
-                          >
-                            Trocar Prof.
-                          </button>
+                          <>
+                            <button
+                              onClick={() => abrirTrocarProfissional(ag)}
+                              style={{ background: "#6f42c1", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4 }}
+                            >
+                              Trocar Prof./Horário
+                            </button>
+                            <button
+                              onClick={() => abrirSwap(ag)}
+                              style={{ background: "#ff8c00", color: "#fff", border: "none", padding: "6px 10px", borderRadius: 4, fontWeight: 600 }}
+                              title="Trocar este paciente com outro paciente da mesma agenda"
+                            >
+                              🔀 Trocar com outro
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => abrirRemover(ag)}
@@ -429,27 +550,164 @@ export default function ProfissionalAgenda() {
         </div>
       )}
 
-      {/* MODAL TROCAR PROFISSIONAL */}
+      {/* MODAL TROCAR PROFISSIONAL / HORÁRIO */}
       {modalTrocarProf && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500, width: "90%" }}>
-            <h3>Trocar Profissional</h3>
-            <p><strong>{modalTrocarProf.nomeAluno}</strong> - {modalTrocarProf.horario}</p>
-            <select value={novoProfId} onChange={e => setNovoProfId(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #ccc", marginBottom: 12 }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 550, width: "90%", maxHeight: "85vh", overflowY: "auto" }}>
+            <h3 style={{ marginTop: 0 }}>Trocar Profissional / Horário</h3>
+            <p style={{ color: "#6b7a8f", fontSize: 14 }}>
+              <strong>{modalTrocarProf.nomeAluno}</strong><br />
+              Atual: {modalTrocarProf.horario} com {modalTrocarProf.nomeProfissional}
+            </p>
+
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Novo profissional:</label>
+            <select
+              value={novoProfId}
+              onChange={e => { setNovoProfId(e.target.value); setNovoHorarioId(""); }}
+              style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccc", marginBottom: 16 }}
+            >
               <option value="">Selecione</option>
               {todosProfissionais.map(p => (
-                <option key={p.id} value={p.id}>{p.nome} ({p.codigo}) {p.tipo === "supervisor" ? "👑" : p.tipo === "diretor" ? "🎯" : p.tipo === "estagiario" ? "📚" : ""}</option>
+                <option key={p.id} value={p.id}>
+                  {p.nome} ({p.codigo}) {p.tipo === "supervisor" ? "👑" : p.tipo === "diretor" ? "🎯" : p.tipo === "estagiario" ? "📚" : ""}
+                </option>
               ))}
             </select>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={confirmarTrocarProfissional} style={{ padding: "8px 20px", background: "#28a745", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Confirmar</button>
-              <button onClick={() => setModalTrocarProf(null)} style={{ padding: "8px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Cancelar</button>
+
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
+              Novo horário disponível:
+            </label>
+            {buscandoHorarios && <p style={{ color: "#6b7a8f", fontSize: 13 }}>Buscando horários...</p>}
+            {!buscandoHorarios && novoProfId && horariosDisponiveis.length === 0 && (
+              <p style={{ color: "#dc3545", fontSize: 13 }}>
+                ⚠️ Nenhum horário disponível para este profissional.
+                <br />
+                <span style={{ fontSize: 12 }}>
+                  Vá em <strong>Saúde → Agenda</strong> e crie novos horários para ele.
+                </span>
+              </p>
+            )}
+            {!buscandoHorarios && horariosDisponiveis.length > 0 && (
+              <select
+                value={novoHorarioId}
+                onChange={e => setNovoHorarioId(e.target.value)}
+                style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccc", marginBottom: 16 }}
+              >
+                <option value="">Selecione o novo horário</option>
+                {horariosDisponiveis.map(h => (
+                  <option key={h.id} value={h.id}>
+                    {formatarData(h.data)} às {h.horario} {h.groupId ? "🔗 (recorrente)" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!novoProfId && (
+              <p style={{ color: "#6b7a8f", fontSize: 13, marginBottom: 16 }}>
+                Escolha um profissional acima para ver os horários disponíveis.
+              </p>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button
+                onClick={confirmarTrocarProfissional}
+                disabled={!novoProfId || !novoHorarioId}
+                style={{
+                  flex: 1,
+                  padding: "10px 20px",
+                  background: (!novoProfId || !novoHorarioId) ? "#999" : "#28a745",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: (!novoProfId || !novoHorarioId) ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Confirmar Troca
+              </button>
+              <button
+                onClick={() => setModalTrocarProf(null)}
+                style={{ flex: 1, padding: "10px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL REMOVER PACIENTE */}
+      {/* 🔥 MODAL SWAP - Trocar dois pacientes */}
+      {modalSwap && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 550, width: "90%" }}>
+            <h3 style={{ marginTop: 0 }}>🔀 Trocar Paciente com Outro</h3>
+            <p style={{ color: "#6b7a8f", fontSize: 14, marginBottom: 16 }}>
+              Troca o paciente de <strong>{modalSwap.horario}</strong> com o paciente de outro horário do mesmo dia.
+            </p>
+
+            <div style={{ background: "#f8f9fa", padding: 12, borderRadius: 8, marginBottom: 16 }}>
+              <p style={{ margin: 0, fontSize: 13 }}>
+                <strong>Paciente atual ({modalSwap.horario}):</strong><br />
+                {modalSwap.nomeAluno || "Livre"}
+              </p>
+            </div>
+
+            <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
+              Trocar com o paciente do horário:
+            </label>
+            <select
+              value={slotSwapId}
+              onChange={e => setSlotSwapId(e.target.value)}
+              style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccc", marginBottom: 16 }}
+            >
+              <option value="">Selecione o outro horário</option>
+              {agenda
+                .filter(a => a.id !== modalSwap.id && a.alunoId && a.profissionalId === modalSwap.profissionalId)
+                .map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.horario} - {a.nomeAluno}
+                  </option>
+                ))}
+            </select>
+
+            {slotSwapId && (
+              <div style={{ background: "#fff8e1", border: "1px solid #ffc107", padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <p style={{ margin: 0, fontSize: 13 }}>
+                  <strong>Troca:</strong><br />
+                  {modalSwap.nomeAluno} → {agenda.find(a => a.id === slotSwapId)?.horario}<br />
+                  {agenda.find(a => a.id === slotSwapId)?.nomeAluno} → {modalSwap.horario}
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={confirmarSwap}
+                disabled={!slotSwapId}
+                style={{
+                  flex: 1,
+                  padding: "10px 20px",
+                  background: !slotSwapId ? "#999" : "#ff8c00",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: !slotSwapId ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                🔀 Confirmar Troca
+              </button>
+              <button
+                onClick={() => setModalSwap(null)}
+                style={{ flex: 1, padding: "10px 20px", background: "#6c757d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REMOVER */}
       {modalRemover && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 450, width: "90%" }}>
