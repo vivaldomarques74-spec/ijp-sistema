@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Cursos from "./pages/Cursos";
 import CursoNovo from "./pages/CursoNovo";
 import CursoDetalhe from "./pages/CursoDetalhe";
+import EditarTurma from "./pages/EditarTurma";
 import Presenca from "./pages/Presenca";
 import AlunosLista from "./pages/AlunosLista";
 import AlunosCadastrar from "./pages/AlunosCadastrar";
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/cursos" element={<Cursos />} />
         <Route path="/cursos/novo" element={<CursoNovo />} />
         <Route path="/cursos/:id" element={<CursoDetalhe />} />
+        <Route path="/cursos/:id/turmas/:turmaId" element={<EditarTurma />} />
         <Route path="/presenca" element={<Presenca />} />
         <Route path="/saude" element={<Saude />}>
           <Route index element={<SaudeFila />} />

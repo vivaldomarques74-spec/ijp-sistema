@@ -332,20 +332,19 @@ export default function AdminUnificacao() {
     finally { setCarregando(false); }
   };
 
-  // 12. 🔥 CORRIGIR VAGAS DE TURMAS
+  // 12. Corrigir vagas de turmas (versão melhorada — NÃO inventa capacidade)
   const handleCorrigirVagasTurmas = async () => {
-    if (!confirm("Recalcular as vagas disponíveis de TODAS as turmas baseado no total de alunos matriculados?")) return;
+    if (!confirm("Recalcular as vagas de turmas?")) return;
     setCarregando(true); setLogs([]);
     try {
       const cursosSnap = await getDocs(collection(db, "cursos"));
       let totalCorrigidas = 0;
       let totalTurmas = 0;
-      let totalCurso = 0;
+      const semCapacidade: string[] = [];
 
       for (const cursoDoc of cursosSnap.docs) {
         const cursoNome = cursoDoc.data().nome || cursoDoc.id;
         const turmasSnap = await getDocs(collection(db, "cursos", cursoDoc.id, "turmas"));
-        let cursoCorrigidas = 0;
 
         for (const turmaDoc of turmasSnap.docs) {
           totalTurmas++;
@@ -353,36 +352,38 @@ export default function AdminUnificacao() {
           const alunos = data.alunos || [];
           const totalAlunos = alunos.length;
 
-          // Tenta descobrir a capacidade total (usa vários nomes possíveis)
-          const capacidadeTotal =
+          const capacidadeExplicita =
             data.vagasTotais ||
             data.totalVagas ||
             data.vagas ||
             data.capacidade ||
-            (data.vagasDisponiveis || 0) + totalAlunos;
+            0;
 
-          const vagasCorretas = Math.max(0, capacidadeTotal - totalAlunos);
+          if (capacidadeExplicita === 0) {
+            semCapacidade.push(`[${cursoNome}] ${data.nome} (${totalAlunos} alunos)`);
+            adicionarLog(`⚠️ [${cursoNome}] ${data.nome}: SEM CAPACIDADE DEFINIDA — configure em "Editar Turma".`);
+            continue;
+          }
+
+          const vagasCorretas = Math.max(0, capacidadeExplicita - totalAlunos);
           const vagasAtuais = data.vagasDisponiveis || 0;
 
           if (vagasAtuais !== vagasCorretas) {
             await updateDoc(doc(db, "cursos", cursoDoc.id, "turmas", turmaDoc.id), {
               vagasDisponiveis: vagasCorretas,
-              vagasTotais: capacidadeTotal,
             });
-            adicionarLog(`✅ [${cursoNome}] ${data.nome}: ${vagasAtuais} → ${vagasCorretas} (Total: ${capacidadeTotal}, Alunos: ${totalAlunos})`);
+            adicionarLog(`✅ [${cursoNome}] ${data.nome}: ${vagasAtuais} → ${vagasCorretas} (Cap: ${capacidadeExplicita}, Alunos: ${totalAlunos})`);
             totalCorrigidas++;
-            cursoCorrigidas++;
           }
-        }
-
-        if (cursoCorrigidas > 0) {
-          adicionarLog(`   → ${cursoNome}: ${cursoCorrigidas} turma(s) corrigida(s)`);
-          totalCurso++;
         }
       }
 
       adicionarLog(`---`);
-      adicionarLog(`🎉 ${totalCorrigidas} turmas corrigidas em ${totalCurso} cursos (total geral: ${totalTurmas} turmas).`);
+      adicionarLog(`🎉 ${totalCorrigidas} turmas corrigidas de ${totalTurmas}.`);
+      if (semCapacidade.length > 0) {
+        adicionarLog(`⚠️ ${semCapacidade.length} turmas SEM CAPACIDADE — precisam ser configuradas em "Editar Turma":`);
+        semCapacidade.forEach(t => adicionarLog(`   - ${t}`));
+      }
     } catch (e: any) {
       adicionarLog(`❌ Erro: ${e.message}`);
     } finally {
