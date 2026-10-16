@@ -27,32 +27,6 @@ const normalizarProfs = (
   return profs as ProfessorCertificado[];
 };
 
-const Presidente: React.FC<{ assinaturaUrl: string }> = ({ assinaturaUrl }) => (
-  <div className="signature-block signature-block-president">
-    {assinaturaUrl && (
-      <img src={assinaturaUrl} alt="" className="signature-image" loading="eager" />
-    )}
-    <div className="signature-name">Jadison dos Santos Palma</div>
-    <div className="signature-role">Presidente</div>
-    <div className="signature-org">Instituto Jovens Periféricos</div>
-  </div>
-);
-
-const Professor: React.FC<{ prof: ProfessorCertificado }> = ({ prof }) => {
-  const registro = prof.numeroRegistro
-    ? `${prof.tipoRegistro ? prof.tipoRegistro + " " : ""}${prof.numeroRegistro}`
-    : "";
-
-  return (
-    <div className="signature-block">
-      <div className="signature-line" />
-      <div className="signature-name">{prof.nome}</div>
-      {prof.profissao && <div className="signature-role">{prof.profissao}</div>}
-      {registro && <div className="signature-registro">{registro}</div>}
-    </div>
-  );
-};
-
 const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
   alunoNome,
   alunoCpf,
@@ -68,22 +42,21 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
   assinaturaUrl = "/assinatura.png",
 }) => {
   const profs = normalizarProfs(professores);
-  const qtdProf = profs.length;
 
   const nomeFontSize = (() => {
     const l = alunoNome.length;
-    if (l <= 28) return 48;
-    if (l <= 36) return 44;
-    if (l <= 44) return 40;
-    if (l <= 55) return 36;
-    return 32;
+    if (l <= 24) return 34;
+    if (l <= 32) return 30;
+    if (l <= 40) return 26;
+    if (l <= 48) return 23;
+    return 20;
   })();
 
   const cursoFontSize = (() => {
     const l = cursoNome.length;
-    if (l <= 30) return 24;
-    if (l <= 45) return 20;
-    if (l <= 60) return 17;
+    if (l <= 30) return 22;
+    if (l <= 45) return 19;
+    if (l <= 60) return 16;
     return 14;
   })();
 
@@ -93,82 +66,31 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
     year: "numeric",
   }).format(new Date());
 
-  let signatureClass = "certificate-signatures";
-  if (qtdProf === 1) signatureClass += " signatures-1";
-  else if (qtdProf === 2) signatureClass += " signatures-2";
-  else if (qtdProf === 3) signatureClass += " signatures-3";
-
-  const professorBlocks = profs.map((p, idx) => (
-    <Professor key={idx} prof={p} />
-  ));
-
-  let signaturesLayout: React.ReactNode = null;
-
-  if (qtdProf === 0) {
-    signaturesLayout = <Presidente assinaturaUrl={assinaturaUrl} />;
-  } else if (qtdProf === 1) {
-    signaturesLayout = (
-      <>
-        <Presidente assinaturaUrl={assinaturaUrl} />
-        {professorBlocks}
-      </>
-    );
-  } else if (qtdProf === 2) {
-    signaturesLayout = (
-      <>
-        {professorBlocks[0]}
-        <Presidente assinaturaUrl={assinaturaUrl} />
-        {professorBlocks[1]}
-      </>
-    );
-  } else if (qtdProf === 3) {
-    signaturesLayout = (
-      <>
-        {professorBlocks}
-        <div className="signature-president-bottom">
-          <Presidente assinaturaUrl={assinaturaUrl} />
-        </div>
-      </>
-    );
-  } else {
-    signaturesLayout = (
-      <>
-        <div className="signatures-multi">{professorBlocks}</div>
-        <div className="signature-president-bottom">
-          <Presidente assinaturaUrl={assinaturaUrl} />
-        </div>
-      </>
-    );
-  }
-
   return (
     <div className="certificate-wrapper">
-      <div className="certificate-frame">
-        <div className="certificate-frame-top" />
-        <div className="certificate-frame-bottom" />
-        <div className="certificate-frame-left" />
-        <div className="certificate-frame-right" />
-      </div>
-
-      <div className="certificate-corner certificate-corner-tl" />
-      <div className="certificate-corner certificate-corner-tr" />
-      <div className="certificate-corner certificate-corner-bl" />
-      <div className="certificate-corner certificate-corner-br" />
-
-      <img src={logoUrl} alt="" className="certificate-seal" loading="eager" />
-      <img src={logoUrl} alt="" className="certificate-watermark" loading="eager" />
+      <div className="certificate-outer-border" />
+      <div className="certificate-inner-border" />
 
       <div className="certificate-content">
+        {/* ============ CABEÇALHO ============ */}
         <div className="certificate-header">
-          <img src={logoUrl} alt="" className="certificate-logo" loading="eager" />
-          <h1 className="certificate-institution">INSTITUTO JOVENS PERIFÉRICOS</h1>
+          <img
+            src={logoUrl}
+            alt="Instituto Jovens Periféricos"
+            className="certificate-logo"
+            loading="eager"
+          />
+          <h1 className="certificate-institution">
+            INSTITUTO JOVENS PERIFÉRICOS
+          </h1>
           <p className="certificate-cnpj">CNPJ 43.248.302/0001-96</p>
           <div className="certificate-divider" />
           <h2 className="certificate-title">CERTIFICADO</h2>
         </div>
 
+        {/* ============ CORPO ============ */}
         <div className="certificate-body">
-          <p className="certificate-body-text">
+          <p className="certificate-text">
             O Instituto Jovens Periféricos certifica que
           </p>
 
@@ -181,7 +103,7 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
 
           {alunoCpf && <div className="certificate-cpf">CPF: {alunoCpf}</div>}
 
-          <p className="certificate-body-text">concluiu com êxito o curso</p>
+          <p className="certificate-text">concluiu com êxito o curso</p>
 
           <div
             className="certificate-course-name"
@@ -190,51 +112,97 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
             “{cursoNome}”
           </div>
 
-          <p className="certificate-body-text">
-            com carga horária de <strong>{cargaHoraria}</strong> horas, promovido
-            pelo Instituto Jovens Periféricos.
+          <p className="certificate-text">
+            com carga horária de <strong>{cargaHoraria} horas</strong>,
+            promovido pelo Instituto Jovens Periféricos.
           </p>
 
           <div className="certificate-details">
             <span>
-              Período:{" "}
-              <strong>
-                {dataInicio} a {dataFim}
-              </strong>
+              <strong>Período:</strong> {dataInicio} a {dataFim}
             </span>
+            <span className="certificate-details-sep">•</span>
             <span>
-              Frequência: <strong>{frequencia}%</strong>
+              <strong>Frequência:</strong> {frequencia}%
             </span>
           </div>
 
           <div className="certificate-issue-date">Emitido em {hoje}</div>
         </div>
 
-        <div className={signatureClass}>{signaturesLayout}</div>
+        {/* ============ ASSINATURAS ============ */}
+        <div className="certificate-signatures-section">
+          {/* Corpo Docente (professores) */}
+          {profs.length > 0 && (
+            <div className="signatures-teachers-row">
+              {profs.map((p, idx) => {
+                const registro = p.numeroRegistro
+                  ? `${p.tipoRegistro ? p.tipoRegistro + " " : ""}${
+                      p.numeroRegistro
+                    }`
+                  : "";
+                return (
+                  <div key={idx} className="teacher-signature">
+                    <div className="teacher-signature-name">{p.nome}</div>
+                    <div className="teacher-signature-line" />
+                    <div className="teacher-signature-fullname">
+                      {p.nome}
+                    </div>
+                    {(p.profissao || registro) && (
+                      <div className="teacher-signature-info">
+                        {p.profissao}
+                        {p.profissao && registro && " • "}
+                        {registro}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
+          {/* Presidente (com imagem de assinatura) */}
+          <div className="signature-president-block">
+            <div className="signature-president-image-wrap">
+              {assinaturaUrl && (
+                <img
+                  src={assinaturaUrl}
+                  alt=""
+                  className="signature-president-image"
+                  loading="eager"
+                />
+              )}
+            </div>
+            <div className="signature-president-line" />
+            <div className="signature-president-name">
+              Jadison dos Santos Palma
+            </div>
+            <div className="signature-president-role">Presidente</div>
+            <div className="signature-president-org">
+              Instituto Jovens Periféricos
+            </div>
+          </div>
+        </div>
+
+        {/* ============ VALIDAÇÃO ============ */}
         {codigoValidacao && (
           <div className="certificate-validation">
-            <div className="certificate-validation-text">
-              <div className="certificate-validation-label">
-                Código de validação
-              </div>
-              <div className="certificate-validation-code">
-                {codigoValidacao}
+            <div className="validation-icon">🔐</div>
+            <div className="validation-body">
+              <div className="validation-title">Autenticidade verificável</div>
+              <div className="validation-code-line">
+                <span className="validation-label">Código:</span>{" "}
+                <span className="validation-code">{codigoValidacao}</span>
               </div>
               {linkValidacao && (
-                <div className="certificate-validation-link">
-                  Valide este certificado em: <strong>{linkValidacao}</strong>
+                <div className="validation-link-line">
+                  <span className="validation-label">Valide em:</span>{" "}
+                  <span className="validation-link">{linkValidacao}</span>
                 </div>
               )}
             </div>
           </div>
         )}
-
-        <div className="certificate-footer">
-          <span>Instituto Jovens Periféricos</span>
-          <span>Salvador • Bahia</span>
-          <span>2026</span>
-        </div>
       </div>
     </div>
   );

@@ -1,117 +1,32 @@
 /* =========================================================
-   CERTIFICADO INSTITUCIONAL — IJP
+   CERTIFICADO — IJP — Design clean, clássico, fundo branco
    ========================================================= */
 
 .certificate-wrapper {
   position: relative;
   width: 1122px;
-  height: 794px; /* A4 paisagem @ 96dpi */
+  height: 794px;
   margin: 0 auto;
   background: #ffffff;
   color: #1a2a4f;
   font-family: "Georgia", "Times New Roman", serif;
   overflow: hidden;
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
+  box-sizing: border-box;
 }
 
-/* ---------- MOLDURAS ---------- */
-.certificate-frame-top,
-.certificate-frame-bottom,
-.certificate-frame-left,
-.certificate-frame-right {
+/* ---------- MOLDURA DUPLA ---------- */
+.certificate-outer-border {
   position: absolute;
-  background: linear-gradient(90deg, #1a2a4f 0%, #2e4a80 50%, #1a2a4f 100%);
-}
-
-.certificate-frame-top {
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 14px;
-}
-
-.certificate-frame-bottom {
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 14px;
-}
-
-.certificate-frame-left {
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 14px;
-  background: linear-gradient(180deg, #1a2a4f 0%, #2e4a80 50%, #1a2a4f 100%);
-}
-
-.certificate-frame-right {
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 14px;
-  background: linear-gradient(180deg, #1a2a4f 0%, #2e4a80 50%, #1a2a4f 100%);
-}
-
-/* ---------- ORNAMENTOS DOS CANTOS ---------- */
-.certificate-corner {
-  position: absolute;
-  width: 70px;
-  height: 70px;
-  border: 3px solid #c9a961;
+  inset: 14px;
+  border: 3px solid #1a2a4f;
   pointer-events: none;
 }
 
-.certificate-corner-tl {
-  top: 20px;
-  left: 20px;
-  border-right: none;
-  border-bottom: none;
-}
-
-.certificate-corner-tr {
-  top: 20px;
-  right: 20px;
-  border-left: none;
-  border-bottom: none;
-}
-
-.certificate-corner-bl {
-  bottom: 20px;
-  left: 20px;
-  border-right: none;
-  border-top: none;
-}
-
-.certificate-corner-br {
-  bottom: 20px;
-  right: 20px;
-  border-left: none;
-  border-top: none;
-}
-
-/* ---------- SELO E MARCA D'ÁGUA ---------- */
-.certificate-seal {
+.certificate-inner-border {
   position: absolute;
-  bottom: 60px;
-  right: 60px;
-  width: 110px;
-  height: 110px;
-  opacity: 0.85;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
-}
-
-.certificate-watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 620px;
-  height: 620px;
-  transform: translate(-50%, -50%);
-  opacity: 0.045;
+  inset: 24px;
+  border: 1px solid #c9a961;
   pointer-events: none;
-  object-fit: contain;
 }
 
 /* ---------- CONTEÚDO ---------- */
@@ -119,10 +34,11 @@
   position: relative;
   z-index: 2;
   height: 100%;
-  padding: 44px 70px 60px;
+  padding: 52px 72px 32px;
   display: flex;
   flex-direction: column;
   text-align: center;
+  box-sizing: border-box;
 }
 
 /* ---------- CABEÇALHO ---------- */
@@ -130,42 +46,42 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
 }
 
 .certificate-logo {
-  width: 68px;
-  height: 68px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .certificate-institution {
   margin: 0;
   font-size: 20px;
-  letter-spacing: 3px;
+  letter-spacing: 3.5px;
   font-weight: 700;
   color: #1a2a4f;
   font-family: "Georgia", serif;
 }
 
 .certificate-cnpj {
-  margin: 0;
-  font-size: 11px;
+  margin: 2px 0 0;
+  font-size: 10.5px;
   color: #6b7a8f;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
 }
 
 .certificate-divider {
-  width: 180px;
+  width: 140px;
   height: 2px;
-  margin: 8px 0 6px;
+  margin: 14px 0 8px;
   background: linear-gradient(90deg, transparent, #c9a961, transparent);
 }
 
 .certificate-title {
-  margin: 4px 0 0;
-  font-size: 34px;
+  margin: 0;
+  font-size: 30px;
   letter-spacing: 8px;
   font-weight: 700;
   color: #1a2a4f;
@@ -179,32 +95,32 @@
   flex-direction: column;
   justify-content: center;
   gap: 6px;
-  padding: 18px 0;
+  padding: 14px 0 8px;
 }
 
-.certificate-body-text {
+.certificate-text {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   color: #33415c;
   font-family: "Georgia", serif;
+  line-height: 1.4;
 }
 
 .certificate-student-name {
   font-weight: 700;
   color: #1a2a4f;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   line-height: 1.15;
-  margin: 2px 0 0;
+  margin: 6px 0 2px;
   font-family: "Georgia", serif;
   text-transform: uppercase;
 }
 
 .certificate-cpf {
-  font-size: 12px;
+  font-size: 11px;
   color: #6b7a8f;
   letter-spacing: 1.5px;
-  margin-top: 0;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-family: "Courier New", monospace;
 }
 
@@ -212,7 +128,7 @@
   font-weight: 700;
   font-style: italic;
   color: #2e4a80;
-  margin: 4px 0;
+  margin: 6px 0;
   line-height: 1.25;
   font-family: "Georgia", serif;
 }
@@ -220,159 +136,196 @@
 .certificate-details {
   display: flex;
   justify-content: center;
-  gap: 40px;
+  align-items: center;
+  gap: 14px;
   margin-top: 10px;
-  font-size: 13px;
+  font-size: 12.5px;
   color: #33415c;
+  flex-wrap: wrap;
+}
+
+.certificate-details-sep {
+  color: #c9a961;
+  font-weight: 700;
 }
 
 .certificate-issue-date {
-  margin-top: 10px;
-  font-size: 12px;
+  margin-top: 8px;
+  font-size: 11.5px;
   color: #6b7a8f;
   font-style: italic;
 }
 
 /* ---------- ASSINATURAS ---------- */
-.certificate-signatures {
+.certificate-signatures-section {
   display: flex;
-  align-items: flex-end;
   justify-content: center;
+  align-items: flex-end;
   gap: 60px;
-  margin: 20px 0 12px;
-  min-height: 110px;
+  padding: 12px 8px 8px;
+  margin: 6px 0 8px;
+  border-top: 1px solid #e0e4e8;
   flex-wrap: wrap;
 }
 
-.signature-block {
+/* --- Corpo Docente --- */
+.signatures-teachers-row {
+  display: flex;
+  gap: 40px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.teacher-signature {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 190px;
-  gap: 2px;
+  min-width: 180px;
+  max-width: 220px;
+  text-align: center;
 }
 
-.signature-line {
-  width: 180px;
+.teacher-signature-name {
+  font-family: "Great Vibes", "Dancing Script", "Brush Script MT",
+    "Lucida Handwriting", cursive;
+  font-size: 26px;
+  color: #1a2a4f;
+  line-height: 1;
+  margin-bottom: -6px;
+  padding: 0 6px;
+}
+
+.teacher-signature-line {
+  width: 100%;
   height: 1px;
   background: #1a2a4f;
-  margin-bottom: 6px;
+  margin: 6px 0 5px;
 }
 
-.signature-image {
-  width: 140px;
-  height: 46px;
-  object-fit: contain;
-  margin-bottom: 2px;
-}
-
-.signature-name {
-  font-size: 13px;
+.teacher-signature-fullname {
+  font-size: 11.5px;
   font-weight: 700;
   color: #1a2a4f;
   font-family: "Georgia", serif;
 }
 
-.signature-role {
+.teacher-signature-info {
+  font-size: 10px;
+  color: #6b7a8f;
+  margin-top: 1px;
+  letter-spacing: 0.2px;
+}
+
+/* --- Presidente --- */
+.signature-president-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 240px;
+  text-align: center;
+}
+
+.signature-president-image-wrap {
+  height: 52px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.signature-president-image {
+  max-height: 52px;
+  max-width: 200px;
+  object-fit: contain;
+}
+
+.signature-president-line {
+  width: 220px;
+  height: 1px;
+  background: #1a2a4f;
+  margin-bottom: 6px;
+}
+
+.signature-president-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1a2a4f;
+  font-family: "Georgia", serif;
+}
+
+.signature-president-role {
   font-size: 11px;
   color: #33415c;
-  letter-spacing: 0.5px;
-}
-
-.signature-org {
-  font-size: 10px;
-  color: #6b7a8f;
-  letter-spacing: 0.8px;
-}
-
-.signature-registro {
-  font-size: 10px;
-  color: #6b7a8f;
   letter-spacing: 0.4px;
-  margin-top: 1px;
 }
 
-/* Layouts condicionais de assinatura */
-.signatures-1 {
-  justify-content: space-around;
+.signature-president-org {
+  font-size: 10px;
+  color: #6b7a8f;
+  letter-spacing: 0.6px;
 }
 
-.signatures-2 {
-  justify-content: space-around;
-}
-
-.signature-president-bottom {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed #c9a961;
-}
-
-.signatures-multi {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px 40px;
-  width: 100%;
-  margin-bottom: 16px;
-}
-
-/* ---------- RODAPÉ / VALIDAÇÃO ---------- */
+/* ---------- VALIDAÇÃO ---------- */
 .certificate-validation {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 12px auto 6px;
-  padding: 12px 24px;
-  border: 1px dashed #c8d3e0;
-  border-radius: 10px;
-  max-width: 560px;
-  background: #fafbfd;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #f7f9fc;
+  border: 1px solid #d6dfeb;
+  border-radius: 6px;
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: left;
 }
 
-.certificate-validation-text {
-  text-align: center;
+.validation-icon {
+  font-size: 18px;
+  line-height: 1;
 }
 
-.certificate-validation-label {
+.validation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.validation-title {
   font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 1.4px;
+  letter-spacing: 1.5px;
+  color: #6b7a8f;
+  font-weight: 700;
+}
+
+.validation-code-line,
+.validation-link-line {
+  font-size: 10.5px;
+  color: #33415c;
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.validation-label {
   color: #6b7a8f;
 }
 
-.certificate-validation-code {
+.validation-code {
   font-family: "Courier New", monospace;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 700;
   color: #1a2a4f;
-  margin: 3px 0;
   letter-spacing: 0.8px;
 }
 
-.certificate-validation-link {
-  font-size: 10px;
-  color: #33415c;
-  margin-top: 4px;
-  word-break: break-all;
-}
-
-.certificate-validation-link strong {
-  color: #1a2a4f;
+.validation-link {
   font-family: "Courier New", monospace;
-}
-
-.certificate-footer {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #8a99ad;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding-top: 6px;
-  border-top: 1px solid #eaeef3;
-  margin-top: 6px;
+  color: #1a2a4f;
+  font-weight: 600;
+  word-break: break-all;
 }
 
 /* ---------- IMPRESSÃO ---------- */
@@ -390,19 +343,5 @@
     left: 0;
     box-shadow: none;
     page-break-after: always;
-  }
-  .certificate-validation {
-    border-color: #999;
-  }
-  .certificate-watermark {
-    opacity: 0.06;
-  }
-}
-
-/* ---------- RESPONSIVO ---------- */
-@media (max-width: 1180px) {
-  .certificate-wrapper {
-    transform: scale(0.85);
-    transform-origin: top left;
   }
 }

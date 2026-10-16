@@ -129,7 +129,6 @@ export default function PortalAluno() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aluno]);
 
-  // ============ Login ============
   const buscarAluno = async () => {
     setErro("");
     const cpfDig = apenasDigitos(cpf);
@@ -179,11 +178,9 @@ export default function PortalAluno() {
     }
   };
 
-  // ============ Carrega TUDO + gera certificados automaticamente ============
   const carregarDados = async (a: Aluno) => {
     setCarregando(true);
     try {
-      // --- 1) CURSOS + CERTIFICADOS ---
       const cursosSnap = await getDocs(collection(db, "cursos"));
       const certificadosEncontrados: Certificado[] = [];
       const cursosEncontrados: CursoMatriculado[] = [];
@@ -204,7 +201,6 @@ export default function PortalAluno() {
           const statusTurma = t.status || "ativa";
           const dataFimISO = normalizarData(t.dataFim);
 
-          // Calcula frequência
           let frequencia = 0;
           if (totalAulas > 0) {
             const presSnap = await getDocs(
@@ -221,7 +217,7 @@ export default function PortalAluno() {
             );
           }
 
-          // 🎯 Se aprovado (>= 70%), GARANTE certificado automaticamente
+          // Gera/recupera certificado automaticamente se aprovado
           if (totalAulas > 0 && frequencia >= 70) {
             try {
               const { codigo } = await obterOuCriarCertificado({
@@ -251,7 +247,7 @@ export default function PortalAluno() {
             }
           }
 
-          // 📚 Só mostra em "Cursos" se AINDA está ativo
+          // Só mostra em "Cursos" se ainda está ativo
           const isAtivo =
             statusTurma === "ativa" && (!dataFimISO || dataFimISO >= hojeISO);
 
@@ -270,7 +266,6 @@ export default function PortalAluno() {
         }
       }
 
-      // Ordena certificados: mais recente primeiro
       certificadosEncontrados.sort((x, y) => {
         const dx = normalizarData(x.dataFim);
         const dy = normalizarData(y.dataFim);
@@ -280,7 +275,6 @@ export default function PortalAluno() {
       setCertificados(certificadosEncontrados);
       setCursos(cursosEncontrados);
 
-      // --- 2) AGENDAMENTOS ---
       try {
         const agSnap = await getDocs(
           query(collection(db, "agendamentos"), where("alunoId", "==", a.id))
@@ -330,12 +324,10 @@ export default function PortalAluno() {
     setCursos([]);
   };
 
-  // ============ Baixar PDF ============
   const baixarPDF = async (cert: Certificado) => {
     if (!aluno) return;
     setBaixando(cert.codigo);
     try {
-      // Pega dados completos (com professores salvos) do Firestore
       const full = await buscarCertificadoPorCodigo(cert.codigo);
       if (!full) {
         alert("Certificado não encontrado.");
@@ -380,7 +372,8 @@ export default function PortalAluno() {
         />
       );
 
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 400));
+      await document.fonts.ready;
 
       const images = root.querySelectorAll("img");
       await Promise.all(
@@ -393,7 +386,7 @@ export default function PortalAluno() {
         })
       );
 
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 250));
 
       const canvas = await html2canvas(root, {
         scale: 4,
@@ -427,9 +420,6 @@ export default function PortalAluno() {
     }
   };
 
-  // ================================================================
-  // LOGIN
-  // ================================================================
   if (!aluno) {
     return (
       <div style={estilos.wrapper}>
@@ -529,9 +519,6 @@ export default function PortalAluno() {
     );
   }
 
-  // ================================================================
-  // LOGADO
-  // ================================================================
   return (
     <div style={estilos.wrapper}>
       <div style={{ ...estilos.card, maxWidth: 780 }}>
@@ -583,7 +570,6 @@ export default function PortalAluno() {
           </p>
         )}
 
-        {/* ============ CERTIFICADOS ============ */}
         {!carregando && abaAtiva === "certificados" && (
           <div>
             {certificados.length === 0 ? (
@@ -594,8 +580,15 @@ export default function PortalAluno() {
               />
             ) : (
               certificados.map((c) => (
-                <div key={c.id} style={estilos.item}>
-                  <div style={{ flex: 1 }}>
+                <div
+                  key={c.id}
+                  style={{
+                    ...estilos.item,
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                  }}
+                >
+                  <div>
                     <div
                       style={{ fontWeight: 700, color: "#1a2a4f", fontSize: 16 }}
                     >
@@ -618,15 +611,22 @@ export default function PortalAluno() {
                       Código: {c.codigo}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      marginTop: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <button
                       onClick={() =>
                         window.open(`/certificado/${c.codigo}`, "_blank")
                       }
                       style={estilos.botaoAcaoSec}
-                      title="Ver validação pública"
                     >
-                      👁️ Ver
+                      👁️ Visualizar
                     </button>
                     <button
                       onClick={() => baixarPDF(c)}
@@ -637,7 +637,7 @@ export default function PortalAluno() {
                         cursor: baixando === c.codigo ? "wait" : "pointer",
                       }}
                     >
-                      {baixando === c.codigo ? "..." : "⬇️ Baixar PDF"}
+                      {baixando === c.codigo ? "Gerando..." : "⬇️ Baixar PDF"}
                     </button>
                   </div>
                 </div>
@@ -646,7 +646,6 @@ export default function PortalAluno() {
           </div>
         )}
 
-        {/* ============ AGENDAMENTOS ============ */}
         {!carregando && abaAtiva === "agenda" && (
           <div>
             {agendamentos.length === 0 ? (
@@ -691,7 +690,6 @@ export default function PortalAluno() {
           </div>
         )}
 
-        {/* ============ CURSOS ============ */}
         {!carregando && abaAtiva === "cursos" && (
           <div>
             {cursos.length === 0 ? (
@@ -755,7 +753,6 @@ export default function PortalAluno() {
   );
 }
 
-// ============ Subcomponentes ============
 function AbaBtn({
   ativo,
   onClick,
@@ -823,7 +820,6 @@ function Vazio({
   );
 }
 
-// ============ Estilos ============
 const estilos: Record<string, React.CSSProperties> = {
   wrapper: {
     minHeight: "100vh",
@@ -868,6 +864,7 @@ const estilos: Record<string, React.CSSProperties> = {
     marginBottom: 16,
     fontSize: 15,
     outline: "none",
+    boxSizing: "border-box",
   },
   botao: {
     width: "100%",
@@ -896,6 +893,7 @@ const estilos: Record<string, React.CSSProperties> = {
     padding: 4,
     background: "#f4f6f9",
     borderRadius: 12,
+    flexWrap: "wrap",
   },
   item: {
     display: "flex",
@@ -909,23 +907,23 @@ const estilos: Record<string, React.CSSProperties> = {
     boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
   },
   botaoAcao: {
-    padding: "8px 14px",
+    padding: "10px 16px",
     background: "#28a745",
     color: "#fff",
     border: "none",
     borderRadius: 8,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
   botaoAcaoSec: {
-    padding: "8px 12px",
+    padding: "10px 16px",
     background: "#fff",
-    color: "#33415c",
+    color: "#1a2a4f",
     border: "1px solid #cbd5e1",
     borderRadius: 8,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
     whiteSpace: "nowrap",
