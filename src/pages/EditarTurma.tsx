@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../services/firebase";
+
+interface Professor {
+  id: string;
+  nome: string;
+  profissao?: string;
+  numeroRegistro?: string;
+  tipoRegistro?: string;
+  situacao: "ativo" | "inativo";
+}
 
 export default function EditarTurma() {
   const { id: cursoId, turmaId } = useParams<{ id: string; turmaId: string }>();
@@ -11,6 +20,10 @@ export default function EditarTurma() {
   const [salvando, setSalvando] = useState(false);
   const [alunos, setAlunos] = useState<string[]>([]);
   const [camposExtras, setCamposExtras] = useState<Record<string, any>>({});
+
+  // Professores
+  const [todosProfessores, setTodosProfessores] = useState<Professor[]>([]);
+  const [professoresSelecionados, setProfessoresSelecionados] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     nome: "",
@@ -28,7 +41,19 @@ export default function EditarTurma() {
 
   useEffect(() => {
     carregar();
+    carregarProfessores();
   }, [cursoId, turmaId]);
+
+  const carregarProfessores = async () => {
+    try {
+      const snap = await getDocs(collection(db, "professores"));
+      const lista = snap.docs.map(d => ({ id: d.id, ...d.data() } as Professor));
+      lista.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+      setTodosProfessores(lista);
+    } catch (e: any) {
+      console.error("Erro ao carregar professores:", e);
+    }
+  };
 
   const carregar = async () => {
     if (!cursoId || !turmaId) return;
@@ -44,6 +69,9 @@ export default function EditarTurma() {
       const alunosArr = data.alunos || [];
       setAlunos(alunosArr);
 
+      // Carrega professores vinculados
+      setProfessoresSelecionados(data.professoresIds || []);
+
       const capacidade =
         data.vagasTotais ||
         data.totalVagas ||
@@ -51,11 +79,10 @@ export default function EditarTurma() {
         data.capacidade ||
         (data.vagasDisponiveis || 0) + alunosArr.length;
 
-      // Identifica campos "extras" que existem no banco mas não são conhecidos do form
       const camposConhecidos = [
         "nome", "vagasTotais", "totalVagas", "vagas", "capacidade", "vagasDisponiveis",
         "cargaHoraria", "totalAulas", "status", "dataInicio", "dataFim", "alunos",
-        "modalidade", "diasSemana", "horario", "descricao",
+        "modalidade", "diasSemana", "horario", "descricao", "professoresIds",
         "createdAt", "updatedAt",
       ];
       const extras: Record<string, any> = {};
@@ -93,7 +120,6 @@ export default function EditarTurma() {
 
     setSalvando(true);
     try {
-      // Preserva todos os campos extras que existiam
       const updateData: any = {
         ...camposExtras,
         nome: form.nome,
@@ -105,6 +131,7 @@ export default function EditarTurma() {
         diasSemana: form.diasSemana,
         horario: form.horario,
         descricao: form.descricao,
+        professoresIds: professoresSelecionados,
         updatedAt: new Date(),
       };
 
@@ -134,10 +161,20 @@ export default function EditarTurma() {
     }));
   };
 
+  const toggleProfessor = (professorId: string) => {
+    setProfessoresSelecionados(prev =>
+      prev.includes(professorId)
+        ? prev.filter(id => id !== professorId)
+        : [...prev, professorId]
+    );
+  };
+
   const sInput = { width: "100%", padding: 10, border: "1px solid #ccc", borderRadius: 8, marginBottom: 12 };
   const dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 
   if (carregando) return <div style={{ padding: 20 }}>Carregando...</div>;
+
+  const professoresAtivos = todosProfessores.filter(p => p.situacao === "ativo");
 
   return (
     <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
@@ -167,37 +204,19 @@ export default function EditarTurma() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
             <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Capacidade total (vagas) *</label>
-            <input
-              type="number"
-              min={alunos.length}
-              value={form.vagasTotais}
-              onChange={e => handleChange("vagasTotais", parseInt(e.target.value) || 0)}
-              style={sInput}
-            />
+            <input type="number" min={alunos.length} value={form.vagasTotais} onChange={e => handleChange("vagasTotais", parseInt(e.target.value) || 0)} style={sInput} />
             <p style={{ fontSize: 12, color: "#6b7a8f", margin: 0 }}>Mínimo: {alunos.length}</p>
           </div>
           <div>
             <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Total de aulas</label>
-            <input
-              type="number"
-              min={0}
-              value={form.totalAulas}
-              onChange={e => handleChange("totalAulas", parseInt(e.target.value) || 0)}
-              style={sInput}
-            />
+            <input type="number" min={0} value={form.totalAulas} onChange={e => handleChange("totalAulas", parseInt(e.target.value) || 0)} style={sInput} />
           </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
             <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Carga horária (horas)</label>
-            <input
-              type="number"
-              min={0}
-              value={form.cargaHoraria}
-              onChange={e => handleChange("cargaHoraria", parseInt(e.target.value) || 0)}
-              style={sInput}
-            />
+            <input type="number" min={0} value={form.cargaHoraria} onChange={e => handleChange("cargaHoraria", parseInt(e.target.value) || 0)} style={sInput} />
           </div>
           <div>
             <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Status</label>
@@ -220,13 +239,7 @@ export default function EditarTurma() {
           </div>
           <div>
             <label style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>Horário</label>
-            <input
-              type="text"
-              value={form.horario}
-              onChange={e => handleChange("horario", e.target.value)}
-              placeholder="Ex: 14:00 - 16:00"
-              style={sInput}
-            />
+            <input type="text" value={form.horario} onChange={e => handleChange("horario", e.target.value)} placeholder="Ex: 14:00 - 16:00" style={sInput} />
           </div>
         </div>
 
@@ -273,6 +286,78 @@ export default function EditarTurma() {
             style={{ ...sInput, minHeight: 80 }}
             placeholder="Informações adicionais sobre a turma..."
           />
+        </div>
+
+        {/* 🔥 PROFESSORES DA TURMA */}
+        <div style={{ marginTop: 20, marginBottom: 20, borderTop: "2px solid #e0e4e8", paddingTop: 20 }}>
+          <label style={{ fontWeight: 700, display: "block", marginBottom: 6, fontSize: 15, color: "#1a2a4f" }}>
+            👨‍🏫 Professores da turma
+          </label>
+          <p style={{ fontSize: 13, color: "#6b7a8f", margin: "0 0 12px" }}>
+            Selecione os professores que assinarão os certificados desta turma.
+            Você pode marcar vários.
+          </p>
+
+          {professoresAtivos.length === 0 && (
+            <div style={{ background: "#fff8e1", border: "1px solid #ffc107", borderRadius: 8, padding: 12 }}>
+              <p style={{ margin: 0, fontSize: 13, color: "#856404" }}>
+                ⚠️ Nenhum professor ativo cadastrado.{" "}
+                <a href="/professores" style={{ color: "#0070f3", fontWeight: 600 }}>
+                  Cadastrar professor →
+                </a>
+              </p>
+            </div>
+          )}
+
+          {professoresAtivos.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {professoresAtivos.map(p => {
+                const selecionado = professoresSelecionados.includes(p.id);
+                return (
+                  <label
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: 12,
+                      border: selecionado ? "2px solid #0070f3" : "1px solid #e0e4e8",
+                      background: selecionado ? "#e6f0ff" : "#fff",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selecionado}
+                      onChange={() => toggleProfessor(p.id)}
+                      style={{ cursor: "pointer" }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: "#1a2a4f" }}>{p.nome}</div>
+                      <div style={{ fontSize: 12, color: "#6b7a8f" }}>
+                        {p.profissao && <span>{p.profissao}</span>}
+                        {p.numeroRegistro && (
+                          <span>
+                            {p.profissao ? " • " : ""}
+                            {p.tipoRegistro ? p.tipoRegistro + " " : ""}{p.numeroRegistro}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {selecionado && <span style={{ color: "#28a745", fontSize: 18 }}>✓</span>}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {professoresSelecionados.length > 0 && (
+            <p style={{ marginTop: 12, fontSize: 13, color: "#28a745", fontWeight: 600 }}>
+              ✓ {professoresSelecionados.length} professor(es) selecionado(s)
+            </p>
+          )}
         </div>
 
         {Object.keys(camposExtras).length > 0 && (

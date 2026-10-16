@@ -7,6 +7,7 @@ import Cursos from "./pages/Cursos";
 import CursoNovo from "./pages/CursoNovo";
 import CursoDetalhe from "./pages/CursoDetalhe";
 import EditarTurma from "./pages/EditarTurma";
+import Professores from "./pages/Professores";
 import Presenca from "./pages/Presenca";
 import AlunosLista from "./pages/AlunosLista";
 import AlunosCadastrar from "./pages/AlunosCadastrar";
@@ -45,6 +46,10 @@ import Atestados from "./pages/Atestados";
 import ValidarAtestado from "./pages/ValidarAtestado";
 import AdminMigrarProntuarios from "./pages/AdminMigrarProntuarios";
 
+// ============ CERTIFICADOS + PORTAL PÚBLICO ============
+import ValidarCertificado from "./pages/ValidarCertificado";
+import PortalAluno from "./pages/PortalAluno";
+
 export default function App() {
   return (
     <Routes>
@@ -54,8 +59,18 @@ export default function App() {
       <Route path="/cadastrar-senha" element={<CadastrarSenhaProfissional />} />
       <Route path="/presenca-professor" element={<PresencaProfessor />} />
       <Route path="/inscricao" element={<Inscricao />} />
+
+      {/* Validação de atestados */}
       <Route path="/validar" element={<ValidarAtestado />} />
       <Route path="/validar/:codigo" element={<ValidarAtestado />} />
+
+      {/* Validação de certificados (pública) */}
+      <Route path="/certificado" element={<ValidarCertificado />} />
+      <Route path="/certificado/:codigo" element={<ValidarCertificado />} />
+
+      {/* Portal do aluno (público) */}
+      <Route path="/portal" element={<PortalAluno />} />
+      <Route path="/portal-aluno" element={<PortalAluno />} />
 
       {/* ============ ÁREA DO PROFISSIONAL ============ */}
       <Route path="/profissional/:codigo" element={<ProfissionalLayout />}>
@@ -65,7 +80,13 @@ export default function App() {
       </Route>
 
       {/* ============ ROTAS ADMINISTRATIVAS (com login) ============ */}
-      <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
+      <Route
+        element={
+          <PrivateRoute>
+            <Layout />
+          </PrivateRoute>
+        }
+      >
         <Route path="/" element={<Dashboard />} />
         <Route path="/alunos" element={<AlunosLista />} />
         <Route path="/alunos/cadastrar" element={<AlunosCadastrar />} />
@@ -74,7 +95,9 @@ export default function App() {
         <Route path="/cursos/novo" element={<CursoNovo />} />
         <Route path="/cursos/:id" element={<CursoDetalhe />} />
         <Route path="/cursos/:id/turmas/:turmaId" element={<EditarTurma />} />
+        <Route path="/professores" element={<Professores />} />
         <Route path="/presenca" element={<Presenca />} />
+
         <Route path="/saude" element={<Saude />}>
           <Route index element={<SaudeFila />} />
           <Route path="fila" element={<SaudeFila />} />
@@ -84,12 +107,19 @@ export default function App() {
           <Route path="pacientes" element={<SaudePacientes />} />
           <Route path="configuracoes" element={<SaudeConfiguracoes />} />
         </Route>
+
         <Route path="/atestados" element={<Atestados />} />
-        <Route path="/admin/migrar-prontuarios" element={<AdminMigrarProntuarios />} />
+        <Route
+          path="/admin/migrar-prontuarios"
+          element={<AdminMigrarProntuarios />}
+        />
         <Route path="/migracao-psicologia" element={<MigracaoPsicologia />} />
         <Route path="/notificacoes" element={<Notificacoes />} />
         <Route path="/relatorio-alunos" element={<RelatorioAlunosTurma />} />
-        <Route path="/migracao-corrigir-horarios" element={<MigracaoCorrigirHorarios />} />
+        <Route
+          path="/migracao-corrigir-horarios"
+          element={<MigracaoCorrigirHorarios />}
+        />
         <Route path="/certificados" element={<Certificados />} />
         <Route path="/teste-certificado" element={<TesteCertificado />} />
         <Route path="/pre-inscricoes" element={<PreInscricoes />} />

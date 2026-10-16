@@ -1,19 +1,32 @@
 import React from "react";
 import "./CertificateTemplate.css";
+import type { ProfessorCertificado } from "../services/certificados";
 
 interface CertificateTemplateProps {
   alunoNome: string;
+  alunoCpf?: string;
   cursoNome: string;
   cargaHoraria: number;
   dataInicio: string;
   dataFim: string;
   frequencia: number;
-  professores: string[];
+  professores: (string | ProfessorCertificado)[];
+  codigoValidacao?: string;
+  linkValidacao?: string;
   logoUrl?: string;
   assinaturaUrl?: string;
 }
 
-// Subcomponente Presidente
+const normalizarProfs = (
+  profs: (string | ProfessorCertificado)[]
+): ProfessorCertificado[] => {
+  if (!profs || profs.length === 0) return [];
+  if (typeof profs[0] === "string") {
+    return (profs as string[]).map((nome) => ({ nome }));
+  }
+  return profs as ProfessorCertificado[];
+};
+
 const Presidente: React.FC<{ assinaturaUrl: string }> = ({ assinaturaUrl }) => (
   <div className="signature-block signature-block-president">
     {assinaturaUrl && (
@@ -25,30 +38,38 @@ const Presidente: React.FC<{ assinaturaUrl: string }> = ({ assinaturaUrl }) => (
   </div>
 );
 
-// Subcomponente Professor
-const Professor: React.FC<{ nome: string }> = ({ nome }) => (
-  <div className="signature-block">
-    <div className="signature-line" />
-    <div className="signature-name">{nome}</div>
-    <div className="signature-role">Professor</div>
-  </div>
-);
+const Professor: React.FC<{ prof: ProfessorCertificado }> = ({ prof }) => {
+  const registro = prof.numeroRegistro
+    ? `${prof.tipoRegistro ? prof.tipoRegistro + " " : ""}${prof.numeroRegistro}`
+    : "";
+
+  return (
+    <div className="signature-block">
+      <div className="signature-line" />
+      <div className="signature-name">{prof.nome}</div>
+      {prof.profissao && <div className="signature-role">{prof.profissao}</div>}
+      {registro && <div className="signature-registro">{registro}</div>}
+    </div>
+  );
+};
 
 const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
   alunoNome,
+  alunoCpf,
   cursoNome,
   cargaHoraria,
   dataInicio,
   dataFim,
   frequencia,
   professores,
+  codigoValidacao,
+  linkValidacao,
   logoUrl = "/logo-ijp.png",
   assinaturaUrl = "/assinatura.png",
 }) => {
-  const profs = professores.length > 0 ? professores : ["_______________________"];
+  const profs = normalizarProfs(professores);
   const qtdProf = profs.length;
 
-  // Tamanho da fonte do nome (dinâmico)
   const nomeFontSize = (() => {
     const l = alunoNome.length;
     if (l <= 28) return 48;
@@ -58,7 +79,6 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
     return 32;
   })();
 
-  // Tamanho da fonte do curso (dinâmico)
   const cursoFontSize = (() => {
     const l = cursoNome.length;
     if (l <= 30) return 24;
@@ -78,10 +98,15 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
   else if (qtdProf === 2) signatureClass += " signatures-2";
   else if (qtdProf === 3) signatureClass += " signatures-3";
 
-  const professorBlocks = profs.map((nome, idx) => <Professor key={idx} nome={nome} />);
+  const professorBlocks = profs.map((p, idx) => (
+    <Professor key={idx} prof={p} />
+  ));
 
-  let signaturesLayout = null;
-  if (qtdProf === 1) {
+  let signaturesLayout: React.ReactNode = null;
+
+  if (qtdProf === 0) {
+    signaturesLayout = <Presidente assinaturaUrl={assinaturaUrl} />;
+  } else if (qtdProf === 1) {
     signaturesLayout = (
       <>
         <Presidente assinaturaUrl={assinaturaUrl} />
@@ -105,11 +130,19 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
         </div>
       </>
     );
+  } else {
+    signaturesLayout = (
+      <>
+        <div className="signatures-multi">{professorBlocks}</div>
+        <div className="signature-president-bottom">
+          <Presidente assinaturaUrl={assinaturaUrl} />
+        </div>
+      </>
+    );
   }
 
   return (
     <div className="certificate-wrapper">
-      {/* Molduras */}
       <div className="certificate-frame">
         <div className="certificate-frame-top" />
         <div className="certificate-frame-bottom" />
@@ -117,16 +150,12 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
         <div className="certificate-frame-right" />
       </div>
 
-      {/* Ornamentos */}
       <div className="certificate-corner certificate-corner-tl" />
       <div className="certificate-corner certificate-corner-tr" />
       <div className="certificate-corner certificate-corner-bl" />
       <div className="certificate-corner certificate-corner-br" />
 
-      {/* Selo seco */}
       <img src={logoUrl} alt="" className="certificate-seal" loading="eager" />
-
-      {/* Marca d'água */}
       <img src={logoUrl} alt="" className="certificate-watermark" loading="eager" />
 
       <div className="certificate-content">
@@ -139,25 +168,67 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
         </div>
 
         <div className="certificate-body">
-          <p className="certificate-body-text">O Instituto Jovens Periféricos certifica que</p>
-          <div className="certificate-student-name" style={{ fontSize: `${nomeFontSize}pt` }}>
+          <p className="certificate-body-text">
+            O Instituto Jovens Periféricos certifica que
+          </p>
+
+          <div
+            className="certificate-student-name"
+            style={{ fontSize: `${nomeFontSize}pt` }}
+          >
             {alunoNome}
           </div>
+
+          {alunoCpf && <div className="certificate-cpf">CPF: {alunoCpf}</div>}
+
           <p className="certificate-body-text">concluiu com êxito o curso</p>
-          <div className="certificate-course-name" style={{ fontSize: `${cursoFontSize}pt` }}>
+
+          <div
+            className="certificate-course-name"
+            style={{ fontSize: `${cursoFontSize}pt` }}
+          >
             “{cursoNome}”
           </div>
+
           <p className="certificate-body-text">
-            com carga horária de <strong>{cargaHoraria}</strong> horas, promovido pelo Instituto Jovens Periféricos.
+            com carga horária de <strong>{cargaHoraria}</strong> horas, promovido
+            pelo Instituto Jovens Periféricos.
           </p>
+
           <div className="certificate-details">
-            <span>Período: <strong>{dataInicio} a {dataFim}</strong></span>
-            <span>Frequência: <strong>{frequencia}%</strong></span>
+            <span>
+              Período:{" "}
+              <strong>
+                {dataInicio} a {dataFim}
+              </strong>
+            </span>
+            <span>
+              Frequência: <strong>{frequencia}%</strong>
+            </span>
           </div>
+
           <div className="certificate-issue-date">Emitido em {hoje}</div>
         </div>
 
         <div className={signatureClass}>{signaturesLayout}</div>
+
+        {codigoValidacao && (
+          <div className="certificate-validation">
+            <div className="certificate-validation-text">
+              <div className="certificate-validation-label">
+                Código de validação
+              </div>
+              <div className="certificate-validation-code">
+                {codigoValidacao}
+              </div>
+              {linkValidacao && (
+                <div className="certificate-validation-link">
+                  Valide este certificado em: <strong>{linkValidacao}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="certificate-footer">
           <span>Instituto Jovens Periféricos</span>

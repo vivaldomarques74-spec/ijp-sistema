@@ -23,6 +23,7 @@ export default function Layout() {
     { path: "/alunos", label: "Alunos", icon: "👤" },
     { path: "/alunos/cadastrar", label: "Novo Aluno", icon: "➕" },
     { path: "/cursos", label: "Cursos", icon: "📚" },
+    { path: "/professores", label: "Professores", icon: "👨‍🏫" },
     { path: "/presenca", label: "Presença", icon: "✅" },
     { path: "/saude", label: "Saúde", icon: "🏥" },
     { path: "/atestados", label: "Atestados", icon: "📄" },

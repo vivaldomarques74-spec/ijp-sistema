@@ -1,325 +1,408 @@
-@font-face {
-  font-family: 'Cormorant';
-  src: url('/fonts/CormorantGaramond-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'CormorantBold';
-  src: url('/fonts/CormorantGaramond-Bold.ttf') format('truetype');
-  font-weight: bold;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  src: url('/fonts/Montserrat-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-}
+/* =========================================================
+   CERTIFICADO INSTITUCIONAL — IJP
+   ========================================================= */
 
 .certificate-wrapper {
-  width: 297mm;
-  height: 210mm;
-  padding: 8mm 18mm 22mm 18mm;
-  box-sizing: border-box;
-  background: #ffffff; /* BRANCO */
-  font-family: 'Montserrat', sans-serif;
   position: relative;
-  overflow: visible;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid #d4c5a0;
+  width: 1122px;
+  height: 794px; /* A4 paisagem @ 96dpi */
+  margin: 0 auto;
+  background: #ffffff;
+  color: #1a2a4f;
+  font-family: "Georgia", "Times New Roman", serif;
+  overflow: hidden;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
 }
 
-.certificate-frame {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-}
+/* ---------- MOLDURAS ---------- */
 .certificate-frame-top,
-.certificate-frame-bottom {
-  position: absolute;
-  left: 10mm;
-  right: 10mm;
-  height: 1.3px;
-  background: #c9a96e;
-}
-.certificate-frame-top { top: 8mm; }
-.certificate-frame-bottom { bottom: 8mm; }
+.certificate-frame-bottom,
 .certificate-frame-left,
 .certificate-frame-right {
   position: absolute;
-  top: 10mm;
-  bottom: 10mm;
-  width: 1.3px;
-  background: #c9a96e;
+  background: linear-gradient(90deg, #1a2a4f 0%, #2e4a80 50%, #1a2a4f 100%);
 }
-.certificate-frame-left { left: 8mm; }
-.certificate-frame-right { right: 8mm; }
 
+.certificate-frame-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+
+.certificate-frame-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+
+.certificate-frame-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 14px;
+  background: linear-gradient(180deg, #1a2a4f 0%, #2e4a80 50%, #1a2a4f 100%);
+}
+
+.certificate-frame-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  background: linear-gradient(180deg, #1a2a4f 0%, #2e4a80 50%, #1a2a4f 100%);
+}
+
+/* ---------- ORNAMENTOS DOS CANTOS ---------- */
 .certificate-corner {
   position: absolute;
-  width: 8mm;
-  height: 8mm;
-  border: 1px solid #c9a96e;
+  width: 70px;
+  height: 70px;
+  border: 3px solid #c9a961;
   pointer-events: none;
 }
-.certificate-corner-tl { top: 8mm; left: 8mm; border-right: none; border-bottom: none; }
-.certificate-corner-tr { top: 8mm; right: 8mm; border-left: none; border-bottom: none; }
-.certificate-corner-bl { bottom: 8mm; left: 8mm; border-right: none; border-top: none; }
-.certificate-corner-br { bottom: 8mm; right: 8mm; border-left: none; border-top: none; }
+
+.certificate-corner-tl {
+  top: 20px;
+  left: 20px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.certificate-corner-tr {
+  top: 20px;
+  right: 20px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.certificate-corner-bl {
+  bottom: 20px;
+  left: 20px;
+  border-right: none;
+  border-top: none;
+}
+
+.certificate-corner-br {
+  bottom: 20px;
+  right: 20px;
+  border-left: none;
+  border-top: none;
+}
+
+/* ---------- SELO E MARCA D'ÁGUA ---------- */
+.certificate-seal {
+  position: absolute;
+  bottom: 60px;
+  right: 60px;
+  width: 110px;
+  height: 110px;
+  opacity: 0.85;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
+}
 
 .certificate-watermark {
   position: absolute;
   top: 50%;
   left: 50%;
+  width: 620px;
+  height: 620px;
   transform: translate(-50%, -50%);
-  opacity: 0.02;
+  opacity: 0.045;
   pointer-events: none;
-  z-index: 0;
-  width: 160mm;
-  height: auto;
+  object-fit: contain;
 }
 
-.certificate-seal {
-  position: absolute;
-  bottom: 16mm;
-  left: 14mm;
-  opacity: 0.025;
-  pointer-events: none;
-  z-index: 0;
-  width: 40mm;
-  height: auto;
-}
-
+/* ---------- CONTEÚDO ---------- */
 .certificate-content {
   position: relative;
-  z-index: 1;
-  flex: 1;
+  z-index: 2;
+  height: 100%;
+  padding: 44px 70px 60px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  height: 100%;
+  text-align: center;
 }
 
+/* ---------- CABEÇALHO ---------- */
 .certificate-header {
-  text-align: center;
-  margin-bottom: 1mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .certificate-logo {
-  width: 60mm;
-  height: auto;
-  margin-bottom: 1mm;
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  margin-bottom: 6px;
 }
 
 .certificate-institution {
-  font-family: 'CormorantBold', serif;
-  font-size: 20pt;
-  font-weight: 600;
-  color: #1a2a4f;
   margin: 0;
+  font-size: 20px;
   letter-spacing: 3px;
-  text-transform: uppercase;
+  font-weight: 700;
+  color: #1a2a4f;
+  font-family: "Georgia", serif;
 }
 
 .certificate-cnpj {
-  font-family: 'Montserrat', sans-serif;
-  font-size: 7pt;
-  color: #555;
+  margin: 0;
+  font-size: 11px;
+  color: #6b7a8f;
   letter-spacing: 1px;
-  margin: 0 0 0.5mm 0;
-  text-align: center;
 }
 
 .certificate-divider {
-  width: 60mm;
-  height: 1.5px;
-  background: #c9a96e;
-  margin: 1mm auto;
+  width: 180px;
+  height: 2px;
+  margin: 8px 0 6px;
+  background: linear-gradient(90deg, transparent, #c9a961, transparent);
 }
 
 .certificate-title {
-  font-family: 'Cormorant', serif;
-  font-size: 34pt;
-  font-weight: 300;
-  font-style: italic;
+  margin: 4px 0 0;
+  font-size: 34px;
+  letter-spacing: 8px;
+  font-weight: 700;
   color: #1a2a4f;
-  margin: 0;
-  letter-spacing: 6px;
-  position: relative;
+  font-family: "Georgia", serif;
 }
 
-.certificate-title::after {
-  content: '❦';
-  display: block;
-  font-size: 12pt;
-  color: #c9a96e;
-  letter-spacing: 6px;
-  margin-top: 0.3mm;
-  font-style: normal;
-}
-
+/* ---------- CORPO ---------- */
 .certificate-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0 4mm;
-  text-align: center;
+  gap: 6px;
+  padding: 18px 0;
 }
 
 .certificate-body-text {
-  font-family: 'Montserrat', sans-serif;
-  font-size: 13pt;
-  color: #2a2a2a;
-  line-height: 1.5;
-  margin: 0 0 0.5mm 0;
+  margin: 0;
+  font-size: 15px;
+  color: #33415c;
+  font-family: "Georgia", serif;
 }
 
 .certificate-student-name {
-  font-family: 'CormorantBold', serif;
   font-weight: 700;
-  color: #0a1a3a;
-  letter-spacing: 2px;
-  margin: 0.5mm 0 1mm 0;
-  line-height: 1.2;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.02);
-  overflow-wrap: anywhere;
-  word-break: keep-all;
-  max-width: 100%;
-  text-wrap: balance;
+  color: #1a2a4f;
+  letter-spacing: 1px;
+  line-height: 1.15;
+  margin: 2px 0 0;
+  font-family: "Georgia", serif;
+  text-transform: uppercase;
+}
+
+.certificate-cpf {
+  font-size: 12px;
+  color: #6b7a8f;
+  letter-spacing: 1.5px;
+  margin-top: 0;
+  margin-bottom: 6px;
+  font-family: "Courier New", monospace;
 }
 
 .certificate-course-name {
-  font-family: 'CormorantBold', serif;
-  font-weight: 600;
-  color: #1a2a4f;
-  letter-spacing: 2px;
-  margin: 0 auto 1mm;
-  max-width: 210mm;
+  font-weight: 700;
+  font-style: italic;
+  color: #2e4a80;
+  margin: 4px 0;
+  line-height: 1.25;
+  font-family: "Georgia", serif;
 }
 
 .certificate-details {
   display: flex;
   justify-content: center;
-  gap: 10mm;
-  font-family: 'Montserrat', sans-serif;
-  font-size: 11pt;
-  color: #3a3a3a;
-  margin-top: 1mm;
-}
-
-.certificate-details strong {
-  font-weight: 600;
+  gap: 40px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #33415c;
 }
 
 .certificate-issue-date {
-  font-family: 'Montserrat', sans-serif;
-  font-size: 10pt;
-  color: #555;
-  margin-top: 1mm;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #6b7a8f;
+  font-style: italic;
 }
 
-.certificate-footer {
-  text-align: center;
-  font-family: 'Montserrat', sans-serif;
-  font-size: 6pt;
-  color: #999;
-  opacity: 0.75;
-  border-top: 1px solid #d4c5a0;
-  padding-top: 1mm;
-  margin-top: 1mm;
-  line-height: 1.4;
-  letter-spacing: 0.5px;
-}
-.certificate-footer span {
-  display: block;
-}
-
+/* ---------- ASSINATURAS ---------- */
 .certificate-signatures {
-  margin-top: 0.5mm;
-  padding-top: 0.5mm;
-  border-top: 1px solid #d4c5a0;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
   align-items: flex-end;
-  gap: 3mm;
+  justify-content: center;
+  gap: 60px;
+  margin: 20px 0 12px;
+  min-height: 110px;
+  flex-wrap: wrap;
 }
 
 .signature-block {
-  text-align: center;
-  min-width: 35mm;
-  flex: 1 1 auto;
-}
-
-.signature-block-president {
-  min-width: 50mm;
-}
-
-.signature-image {
-  height: 16mm;
-  width: auto;
-  margin-bottom: 0.5mm;
-  opacity: 0.9;
-  object-fit: contain;
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 190px;
+  gap: 2px;
 }
 
 .signature-line {
-  width: min(60mm, 100%);
-  border-bottom: 1px solid #666;
-  margin: 0 auto 0.5mm auto;
+  width: 180px;
+  height: 1px;
+  background: #1a2a4f;
+  margin-bottom: 6px;
+}
+
+.signature-image {
+  width: 140px;
+  height: 46px;
+  object-fit: contain;
+  margin-bottom: 2px;
 }
 
 .signature-name {
-  font-family: 'CormorantBold', serif;
-  font-size: 11pt;
-  font-weight: 600;
-  color: #0a1a3a;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a2a4f;
+  font-family: "Georgia", serif;
 }
 
 .signature-role {
-  font-family: 'Montserrat', sans-serif;
-  font-size: 7pt;
-  color: #555;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  font-size: 11px;
+  color: #33415c;
+  letter-spacing: 0.5px;
 }
 
 .signature-org {
-  font-family: 'Montserrat', sans-serif;
-  font-size: 7pt;
-  color: #777;
+  font-size: 10px;
+  color: #6b7a8f;
+  letter-spacing: 0.8px;
 }
 
-.signatures-1 {
-  justify-content: space-between;
+.signature-registro {
+  font-size: 10px;
+  color: #6b7a8f;
+  letter-spacing: 0.4px;
+  margin-top: 1px;
 }
+
+/* Layouts condicionais de assinatura */
+.signatures-1 {
+  justify-content: space-around;
+}
+
 .signatures-2 {
   justify-content: space-around;
 }
-.signatures-3 {
-  justify-content: space-around;
-  flex-wrap: wrap;
-}
-.signatures-3 .signature-block {
-  flex: 0 0 30%;
-  min-width: 40mm;
-}
 
 .signature-president-bottom {
-  flex: 0 0 100%;
-  margin-top: 2mm;
   display: flex;
   justify-content: center;
+  width: 100%;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #c9a961;
+}
+
+.signatures-multi {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px 40px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+/* ---------- RODAPÉ / VALIDAÇÃO ---------- */
+.certificate-validation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12px auto 6px;
+  padding: 12px 24px;
+  border: 1px dashed #c8d3e0;
+  border-radius: 10px;
+  max-width: 560px;
+  background: #fafbfd;
+}
+
+.certificate-validation-text {
+  text-align: center;
+}
+
+.certificate-validation-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: #6b7a8f;
+}
+
+.certificate-validation-code {
+  font-family: "Courier New", monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a2a4f;
+  margin: 3px 0;
+  letter-spacing: 0.8px;
+}
+
+.certificate-validation-link {
+  font-size: 10px;
+  color: #33415c;
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+.certificate-validation-link strong {
+  color: #1a2a4f;
+  font-family: "Courier New", monospace;
+}
+
+.certificate-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #8a99ad;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding-top: 6px;
+  border-top: 1px solid #eaeef3;
+  margin-top: 6px;
+}
+
+/* ---------- IMPRESSÃO ---------- */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .certificate-wrapper,
+  .certificate-wrapper * {
+    visibility: visible;
+  }
+  .certificate-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  .certificate-validation {
+    border-color: #999;
+  }
+  .certificate-watermark {
+    opacity: 0.06;
+  }
+}
+
+/* ---------- RESPONSIVO ---------- */
+@media (max-width: 1180px) {
+  .certificate-wrapper {
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
 }
