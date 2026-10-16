@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../services/firebase";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import CertificateTemplate from "./CertificateTemplate";
+import {
+  obterOuCriarCertificado,
+  buscarCertificadoPorCodigo,
+  urlValidacao,
+} from "../services/certificados";
+import type { ProfessorCertificado } from "../services/certificados";
 
 // ============ Helpers ============
 const apenasDigitos = (s: string) => (s || "").replace(/\D/g, "");
@@ -22,12 +31,9 @@ const formatarTelefone = (v: string) => {
 const formatarData = (v: any): string => {
   if (!v) return "-";
   try {
-    if (typeof v?.toDate === "function") {
+    if (typeof v?.toDate === "function")
       return v.toDate().toLocaleDateString("pt-BR");
-    }
-    if (v instanceof Date) {
-      return v.toLocaleDateString("pt-BR");
-    }
+    if (v instanceof Date) return v.toLocaleDateString("pt-BR");
     if (typeof v === "string") {
       const d = new Date(v.length === 10 ? v + "T12:00:00" : v);
       if (!isNaN(d.getTime())) return d.toLocaleDateString("pt-BR");
@@ -96,6 +102,7 @@ export default function PortalAluno() {
   const [nascimento, setNascimento] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [baixando, setBaixando] = useState<string | null>(null);
   const [erro, setErro] = useState("");
   const [aluno, setAluno] = useState<Aluno | null>(null);
 
@@ -106,7 +113,6 @@ export default function PortalAluno() {
     "certificados"
   );
 
-  // Recupera sessão
   useEffect(() => {
     const salvo = sessionStorage.getItem("portalAluno");
     if (salvo) {
@@ -123,7 +129,7 @@ export default function PortalAluno() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aluno]);
 
-  // ============ Busca por 3 fatores ============
+  // ============ Login ============
   const buscarAluno = async () => {
     setErro("");
     const cpfDig = apenasDigitos(cpf);
@@ -148,23 +154,17 @@ export default function PortalAluno() {
       }
 
       if (!encontrado) {
-        setErro(
-          "Não encontramos seu cadastro. Verifique os dados ou fale com o IJP."
-        );
+        setErro("Não encontramos seu cadastro. Verifique os dados ou fale com o IJP.");
         return;
       }
 
-      // Confere data de nascimento
       const nascCad = normalizarData(encontrado.nascimento);
       if (nascCad && nascCad !== nascimento) {
         setErro("Os dados não conferem. Verifique a data de nascimento.");
         return;
       }
 
-      // Confere WhatsApp (aceita campo "whatsapp" ou "telefone")
-      const zapCad = apenasDigitos(
-        encontrado.whatsapp || encontrado.telefone || ""
-      );
+      const zapCad = apenasDigitos(encontrado.whatsapp || encontrado.telefone || "");
       if (zapCad && zapCad.slice(-8) !== zapDig.slice(-8)) {
         setErro("Os dados não conferem. Verifique o WhatsApp informado.");
         return;
@@ -179,36 +179,112 @@ export default function PortalAluno() {
     }
   };
 
-  // ============ Carrega tudo ============
+  // ============ Carrega TUDO + gera certificados automaticamente ============
   const carregarDados = async (a: Aluno) => {
     setCarregando(true);
     try {
-      // 1) CERTIFICADOS
-      const certSnap = await getDocs(
-        query(collection(db, "certificados"), where("alunoId", "==", a.id))
-      );
-      setCertificados(
-        certSnap.docs.map((d) => {
-          const data = d.data() as any;
-          return {
-            id: d.id,
-            codigo: data.codigo,
-            cursoNome: data.cursoNome,
-            cargaHoraria: data.cargaHoraria,
-            frequencia: data.frequencia,
-            dataInicio: data.dataInicio,
-            dataFim: data.dataFim,
-            status: data.status || "valido",
-          };
-        })
-      );
+      // --- 1) CURSOS + CERTIFICADOS ---
+      const cursosSnap = await getDocs(collection(db, "cursos"));
+      const certificadosEncontrados: Certificado[] = [];
+      const cursosEncontrados: CursoMatriculado[] = [];
+      const hojeISO = new Date().toISOString().slice(0, 10);
 
-      // 2) AGENDAMENTOS (saúde)
+      for (const cursoDoc of cursosSnap.docs) {
+        const cursoData = cursoDoc.data();
+        const turmasSnap = await getDocs(
+          collection(db, "cursos", cursoDoc.id, "turmas")
+        );
+
+        for (const turmaDoc of turmasSnap.docs) {
+          const t = turmaDoc.data();
+          const alunosArr: string[] = t.alunos || [];
+          if (!alunosArr.includes(a.id)) continue;
+
+          const totalAulas = t.totalAulas || 0;
+          const statusTurma = t.status || "ativa";
+          const dataFimISO = normalizarData(t.dataFim);
+
+          // Calcula frequência
+          let frequencia = 0;
+          if (totalAulas > 0) {
+            const presSnap = await getDocs(
+              query(
+                collection(db, "presencas"),
+                where("alunoId", "==", a.id),
+                where("cursoId", "==", cursoDoc.id),
+                where("turmaId", "==", turmaDoc.id),
+                where("presente", "==", true)
+              )
+            );
+            frequencia = parseFloat(
+              ((presSnap.size / totalAulas) * 100).toFixed(2)
+            );
+          }
+
+          // 🎯 Se aprovado (>= 70%), GARANTE certificado automaticamente
+          if (totalAulas > 0 && frequencia >= 70) {
+            try {
+              const { codigo } = await obterOuCriarCertificado({
+                alunoId: a.id,
+                alunoNome: a.nomeCompleto,
+                alunoCpf: a.cpf,
+                cursoId: cursoDoc.id,
+                cursoNome: cursoData.nome || "Curso",
+                turmaId: turmaDoc.id,
+                cargaHoraria: t.cargaHoraria || 0,
+                dataInicio: normalizarData(t.dataInicio),
+                dataFim: dataFimISO,
+                frequencia,
+              });
+              certificadosEncontrados.push({
+                id: `${cursoDoc.id}_${turmaDoc.id}`,
+                codigo,
+                cursoNome: cursoData.nome || "Curso",
+                cargaHoraria: t.cargaHoraria || 0,
+                frequencia,
+                dataInicio: t.dataInicio,
+                dataFim: t.dataFim,
+                status: "valido",
+              });
+            } catch (err) {
+              console.warn("Erro ao garantir certificado:", err);
+            }
+          }
+
+          // 📚 Só mostra em "Cursos" se AINDA está ativo
+          const isAtivo =
+            statusTurma === "ativa" && (!dataFimISO || dataFimISO >= hojeISO);
+
+          if (isAtivo) {
+            cursosEncontrados.push({
+              cursoId: cursoDoc.id,
+              cursoNome: cursoData.nome || "Curso",
+              turmaId: turmaDoc.id,
+              turmaNome: t.nome || "Turma",
+              cargaHoraria: t.cargaHoraria,
+              dataInicio: normalizarData(t.dataInicio),
+              dataFim: dataFimISO,
+              status: statusTurma,
+            });
+          }
+        }
+      }
+
+      // Ordena certificados: mais recente primeiro
+      certificadosEncontrados.sort((x, y) => {
+        const dx = normalizarData(x.dataFim);
+        const dy = normalizarData(y.dataFim);
+        return dy.localeCompare(dx);
+      });
+
+      setCertificados(certificadosEncontrados);
+      setCursos(cursosEncontrados);
+
+      // --- 2) AGENDAMENTOS ---
       try {
         const agSnap = await getDocs(
           query(collection(db, "agendamentos"), where("alunoId", "==", a.id))
         );
-        const hojeISO = new Date().toISOString().slice(0, 10);
 
         const profSnap = await getDocs(collection(db, "profissionais"));
         const profMap: Record<string, { nome: string; especialidade?: string }> = {};
@@ -238,38 +314,6 @@ export default function PortalAluno() {
       } catch (e) {
         console.warn("Sem agendamentos:", e);
       }
-
-      // 3) CURSOS MATRICULADOS
-      try {
-        const cursosSnap = await getDocs(collection(db, "cursos"));
-        const encontrados: CursoMatriculado[] = [];
-
-        for (const cursoDoc of cursosSnap.docs) {
-          const cursoData = cursoDoc.data();
-          const turmasSnap = await getDocs(
-            collection(db, "cursos", cursoDoc.id, "turmas")
-          );
-          for (const turmaDoc of turmasSnap.docs) {
-            const t = turmaDoc.data();
-            const alunosArr: string[] = t.alunos || [];
-            if (alunosArr.includes(a.id)) {
-              encontrados.push({
-                cursoId: cursoDoc.id,
-                cursoNome: cursoData.nome || "Curso",
-                turmaId: turmaDoc.id,
-                turmaNome: t.nome || "Turma",
-                cargaHoraria: t.cargaHoraria,
-                dataInicio: normalizarData(t.dataInicio),
-                dataFim: normalizarData(t.dataFim),
-                status: t.status,
-              });
-            }
-          }
-        }
-        setCursos(encontrados);
-      } catch (e) {
-        console.warn("Sem cursos:", e);
-      }
     } finally {
       setCarregando(false);
     }
@@ -286,8 +330,105 @@ export default function PortalAluno() {
     setCursos([]);
   };
 
+  // ============ Baixar PDF ============
+  const baixarPDF = async (cert: Certificado) => {
+    if (!aluno) return;
+    setBaixando(cert.codigo);
+    try {
+      // Pega dados completos (com professores salvos) do Firestore
+      const full = await buscarCertificadoPorCodigo(cert.codigo);
+      if (!full) {
+        alert("Certificado não encontrado.");
+        return;
+      }
+
+      const professores: ProfessorCertificado[] = full.professores || [];
+      const dataInicio = formatarData(full.dataInicio);
+      const dataFim = formatarData(full.dataFim);
+
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "-9999px";
+      container.style.left = "-9999px";
+      container.style.width = "297mm";
+      container.style.height = "210mm";
+      container.style.background = "#ffffff";
+      document.body.appendChild(container);
+
+      const root = document.createElement("div");
+      root.style.width = "297mm";
+      root.style.height = "210mm";
+      container.appendChild(root);
+
+      const ReactDOM = await import("react-dom/client");
+      const reactRoot = ReactDOM.createRoot(root);
+
+      reactRoot.render(
+        <CertificateTemplate
+          alunoNome={aluno.nomeCompleto}
+          alunoCpf={aluno.cpf}
+          cursoNome={cert.cursoNome}
+          cargaHoraria={cert.cargaHoraria}
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          frequencia={cert.frequencia || 0}
+          professores={professores}
+          codigoValidacao={cert.codigo}
+          linkValidacao={urlValidacao(cert.codigo)}
+          logoUrl="/logo-ijp.png"
+          assinaturaUrl="/assinatura.png"
+        />
+      );
+
+      await new Promise((r) => setTimeout(r, 300));
+
+      const images = root.querySelectorAll("img");
+      await Promise.all(
+        Array.from(images).map((img) => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          });
+        })
+      );
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      const canvas = await html2canvas(root, {
+        scale: 4,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        width: root.scrollWidth,
+        height: root.scrollHeight,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 297, 210);
+
+      const nomeSanit = aluno.nomeCompleto.replace(/[^\w-]/g, "_");
+      const cursoSanit = cert.cursoNome.replace(/[^\w-]/g, "_");
+      pdf.save(`certificado_${nomeSanit}_${cursoSanit}.pdf`);
+
+      reactRoot.unmount();
+      document.body.removeChild(container);
+    } catch (e) {
+      console.error("Erro ao baixar PDF:", e);
+      alert("Erro ao gerar o PDF. Tente novamente.");
+    } finally {
+      setBaixando(null);
+    }
+  };
+
   // ================================================================
-  // TELA DE LOGIN
+  // LOGIN
   // ================================================================
   if (!aluno) {
     return (
@@ -389,12 +530,11 @@ export default function PortalAluno() {
   }
 
   // ================================================================
-  // ÁREA LOGADA
+  // LOGADO
   // ================================================================
   return (
     <div style={estilos.wrapper}>
       <div style={{ ...estilos.card, maxWidth: 780 }}>
-        {/* Cabeçalho */}
         <div
           style={{
             display: "flex",
@@ -416,21 +556,18 @@ export default function PortalAluno() {
           </button>
         </div>
 
-        {/* Abas */}
         <div style={estilos.abas}>
           <AbaBtn
             ativo={abaAtiva === "certificados"}
             onClick={() => setAbaAtiva("certificados")}
           >
-            📜 Certificados{" "}
-            {certificados.length > 0 && `(${certificados.length})`}
+            📜 Certificados {certificados.length > 0 && `(${certificados.length})`}
           </AbaBtn>
           <AbaBtn
             ativo={abaAtiva === "agenda"}
             onClick={() => setAbaAtiva("agenda")}
           >
-            📅 Atendimentos{" "}
-            {agendamentos.length > 0 && `(${agendamentos.length})`}
+            📅 Atendimentos {agendamentos.length > 0 && `(${agendamentos.length})`}
           </AbaBtn>
           <AbaBtn
             ativo={abaAtiva === "cursos"}
@@ -460,11 +597,7 @@ export default function PortalAluno() {
                 <div key={c.id} style={estilos.item}>
                   <div style={{ flex: 1 }}>
                     <div
-                      style={{
-                        fontWeight: 700,
-                        color: "#1a2a4f",
-                        fontSize: 16,
-                      }}
+                      style={{ fontWeight: 700, color: "#1a2a4f", fontSize: 16 }}
                     >
                       {c.cursoNome}
                     </div>
@@ -485,14 +618,28 @@ export default function PortalAluno() {
                       Código: {c.codigo}
                     </div>
                   </div>
-                  <button
-                    onClick={() =>
-                      window.open(`/certificado/${c.codigo}`, "_blank")
-                    }
-                    style={estilos.botaoAcao}
-                  >
-                    Ver certificado
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() =>
+                        window.open(`/certificado/${c.codigo}`, "_blank")
+                      }
+                      style={estilos.botaoAcaoSec}
+                      title="Ver validação pública"
+                    >
+                      👁️ Ver
+                    </button>
+                    <button
+                      onClick={() => baixarPDF(c)}
+                      disabled={baixando === c.codigo}
+                      style={{
+                        ...estilos.botaoAcao,
+                        opacity: baixando === c.codigo ? 0.6 : 1,
+                        cursor: baixando === c.codigo ? "wait" : "pointer",
+                      }}
+                    >
+                      {baixando === c.codigo ? "..." : "⬇️ Baixar PDF"}
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -513,11 +660,7 @@ export default function PortalAluno() {
                 <div key={ag.id} style={estilos.item}>
                   <div style={{ flex: 1 }}>
                     <div
-                      style={{
-                        fontWeight: 700,
-                        color: "#1a2a4f",
-                        fontSize: 15,
-                      }}
+                      style={{ fontWeight: 700, color: "#1a2a4f", fontSize: 15 }}
                     >
                       {formatarData(ag.data)} às {ag.horario}
                     </div>
@@ -554,19 +697,15 @@ export default function PortalAluno() {
             {cursos.length === 0 ? (
               <Vazio
                 emoji="📚"
-                titulo="Nenhum curso em andamento"
-                texto="Você não está matriculado em nenhum curso no momento."
+                titulo="Nenhum curso ativo no momento"
+                texto="Seus cursos concluídos aparecem na aba de certificados."
               />
             ) : (
               cursos.map((c) => (
                 <div key={`${c.cursoId}-${c.turmaId}`} style={estilos.item}>
                   <div style={{ flex: 1 }}>
                     <div
-                      style={{
-                        fontWeight: 700,
-                        color: "#1a2a4f",
-                        fontSize: 16,
-                      }}
+                      style={{ fontWeight: 700, color: "#1a2a4f", fontSize: 16 }}
                     >
                       {c.cursoNome}
                     </div>
@@ -587,14 +726,13 @@ export default function PortalAluno() {
                     style={{
                       padding: "4px 12px",
                       borderRadius: 999,
-                      background:
-                        c.status === "encerrada" ? "#e2e3e5" : "#e6f0ff",
+                      background: "#e6f0ff",
                       color: "#1a2a4f",
                       fontSize: 12,
                       fontWeight: 600,
                     }}
                   >
-                    {c.status || "ativa"}
+                    ativa
                   </span>
                 </div>
               ))
@@ -771,12 +909,23 @@ const estilos: Record<string, React.CSSProperties> = {
     boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
   },
   botaoAcao: {
-    padding: "8px 16px",
+    padding: "8px 14px",
     background: "#28a745",
     color: "#fff",
     border: "none",
     borderRadius: 8,
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  botaoAcaoSec: {
+    padding: "8px 12px",
+    background: "#fff",
+    color: "#33415c",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    fontSize: 12,
     fontWeight: 600,
     cursor: "pointer",
     whiteSpace: "nowrap",
