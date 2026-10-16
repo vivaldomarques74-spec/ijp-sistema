@@ -34,7 +34,7 @@
   position: relative;
   z-index: 2;
   height: 100%;
-  padding: 52px 72px 32px;
+  padding: 48px 72px 28px;
   display: flex;
   flex-direction: column;
   text-align: center;
@@ -75,13 +75,13 @@
 .certificate-divider {
   width: 140px;
   height: 2px;
-  margin: 14px 0 8px;
+  margin: 12px 0 6px;
   background: linear-gradient(90deg, transparent, #c9a961, transparent);
 }
 
 .certificate-title {
   margin: 0;
-  font-size: 30px;
+  font-size: 28px;
   letter-spacing: 8px;
   font-weight: 700;
   color: #1a2a4f;
@@ -94,13 +94,13 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
-  padding: 14px 0 8px;
+  gap: 5px;
+  padding: 12px 0 6px;
 }
 
 .certificate-text {
   margin: 0;
-  font-size: 14px;
+  font-size: 13.5px;
   color: #33415c;
   font-family: "Georgia", serif;
   line-height: 1.4;
@@ -111,7 +111,7 @@
   color: #1a2a4f;
   letter-spacing: 1.5px;
   line-height: 1.15;
-  margin: 6px 0 2px;
+  margin: 5px 0 2px;
   font-family: "Georgia", serif;
   text-transform: uppercase;
 }
@@ -120,7 +120,7 @@
   font-size: 11px;
   color: #6b7a8f;
   letter-spacing: 1.5px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-family: "Courier New", monospace;
 }
 
@@ -128,7 +128,7 @@
   font-weight: 700;
   font-style: italic;
   color: #2e4a80;
-  margin: 6px 0;
+  margin: 5px 0;
   line-height: 1.25;
   font-family: "Georgia", serif;
 }
@@ -138,7 +138,7 @@
   justify-content: center;
   align-items: center;
   gap: 14px;
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 12.5px;
   color: #33415c;
   flex-wrap: wrap;
@@ -150,123 +150,181 @@
 }
 
 .certificate-issue-date {
-  margin-top: 8px;
-  font-size: 11.5px;
+  margin-top: 6px;
+  font-size: 11px;
   color: #6b7a8f;
   font-style: italic;
 }
 
-/* ---------- ASSINATURAS ---------- */
-.certificate-signatures-section {
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  gap: 60px;
-  padding: 12px 8px 8px;
-  margin: 6px 0 8px;
+/* =========================================================
+   ASSINATURAS — LAYOUT
+   ========================================================= */
+
+/* Linha horizontal que separa o corpo das assinaturas */
+.certificate-signatures,
+.certificate-signatures-block {
+  margin-top: 8px;
+  padding-top: 12px;
   border-top: 1px solid #e0e4e8;
-  flex-wrap: wrap;
 }
 
-/* --- Corpo Docente --- */
-.signatures-teachers-row {
+/* Base comum a todos os layouts */
+.certificate-signatures {
   display: flex;
-  gap: 40px;
   align-items: flex-end;
+  justify-content: center;
   flex-wrap: wrap;
+  gap: 20px;
+}
+
+/* Wrapper para layouts com professor embaixo (3+ profs) */
+.certificate-signatures-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.certificate-signatures-block .certificate-signatures {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+/* --- Layout: single (só presidente) --- */
+.layout-single {
   justify-content: center;
 }
 
-.teacher-signature {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 180px;
-  max-width: 220px;
-  text-align: center;
+/* --- Layout: 2 blocos (1 prof + presidente) --- */
+.layout-two {
+  justify-content: space-evenly;
+  gap: 60px;
 }
 
-.teacher-signature-name {
-  font-family: "Great Vibes", "Dancing Script", "Brush Script MT",
-    "Lucida Handwriting", cursive;
-  font-size: 26px;
-  color: #1a2a4f;
-  line-height: 1;
-  margin-bottom: -6px;
-  padding: 0 6px;
+/* --- Layout: 3 blocos (prof • presidente • prof) --- */
+.layout-three {
+  justify-content: space-evenly;
+  gap: 40px;
 }
 
-.teacher-signature-line {
+/* --- Layout: topo com 3 professores em linha --- */
+.layout-multi-top {
+  justify-content: space-evenly;
+  gap: 30px;
+  margin-bottom: 4px;
+}
+
+/* --- Layout: grade (4+ professores) --- */
+.layout-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px 30px;
   width: 100%;
-  height: 1px;
-  background: #1a2a4f;
-  margin: 6px 0 5px;
+  justify-items: center;
 }
 
-.teacher-signature-fullname {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #1a2a4f;
-  font-family: "Georgia", serif;
+/* Presidente embaixo centralizado */
+.signatures-president-bottom {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed #d6dfeb;
 }
 
-.teacher-signature-info {
-  font-size: 10px;
-  color: #6b7a8f;
-  margin-top: 1px;
-  letter-spacing: 0.2px;
-}
+/* =========================================================
+   ASSINATURA — BLOCO (uniformizado)
+   ========================================================= */
 
-/* --- Presidente --- */
-.signature-president-block {
+.signature-block {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 240px;
   text-align: center;
+  width: 220px;         /* largura fixa para alinhar */
+  min-width: 220px;
+  max-width: 220px;
 }
 
-.signature-president-image-wrap {
+/* Área visual de assinatura (cursiva OU imagem), altura fixa */
+.signature-visual {
   height: 52px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   margin-bottom: 2px;
+  width: 100%;
+  overflow: hidden;
 }
 
-.signature-president-image {
+/* Nome em cursiva (professores) */
+.signature-visual-cursive {
+  align-items: center;
+}
+
+.signature-cursive-text {
+  font-family: "Great Vibes", "Dancing Script", "Brush Script MT",
+    "Lucida Handwriting", cursive;
+  font-size: 26px;
+  line-height: 1;
+  color: #1a2a4f;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Imagem de assinatura (presidente) */
+.signature-visual-image {
+  align-items: flex-end;
+}
+
+.signature-image {
   max-height: 52px;
   max-width: 200px;
   object-fit: contain;
 }
 
-.signature-president-line {
-  width: 220px;
+/* Linha embaixo (mesma largura pra todos) */
+.signature-line {
+  width: 180px;
   height: 1px;
   background: #1a2a4f;
-  margin-bottom: 6px;
+  margin: 4px 0 6px;
 }
 
-.signature-president-name {
+/* Nome em negrito abaixo da linha */
+.signature-name {
   font-size: 12.5px;
   font-weight: 700;
   color: #1a2a4f;
   font-family: "Georgia", serif;
+  line-height: 1.2;
 }
 
-.signature-president-role {
-  font-size: 11px;
+/* Cargo / qualificação */
+.signature-role,
+.signature-info {
+  font-size: 10.5px;
   color: #33415c;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
+  line-height: 1.3;
+  margin-top: 1px;
 }
 
-.signature-president-org {
+.signature-org {
   font-size: 10px;
   color: #6b7a8f;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
+  margin-top: 1px;
 }
 
-/* ---------- VALIDAÇÃO ---------- */
+/* =========================================================
+   VALIDAÇÃO
+   ========================================================= */
 .certificate-validation {
   display: flex;
   align-items: center;
@@ -277,7 +335,7 @@
   border: 1px solid #d6dfeb;
   border-radius: 6px;
   max-width: 720px;
-  margin: 0 auto;
+  margin: 10px auto 0;
   text-align: left;
 }
 
@@ -328,7 +386,9 @@
   word-break: break-all;
 }
 
-/* ---------- IMPRESSÃO ---------- */
+/* =========================================================
+   IMPRESSÃO
+   ========================================================= */
 @media print {
   body * {
     visibility: hidden;

@@ -66,6 +66,103 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
     year: "numeric",
   }).format(new Date());
 
+  // ===== Blocos reutilizáveis =====
+  const BlocoProfessor = (p: ProfessorCertificado, key: number) => {
+    const registro = p.numeroRegistro
+      ? `${p.tipoRegistro ? p.tipoRegistro + " " : ""}${p.numeroRegistro}`
+      : "";
+    return (
+      <div key={key} className="signature-block">
+        <div className="signature-visual signature-visual-cursive">
+          <span className="signature-cursive-text">{p.nome}</span>
+        </div>
+        <div className="signature-line" />
+        <div className="signature-name">{p.nome}</div>
+        {(p.profissao || registro) && (
+          <div className="signature-info">
+            {p.profissao}
+            {p.profissao && registro && " • "}
+            {registro}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const BlocoPresidente = () => (
+    <div className="signature-block signature-block-president">
+      <div className="signature-visual signature-visual-image">
+        {assinaturaUrl && (
+          <img
+            src={assinaturaUrl}
+            alt=""
+            className="signature-image"
+            loading="eager"
+          />
+        )}
+      </div>
+      <div className="signature-line" />
+      <div className="signature-name">Jadison dos Santos Palma</div>
+      <div className="signature-role">Presidente</div>
+      <div className="signature-org">Instituto Jovens Periféricos</div>
+    </div>
+  );
+
+  // ===== Layout condicional =====
+  const qtd = profs.length;
+
+  let blocoAssinaturas: React.ReactNode;
+
+  if (qtd === 0) {
+    // Só presidente
+    blocoAssinaturas = (
+      <div className="certificate-signatures layout-single">
+        <BlocoPresidente />
+      </div>
+    );
+  } else if (qtd === 1) {
+    // Professor • Presidente (lado a lado, espaçados)
+    blocoAssinaturas = (
+      <div className="certificate-signatures layout-two">
+        {BlocoProfessor(profs[0], 0)}
+        <BlocoPresidente />
+      </div>
+    );
+  } else if (qtd === 2) {
+    // Professor • Presidente • Professor
+    blocoAssinaturas = (
+      <div className="certificate-signatures layout-three">
+        {BlocoProfessor(profs[0], 0)}
+        <BlocoPresidente />
+        {BlocoProfessor(profs[1], 1)}
+      </div>
+    );
+  } else if (qtd === 3) {
+    // 3 professores em cima + presidente embaixo centralizado
+    blocoAssinaturas = (
+      <div className="certificate-signatures-block">
+        <div className="certificate-signatures layout-multi-top">
+          {profs.map((p, i) => BlocoProfessor(p, i))}
+        </div>
+        <div className="signatures-president-bottom">
+          <BlocoPresidente />
+        </div>
+      </div>
+    );
+  } else {
+    // 4+ professores: grade 2 colunas + presidente embaixo
+    blocoAssinaturas = (
+      <div className="certificate-signatures-block">
+        <div className="certificate-signatures layout-grid">
+          {profs.map((p, i) => BlocoProfessor(p, i))}
+        </div>
+        <div className="signatures-president-bottom">
+          <BlocoPresidente />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="certificate-wrapper">
       <div className="certificate-outer-border" />
@@ -131,58 +228,7 @@ const CertificateTemplate: React.FC<CertificateTemplateProps> = ({
         </div>
 
         {/* ============ ASSINATURAS ============ */}
-        <div className="certificate-signatures-section">
-          {/* Corpo Docente (professores) */}
-          {profs.length > 0 && (
-            <div className="signatures-teachers-row">
-              {profs.map((p, idx) => {
-                const registro = p.numeroRegistro
-                  ? `${p.tipoRegistro ? p.tipoRegistro + " " : ""}${
-                      p.numeroRegistro
-                    }`
-                  : "";
-                return (
-                  <div key={idx} className="teacher-signature">
-                    <div className="teacher-signature-name">{p.nome}</div>
-                    <div className="teacher-signature-line" />
-                    <div className="teacher-signature-fullname">
-                      {p.nome}
-                    </div>
-                    {(p.profissao || registro) && (
-                      <div className="teacher-signature-info">
-                        {p.profissao}
-                        {p.profissao && registro && " • "}
-                        {registro}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Presidente (com imagem de assinatura) */}
-          <div className="signature-president-block">
-            <div className="signature-president-image-wrap">
-              {assinaturaUrl && (
-                <img
-                  src={assinaturaUrl}
-                  alt=""
-                  className="signature-president-image"
-                  loading="eager"
-                />
-              )}
-            </div>
-            <div className="signature-president-line" />
-            <div className="signature-president-name">
-              Jadison dos Santos Palma
-            </div>
-            <div className="signature-president-role">Presidente</div>
-            <div className="signature-president-org">
-              Instituto Jovens Periféricos
-            </div>
-          </div>
-        </div>
+        {blocoAssinaturas}
 
         {/* ============ VALIDAÇÃO ============ */}
         {codigoValidacao && (
